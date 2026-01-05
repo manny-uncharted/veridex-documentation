@@ -1,0 +1,181 @@
+---
+title: Quick Start
+description: Integrate Veridex passkey wallets in 5 minutes
+---
+
+# Quick Start
+
+Build a passkey wallet and send your first gasless transaction in under 5 minutes.
+
+## 1. Initialize the SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+// Initialize with testnet (default)
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network', // Or your own relayer
+});
+```
+
+## 2. Register a Passkey
+
+```typescript
+// Prompt user to create a passkey with biometric
+const credential = await sdk.passkey.register(
+  'user@example.com',  // Username (displayed in passkey prompt)
+  'My Veridex Wallet'  // Display name
+);
+
+console.log('Credential ID:', credential.id);
+console.log('Vault Address:', sdk.getVaultAddress());
+```
+
+<Callout type="info">
+  The vault address is **deterministic** — the same passkey always generates the same address across all EVM chains.
+</Callout>
+
+## 3. Fund the Vault
+
+For testnet, use these faucets:
+
+| Chain | Faucet |
+|-------|--------|
+| Base Sepolia | [base.org/faucet](https://www.base.org/faucet) |
+| Optimism Sepolia | [app.optimism.io/faucet](https://app.optimism.io/faucet) |
+| Arbitrum Sepolia | [faucet.quicknode.com/arbitrum](https://faucet.quicknode.com/arbitrum) |
+
+Or use the test app's built-in faucet at [demo.veridex.network](https://demo.veridex.network).
+
+## 4. Send a Gasless Transfer
+
+```typescript
+// Transfer USDC (gasless - relayer pays gas)
+const result = await sdk.transferViaRelayer({
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: 1000000n, // 1 USDC (6 decimals)
+});
+
+console.log('Transaction hash:', result.txHash);
+```
+
+## 5. Check Balances
+
+```typescript
+// Get balances across all chains
+const balances = await sdk.getBalances();
+
+console.log('Balances:', balances);
+// {
+//   'base-sepolia': { ETH: '0.1', USDC: '100.0' },
+//   'optimism-sepolia': { ETH: '0.05', USDC: '50.0' },
+//   ...
+// }
+```
+
+## Complete Example
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+async function main() {
+  // 1. Initialize
+  const sdk = createSDK('base', {
+    network: 'testnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  // 2. Check if user has existing passkey
+  const existingCredential = sdk.passkey.getStoredCredential();
+  
+  if (!existingCredential) {
+    // 3. Register new passkey
+    console.log('Registering passkey...');
+    await sdk.passkey.register('user@example.com', 'My Wallet');
+  } else {
+    // 4. Login with existing passkey
+    console.log('Logging in...');
+    await sdk.passkey.login();
+  }
+
+  // 5. Get vault info
+  const vault = sdk.getVaultAddress();
+  console.log('Vault:', vault);
+
+  // 6. Get balances
+  const balances = await sdk.getBalances();
+  console.log('Balances:', balances);
+
+  // 7. Transfer (if balance exists)
+  if (balances['base-sepolia']?.USDC > 0) {
+    const tx = await sdk.transferViaRelayer({
+      token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+      amount: 100000n, // 0.1 USDC
+    });
+    console.log('Transfer complete:', tx.txHash);
+  }
+}
+
+main().catch(console.error);
+```
+
+## React Integration
+
+```tsx
+import { useState } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+export function WalletButton() {
+  const [vault, setVault] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const existing = sdk.passkey.getStoredCredential();
+      if (existing) {
+        await sdk.passkey.login();
+      } else {
+        await sdk.passkey.register('user@example.com', 'My Wallet');
+      }
+      setVault(sdk.getVaultAddress());
+    } catch (error) {
+      console.error('Failed to connect:', error);
+    }
+    setLoading(false);
+  };
+
+  if (vault) {
+    return (
+      <div>
+        <p>Connected: {vault.slice(0, 6)}...{vault.slice(-4)}</p>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={handleConnect} disabled={loading}>
+      {loading ? 'Connecting...' : 'Connect with Passkey'}
+    </button>
+  );
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Enable smooth UX without repeated biometric prompts
+  </Card>
+  <Card title="Cross-Chain Transfers" href="/guides/cross-chain">
+    Send tokens between different blockchains
+  </Card>
+  <Card title="Spending Limits" href="/guides/spending-limits">
+    Configure spending limits for safety
+  </Card>
+</Cards>

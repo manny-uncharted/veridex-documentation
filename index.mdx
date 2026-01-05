@@ -1,0 +1,96 @@
+---
+title: Veridex Protocol Documentation
+description: Cross-chain passkey authentication for the multi-chain web
+---
+
+# Veridex Protocol
+
+**One passkey. Any chain. Fully self-custodial.**
+
+Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching.
+
+## Why Veridex?
+
+| Feature | Traditional Wallets | MPC/Custodial | Veridex |
+|---------|---------------------|---------------|---------|
+| **Login** | Seed phrase | Social/email | FaceID only |
+| **Custody** | Self-custody | Custodial | **Fully self-custodial** |
+| **Cross-chain** | Manual bridging | Limited | **Native multi-chain** |
+| **Recovery** | Seed phrase | Via provider | **On-chain social recovery** |
+
+## Quick Links
+
+<Cards>
+  <Card title="Quick Start" href="/getting-started/quick-start">
+    Integrate Veridex in 5 minutes
+  </Card>
+  <Card title="SDK Reference" href="/api-reference/sdk">
+    Complete TypeScript SDK documentation
+  </Card>
+  <Card title="Guides" href="/guides/create-wallet">
+    Step-by-step integration guides
+  </Card>
+  <Card title="Examples" href="https://github.com/Veridex-Protocol/demo/tree/main/examples">
+    Production-ready code examples
+  </Card>
+</Cards>
+
+## Supported Chains
+
+| Chain | Type | Status |
+|-------|------|--------|
+| Base | Hub (EVM) | ✅ Live |
+| Optimism | Spoke (EVM) | ✅ Live |
+| Arbitrum | Spoke (EVM) | ✅ Live |
+| Solana | Spoke | ✅ Live |
+| Aptos | Spoke | ✅ Live |
+| Sui | Spoke | ✅ Live |
+| Starknet | Spoke | ✅ Live |
+
+## How It Works
+
+```
+User authenticates with FaceID/TouchID
+        ↓
+Hub (Base) verifies P-256 signature
+        ↓
+Wormhole broadcasts authorization
+        ↓
+Spoke (any chain) executes action
+```
+
+Users get the **same deterministic vault address** across all EVM chains, derived from their passkey.
+
+## Get Started
+
+```bash
+npm install @veridex/sdk
+```
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+// Initialize SDK
+const sdk = createSDK('base');
+
+// Register a passkey
+await sdk.passkey.register('user@example.com', 'My Wallet');
+
+// Get your vault address (same on all EVM chains!)
+const vault = sdk.getVaultAddress();
+
+// Transfer tokens (gasless!)
+await sdk.transferViaRelayer({
+  token: '0x...USDC',
+  recipient: '0x...',
+  amount: 1000000n,
+});
+```
+
+## Resources
+
+- [GitHub Repository](https://github.com/Veridex-Protocol/)
+- [Demo Video](https://youtu.be/CgSvFqrVGAw)
+- [Discord Community]()
+- [Telegram Community](https://t.me/+1b16cbymIYI4OTVk)
+- [Twitter @VeridexProtocol]()

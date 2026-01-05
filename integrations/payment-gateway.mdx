@@ -1,0 +1,322 @@
+---
+title: Payment Gateway
+description: Accept crypto payments using Veridex passkeys
+---
+
+# Payment Gateway Integration
+
+Accept cryptocurrency payments in your application using Veridex passkeys.
+
+## Overview
+
+Veridex enables:
+- **Gasless payments** - Customers don't need gas tokens
+- **One-click checkout** - FaceID/TouchID to confirm
+- **Multi-chain** - Accept payments on any supported chain
+- **Session-based** - Optional smooth checkout flows
+
+## Basic Payment Flow
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', {
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Customer authenticates
+await sdk.passkey.login();
+
+// Process payment
+const payment = await sdk.transferViaRelayer({
+  token: USDC_ADDRESS,
+  recipient: MERCHANT_WALLET,
+  amount: parseUnits('29.99', 6), // $29.99
+});
+
+console.log('Payment complete:', payment.txHash);
+```
+
+## React Checkout Component
+
+```tsx
+import { useState } from 'react';
+import { createSDK } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', { 
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // Base Mainnet USDC
+const MERCHANT = '0xYourMerchantWallet';
+
+interface CheckoutProps {
+  amount: string;  // e.g., "29.99"
+  orderId: string;
+  onSuccess: (txHash: string) => void;
+  onError: (error: Error) => void;
+}
+
+export function VeridexCheckout({ amount, orderId, onSuccess, onError }: CheckoutProps) {
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'connect' | 'confirm' | 'processing' | 'done'>('connect');
+
+  const handleCheckout = async () => {
+    setLoading(true);
+    
+    try {
+      // Step 1: Authenticate
+      setStep('connect');
+      const stored = sdk.passkey.getStoredCredential();
+      if (stored) {
+        await sdk.passkey.login();
+      } else {
+        await sdk.passkey.register('customer@example.com', 'Checkout');
+      }
+
+      // Step 2: Confirm payment
+      setStep('confirm');
+      
+      // Step 3: Process
+      setStep('processing');
+      const result = await sdk.transferViaRelayer({
+        token: USDC,
+        recipient: MERCHANT,
+        amount: parseUnits(amount, 6),
+      });
+
+      setStep('done');
+      onSuccess(result.txHash);
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error('Payment failed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto p-6 border rounded-xl">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold">${amount}</h2>
+        <p className="text-gray-500">Order #{orderId}</p>
+      </div>
+
+      {step === 'done' ? (
+        <div className="text-center text-green-600">
+          <span className="text-4xl">✓</span>
+          <p className="font-medium">Payment Complete!</p>
+        </div>
+      ) : (
+        <button
+          onClick={handleCheckout}
+          disabled={loading}
+          className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium"
+        >
+          {loading ? (
+            <span>
+              {step === 'connect' && 'Authenticating...'}
+              {step === 'confirm' && 'Confirming...'}
+              {step === 'processing' && 'Processing...'}
+            </span>
+          ) : (
+            'Pay with Passkey'
+          )}
+        </button>
+      )}
+
+      <p className="text-center text-sm text-gray-500 mt-4">
+        Powered by Veridex • No gas fees
+      </p>
+    </div>
+  );
+}
+```
+
+## Session-Based Checkout
+
+For smoother repeat purchases:
+
+```typescript
+// First purchase: Create session for future payments
+const session = await sdk.sessions.create({
+  duration: 1800, // 30 minutes
+  maxValue: parseUnits('100', 6), // Max $100
+  allowedTokens: [USDC],
+  allowedRecipients: [MERCHANT],
+});
+
+// Subsequent purchases in session: No biometric prompt
+await sdk.transfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('9.99', 6) });
+await sdk.transfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('14.99', 6) });
+// Both auto-signed! ✓
+```
+
+## Server-Side Verification
+
+Verify payments on your backend:
+
+```typescript
+// pages/api/verify-payment.ts (Next.js)
+import { ethers } from 'ethers';
+
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const MERCHANT_ADDRESS = '0xYourMerchantWallet';
+
+export async function POST(req: Request) {
+  const { txHash, orderId, expectedAmount } = await req.json();
+
+  // Connect to Base
+  const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+  
+  // Get transaction receipt
+  const receipt = await provider.getTransactionReceipt(txHash);
+  
+  if (!receipt || receipt.status !== 1) {
+    return Response.json({ valid: false, error: 'Transaction not confirmed' });
+  }
+
+  // Parse transfer event
+  const iface = new ethers.Interface([
+    'event Transfer(address indexed from, address indexed to, uint256 value)'
+  ]);
+
+  const transferLog = receipt.logs.find(log => 
+    log.address.toLowerCase() === USDC_ADDRESS.toLowerCase()
+  );
+
+  if (!transferLog) {
+    return Response.json({ valid: false, error: 'No USDC transfer found' });
+  }
+
+  const parsed = iface.parseLog(transferLog);
+  const { to, value } = parsed.args;
+
+  // Verify recipient and amount
+  if (to.toLowerCase() !== MERCHANT_ADDRESS.toLowerCase()) {
+    return Response.json({ valid: false, error: 'Wrong recipient' });
+  }
+
+  if (value < ethers.parseUnits(expectedAmount, 6)) {
+    return Response.json({ valid: false, error: 'Insufficient amount' });
+  }
+
+  // Payment verified - update order status
+  await updateOrderStatus(orderId, 'paid', txHash);
+
+  return Response.json({ valid: true, txHash });
+}
+```
+
+## Webhook Integration
+
+Receive payment notifications:
+
+```typescript
+// Configure webhook with relayer (if using managed relayer)
+await sdk.webhooks.register({
+  url: 'https://your-app.com/api/webhooks/veridex',
+  events: ['payment.completed', 'payment.failed'],
+  secret: process.env.WEBHOOK_SECRET,
+});
+```
+
+Handle webhooks:
+
+```typescript
+// pages/api/webhooks/veridex.ts
+import { createHmac } from 'crypto';
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const signature = req.headers.get('x-veridex-signature');
+  
+  // Verify signature
+  const expectedSig = createHmac('sha256', process.env.WEBHOOK_SECRET!)
+    .update(body)
+    .digest('hex');
+  
+  if (signature !== expectedSig) {
+    return Response.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
+  const event = JSON.parse(body);
+
+  switch (event.type) {
+    case 'payment.completed':
+      await handlePaymentComplete(event.data);
+      break;
+    case 'payment.failed':
+      await handlePaymentFailed(event.data);
+      break;
+  }
+
+  return Response.json({ received: true });
+}
+```
+
+## Multi-Currency Support
+
+Accept multiple stablecoins:
+
+```typescript
+const TOKENS = {
+  USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  USDT: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
+  DAI: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb',
+};
+
+function CurrencySelector({ onSelect }: { onSelect: (token: string) => void }) {
+  return (
+    <div className="flex gap-2">
+      {Object.entries(TOKENS).map(([symbol, address]) => (
+        <button
+          key={symbol}
+          onClick={() => onSelect(address)}
+          className="px-4 py-2 border rounded-lg"
+        >
+          {symbol}
+        </button>
+      ))}
+    </div>
+  );
+}
+```
+
+## Invoice Links
+
+Generate payment links:
+
+```typescript
+// Generate payment URL
+function generatePaymentLink(orderId: string, amount: string, currency: string) {
+  const params = new URLSearchParams({
+    orderId,
+    amount,
+    currency,
+    merchant: MERCHANT_ADDRESS,
+  });
+  return `https://your-app.com/pay?${params}`;
+}
+
+// Payment page reads params and initiates checkout
+// /pay?orderId=123&amount=29.99&currency=USDC&merchant=0x...
+```
+
+## Best Practices
+
+1. **Verify on server** - Always verify payments server-side
+2. **Use webhooks** - Don't rely solely on client-side callbacks
+3. **Set timeouts** - Expire payment sessions after reasonable time
+4. **Show progress** - Clear UI for each checkout step
+5. **Handle errors** - Graceful fallbacks for failed payments
+
+## Security Considerations
+
+- Never trust client-side payment confirmations alone
+- Verify transaction on-chain before fulfilling orders
+- Use unique order IDs to prevent replay attacks
+- Implement rate limiting on payment endpoints

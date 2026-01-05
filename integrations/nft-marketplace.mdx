@@ -1,0 +1,383 @@
+---
+title: NFT Marketplace
+description: Build NFT marketplaces with passkey authentication
+---
+
+# NFT Marketplace Integration
+
+Build NFT marketplaces with gasless, passkey-authenticated transactions.
+
+## Overview
+
+Veridex enables NFT marketplaces to offer:
+- **No wallet extensions** - Users authenticate with FaceID/TouchID
+- **Gasless minting** - Creators mint without ETH
+- **Gasless purchases** - Buyers pay only the NFT price
+- **Cross-chain NFTs** - Bridge NFTs between chains
+
+## Basic NFT Operations
+
+### Minting
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { 
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Authenticate
+await sdk.passkey.login();
+
+// Mint NFT via relayer (gasless)
+const tx = await sdk.executeViaRelayer({
+  target: NFT_CONTRACT,
+  value: 0n,
+  data: nftContract.interface.encodeFunctionData('mint', [
+    sdk.getVaultAddress(), // to
+    'ipfs://Qm...',        // tokenURI
+  ]),
+});
+```
+
+### Transfer
+
+```typescript
+// Transfer NFT
+const tx = await sdk.executeViaRelayer({
+  target: NFT_CONTRACT,
+  value: 0n,
+  data: nftContract.interface.encodeFunctionData('transferFrom', [
+    sdk.getVaultAddress(), // from
+    recipientAddress,       // to
+    tokenId,               // tokenId
+  ]),
+});
+```
+
+## Marketplace Components
+
+### Listing Component
+
+```tsx
+import { useState } from 'react';
+import { parseUnits } from 'ethers';
+import { sdk } from '@/lib/veridex';
+
+const MARKETPLACE = '0xYourMarketplace';
+
+export function ListNFT({ nftContract, tokenId }: { nftContract: string; tokenId: bigint }) {
+  const [price, setPrice] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleList = async () => {
+    setLoading(true);
+    try {
+      // 1. Approve marketplace to transfer NFT
+      await sdk.executeViaRelayer({
+        target: nftContract,
+        data: new ethers.Interface([
+          'function approve(address to, uint256 tokenId)'
+        ]).encodeFunctionData('approve', [MARKETPLACE, tokenId]),
+      });
+
+      // 2. List on marketplace
+      await sdk.executeViaRelayer({
+        target: MARKETPLACE,
+        data: new ethers.Interface([
+          'function list(address nft, uint256 tokenId, uint256 price)'
+        ]).encodeFunctionData('list', [
+          nftContract,
+          tokenId,
+          parseUnits(price, 6), // USDC price
+        ]),
+      });
+
+      alert('NFT listed!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">List NFT #{tokenId.toString()}</h3>
+      <input
+        type="number"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        placeholder="Price in USDC"
+        className="w-full p-2 border rounded mb-4"
+      />
+      <button
+        onClick={handleList}
+        disabled={loading}
+        className="w-full bg-purple-600 text-white py-2 rounded"
+      >
+        {loading ? 'Listing...' : 'List for Sale'}
+      </button>
+    </div>
+  );
+}
+```
+
+### Buy Component
+
+```tsx
+export function BuyNFT({ 
+  nftContract, 
+  tokenId, 
+  price,
+  seller 
+}: { 
+  nftContract: string; 
+  tokenId: bigint; 
+  price: bigint;
+  seller: string;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handleBuy = async () => {
+    setLoading(true);
+    try {
+      // 1. Approve USDC spend
+      await sdk.approveViaRelayer({
+        token: USDC_ADDRESS,
+        spender: MARKETPLACE,
+        amount: price,
+      });
+
+      // 2. Execute purchase
+      await sdk.executeViaRelayer({
+        target: MARKETPLACE,
+        data: new ethers.Interface([
+          'function buy(address nft, uint256 tokenId)'
+        ]).encodeFunctionData('buy', [nftContract, tokenId]),
+      });
+
+      alert('NFT purchased!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <button
+      onClick={handleBuy}
+      disabled={loading}
+      className="bg-green-600 text-white px-6 py-3 rounded-lg"
+    >
+      {loading ? 'Purchasing...' : `Buy for ${formatUnits(price, 6)} USDC`}
+    </button>
+  );
+}
+```
+
+### Gallery Component
+
+```tsx
+import { useState, useEffect } from 'react';
+import { useVeridex } from '@/context/VeridexContext';
+
+interface NFT {
+  tokenId: bigint;
+  tokenURI: string;
+  metadata?: {
+    name: string;
+    image: string;
+    description: string;
+  };
+}
+
+export function NFTGallery({ nftContract }: { nftContract: string }) {
+  const { vaultAddress } = useVeridex();
+  const [nfts, setNfts] = useState<NFT[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (vaultAddress) {
+      loadNFTs();
+    }
+  }, [vaultAddress]);
+
+  const loadNFTs = async () => {
+    setLoading(true);
+    try {
+      const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+      const contract = new ethers.Contract(
+        nftContract,
+        ['function balanceOf(address) view returns (uint256)',
+         'function tokenOfOwnerByIndex(address, uint256) view returns (uint256)',
+         'function tokenURI(uint256) view returns (string)'],
+        provider
+      );
+
+      const balance = await contract.balanceOf(vaultAddress);
+      const nftData: NFT[] = [];
+
+      for (let i = 0; i < balance; i++) {
+        const tokenId = await contract.tokenOfOwnerByIndex(vaultAddress, i);
+        const tokenURI = await contract.tokenURI(tokenId);
+        
+        // Fetch metadata
+        const metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        const metadata = await fetch(metadataUrl).then(r => r.json());
+        
+        nftData.push({ tokenId, tokenURI, metadata });
+      }
+
+      setNfts(nftData);
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  if (loading) return <div>Loading NFTs...</div>;
+
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      {nfts.map((nft) => (
+        <div key={nft.tokenId.toString()} className="border rounded-lg overflow-hidden">
+          <img
+            src={nft.metadata?.image.replace('ipfs://', 'https://ipfs.io/ipfs/')}
+            alt={nft.metadata?.name}
+            className="w-full aspect-square object-cover"
+          />
+          <div className="p-3">
+            <h4 className="font-medium">{nft.metadata?.name}</h4>
+            <p className="text-sm text-gray-500">#{nft.tokenId.toString()}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Batch Operations
+
+For multiple NFT operations:
+
+```typescript
+// Batch list multiple NFTs
+async function batchList(nfts: { contract: string; tokenId: bigint; price: bigint }[]) {
+  for (const nft of nfts) {
+    await sdk.executeViaRelayer({
+      target: nft.contract,
+      data: nftIface.encodeFunctionData('approve', [MARKETPLACE, nft.tokenId]),
+    });
+    
+    await sdk.executeViaRelayer({
+      target: MARKETPLACE,
+      data: marketplaceIface.encodeFunctionData('list', [
+        nft.contract, nft.tokenId, nft.price
+      ]),
+    });
+  }
+}
+```
+
+## Cross-Chain NFTs
+
+Bridge NFTs between chains using Wormhole:
+
+```typescript
+// Bridge NFT from Base to Optimism
+async function bridgeNFT(nftContract: string, tokenId: bigint, targetChain: string) {
+  // 1. Lock NFT in bridge contract
+  await sdk.executeViaRelayer({
+    target: nftContract,
+    data: nftIface.encodeFunctionData('approve', [NFT_BRIDGE, tokenId]),
+  });
+
+  await sdk.executeViaRelayer({
+    target: NFT_BRIDGE,
+    data: bridgeIface.encodeFunctionData('bridge', [
+      nftContract,
+      tokenId,
+      getWormholeChainId(targetChain),
+      sdk.getVaultAddress(),
+    ]),
+  });
+
+  // 2. Claim on target chain (handled by relayer)
+}
+```
+
+## Royalties
+
+Support EIP-2981 royalties:
+
+```typescript
+// Check royalties before sale
+async function getRoyaltyInfo(nftContract: string, tokenId: bigint, salePrice: bigint) {
+  const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+  const contract = new ethers.Contract(
+    nftContract,
+    ['function royaltyInfo(uint256 tokenId, uint256 salePrice) view returns (address, uint256)'],
+    provider
+  );
+
+  try {
+    const [receiver, royaltyAmount] = await contract.royaltyInfo(tokenId, salePrice);
+    return { receiver, royaltyAmount };
+  } catch {
+    return null; // No royalty support
+  }
+}
+```
+
+## Metadata Standards
+
+### ERC-721 Metadata
+
+```typescript
+interface NFTMetadata {
+  name: string;
+  description: string;
+  image: string;
+  external_url?: string;
+  attributes?: Array<{
+    trait_type: string;
+    value: string | number;
+    display_type?: 'number' | 'boost_percentage' | 'boost_number' | 'date';
+  }>;
+}
+```
+
+### Upload to IPFS
+
+```typescript
+import { create } from 'ipfs-http-client';
+
+const ipfs = create({ url: 'https://ipfs.infura.io:5001' });
+
+async function uploadMetadata(metadata: NFTMetadata): Promise<string> {
+  const { cid } = await ipfs.add(JSON.stringify(metadata));
+  return `ipfs://${cid}`;
+}
+
+async function uploadImage(file: File): Promise<string> {
+  const { cid } = await ipfs.add(file);
+  return `ipfs://${cid}`;
+}
+```
+
+## Best Practices
+
+1. **Lazy minting** - Only mint when sold to save gas
+2. **Batch approvals** - Use `setApprovalForAll` for multiple NFTs
+3. **Cache metadata** - Store metadata in database for fast loading
+4. **Verify ownership** - Always check on-chain before allowing actions
+5. **Handle pending** - Show pending transactions in UI
+
+## Security
+
+- Verify NFT ownership before listing
+- Check approval status before purchase
+- Validate metadata before display
+- Use IPFS for decentralized storage

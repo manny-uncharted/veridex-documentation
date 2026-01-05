@@ -1,0 +1,410 @@
+---
+title: TypeScript Types
+description: TypeScript type definitions for the Veridex SDK
+---
+
+# TypeScript Types
+
+All types exported from `@veridex/sdk`.
+
+## Core Types
+
+### SDKOptions
+
+```typescript
+interface SDKOptions {
+  /** Network to use */
+  network?: 'testnet' | 'mainnet';
+  
+  /** Relayer API URL for gasless transactions */
+  relayerUrl?: string;
+  
+  /** API key for Wormhole Query Proxy */
+  relayerApiKey?: string;
+  
+  /** Custom RPC URL */
+  rpcUrl?: string;
+  
+  /** Ethers signer for direct transactions */
+  signer?: Signer;
+  
+  /** Custom storage adapter */
+  storage?: StorageAdapter;
+}
+```
+
+### StorageAdapter
+
+```typescript
+interface StorageAdapter {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  remove(key: string): void;
+}
+```
+
+---
+
+## Passkey Types
+
+### Credential
+
+```typescript
+interface Credential {
+  /** Base64-encoded credential ID */
+  id: string;
+  
+  /** Raw credential ID */
+  rawId: ArrayBuffer;
+  
+  /** P-256 public key */
+  publicKey: {
+    /** X coordinate (hex) */
+    x: string;
+    /** Y coordinate (hex) */
+    y: string;
+  };
+}
+```
+
+### WebAuthnSignature
+
+```typescript
+interface WebAuthnSignature {
+  /** ECDSA r value (hex) */
+  r: string;
+  
+  /** ECDSA s value (hex) */
+  s: string;
+  
+  /** Authenticator data (hex) */
+  authenticatorData: string;
+  
+  /** Client data JSON (base64) */
+  clientDataJSON: string;
+}
+```
+
+---
+
+## Transfer Types
+
+### TransferParams
+
+```typescript
+interface TransferParams {
+  /** Token address or 'native' for native token */
+  token: string;
+  
+  /** Recipient address */
+  recipient: string;
+  
+  /** Amount in smallest unit (wei, lamports, etc.) */
+  amount: bigint;
+}
+```
+
+### TransferResult
+
+```typescript
+interface TransferResult {
+  /** Whether transfer succeeded */
+  success: boolean;
+  
+  /** Transaction hash */
+  txHash: string;
+  
+  /** Block number (if confirmed) */
+  blockNumber?: number;
+  
+  /** Transaction status */
+  status: 'pending' | 'confirmed' | 'failed';
+  
+  /** Error message (if failed) */
+  error?: string;
+}
+```
+
+---
+
+## Bridge Types
+
+### BridgeParams
+
+```typescript
+interface BridgeParams {
+  /** Wormhole chain ID of target chain */
+  targetChain: number;
+  
+  /** Token address or 'native' */
+  token: string;
+  
+  /** Recipient address on target chain */
+  recipient: string;
+  
+  /** Amount in smallest unit */
+  amount: bigint;
+  
+  /** Force specific verification path */
+  path?: 'query' | 'vaa';
+}
+```
+
+### BridgeResult
+
+```typescript
+interface BridgeResult {
+  /** Whether bridge initiated successfully */
+  success: boolean;
+  
+  /** Source chain transaction hash */
+  txHash: string;
+  
+  /** Estimated confirmation time in seconds */
+  estimatedTimeSeconds: number;
+  
+  /** Verification path used */
+  path: 'query' | 'vaa';
+}
+```
+
+### BridgeStatus
+
+```typescript
+interface BridgeStatus {
+  /** Current state */
+  state: 'pending' | 'attested' | 'completed' | 'failed';
+  
+  /** Source chain transaction hash */
+  sourceTxHash: string;
+  
+  /** Destination chain transaction hash */
+  destinationTxHash?: string;
+  
+  /** VAA sequence number */
+  sequence?: bigint;
+  
+  /** Error message (if failed) */
+  error?: string;
+}
+```
+
+---
+
+## Session Types
+
+### SessionParams
+
+```typescript
+interface SessionParams {
+  /** Session duration in seconds */
+  duration: number;
+  
+  /** Maximum total value (in wei equivalent) */
+  maxValue?: bigint;
+  
+  /** Allowed token addresses */
+  allowedTokens?: string[];
+  
+  /** Allowed recipient addresses */
+  allowedRecipients?: string[];
+}
+```
+
+### Session
+
+```typescript
+interface Session {
+  /** Unique session ID */
+  id: string;
+  
+  /** Expiration timestamp (Unix ms) */
+  expiresAt: number;
+  
+  /** Maximum allowed value */
+  maxValue: bigint;
+  
+  /** Value used so far */
+  usedValue: bigint;
+  
+  /** Remaining value */
+  remainingValue: bigint;
+  
+  /** Allowed tokens (if restricted) */
+  allowedTokens?: string[];
+  
+  /** Allowed recipients (if restricted) */
+  allowedRecipients?: string[];
+  
+  /** Session key address */
+  sessionKey: string;
+}
+```
+
+---
+
+## Spending Limit Types
+
+### SpendingLimitConfig
+
+```typescript
+interface SpendingLimitConfig {
+  /** Daily limit (in wei equivalent) */
+  daily?: bigint;
+  
+  /** Per-transaction limit */
+  perTransaction?: bigint;
+  
+  /** Token-specific limits */
+  tokens?: {
+    [address: string]: {
+      daily?: bigint;
+      perTransaction?: bigint;
+    };
+  };
+}
+```
+
+### SpendingLimits
+
+```typescript
+interface SpendingLimits {
+  /** Daily limit */
+  daily: bigint;
+  
+  /** Per-transaction limit */
+  perTransaction: bigint;
+  
+  /** Amount used today */
+  usedToday: bigint;
+  
+  /** Remaining for today */
+  remaining: bigint;
+  
+  /** When limits reset (Unix timestamp) */
+  resetsAt: number;
+  
+  /** Token-specific limits */
+  tokens: {
+    [address: string]: {
+      daily: bigint;
+      perTransaction: bigint;
+      usedToday: bigint;
+      remaining: bigint;
+    };
+  };
+}
+```
+
+### SpendingCheck
+
+```typescript
+interface SpendingCheck {
+  /** Whether transfer is allowed */
+  allowed: boolean;
+  
+  /** Reason if not allowed */
+  reason?: string;
+  
+  /** Available amount */
+  available: bigint;
+  
+  /** When limit resets */
+  resetsAt: number;
+}
+```
+
+---
+
+## Chain Types
+
+### ChainConfig
+
+```typescript
+interface ChainConfig {
+  /** Chain name */
+  name: string;
+  
+  /** Native chain ID */
+  chainId: number;
+  
+  /** Wormhole chain ID */
+  wormholeChainId: number;
+  
+  /** RPC URL */
+  rpcUrl: string;
+  
+  /** Chain type */
+  type: 'evm' | 'solana' | 'aptos' | 'sui' | 'starknet';
+  
+  /** Contract addresses */
+  contracts: {
+    factory?: string;
+    implementation?: string;
+    hub?: string;
+    programId?: string;
+    moduleAddress?: string;
+    packageId?: string;
+  };
+}
+```
+
+### ChainBalances
+
+```typescript
+interface ChainBalances {
+  [chainName: string]: {
+    [symbol: string]: string;
+  };
+}
+```
+
+---
+
+## Error Types
+
+### VeridexError
+
+```typescript
+interface VeridexError extends Error {
+  /** Machine-readable error code */
+  code: string;
+  
+  /** Human-readable message */
+  message: string;
+  
+  /** Additional context */
+  details?: Record<string, any>;
+  
+  /** Seconds to wait before retry */
+  retryAfter?: number;
+  
+  /** HTTP status code */
+  httpStatus?: number;
+}
+```
+
+---
+
+## Importing Types
+
+```typescript
+import type {
+  SDKOptions,
+  Credential,
+  WebAuthnSignature,
+  TransferParams,
+  TransferResult,
+  BridgeParams,
+  BridgeResult,
+  BridgeStatus,
+  SessionParams,
+  Session,
+  SpendingLimitConfig,
+  SpendingLimits,
+  SpendingCheck,
+  ChainConfig,
+  ChainBalances,
+  VeridexError,
+} from '@veridex/sdk';
+```

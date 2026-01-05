@@ -1,0 +1,106 @@
+---
+title: Changelog
+description: Version history and release notes for Veridex SDK
+---
+
+# Changelog
+
+All notable changes to the Veridex SDK.
+
+## [1.0.0-beta.1] - 2024-12-XX
+
+### Added
+- Initial beta release
+- Passkey registration and login
+- Session key management
+- Gasless transactions via relayer
+- Cross-chain transfers (Base, Optimism, Arbitrum)
+- Multi-chain balance queries
+- Wormhole CCQ (fast path) integration
+- Wormhole VAA (standard path) integration
+- TypeScript types and documentation
+
+### Supported Chains
+- Base (Hub)
+- Optimism (Spoke)
+- Arbitrum (Spoke)
+- Base Sepolia (Testnet Hub)
+
+### Known Limitations
+- Solana, Aptos, Sui, Starknet in development
+- Recovery features in beta
+- Session keys limited to EVM chains
+
+---
+
+## Versioning
+
+We use [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backwards compatible)
+- **PATCH**: Bug fixes (backwards compatible)
+
+During beta (`1.0.0-beta.x`), minor breaking changes may occur.
+
+---
+
+## Upgrade Guide
+
+### From 0.x to 1.0.0-beta.1
+
+```typescript
+// Old (0.x)
+import Veridex from '@veridex/sdk';
+const sdk = new Veridex({ chain: 'base' });
+
+// New (1.0.0-beta.1)
+import { createSDK } from '@veridex/sdk';
+const sdk = createSDK('base', { network: 'mainnet' });
+```
+
+**Breaking Changes:**
+1. `new Veridex()` → `createSDK()`
+2. `chain` option → first argument
+3. `testnet: true` → `network: 'testnet'`
+4. `sdk.register()` → `sdk.passkey.register()`
+5. `sdk.login()` → `sdk.passkey.login()`
+
+---
+
+## Upcoming
+
+### 1.0.0-beta.2 (Planned)
+- [ ] Solana support
+- [ ] Improved error messages
+- [ ] React hooks package
+- [ ] Vue composables package
+
+### 1.0.0-beta.3 (Planned)
+- [ ] Aptos support
+- [ ] Sui support
+- [ ] Social recovery
+
+### 1.0.0 (Planned)
+- [ ] Starknet support
+- [ ] Full audit completion
+- [ ] Production relayer
+- [ ] Stable API
+
+---
+
+## Release Process
+
+1. Changes merged to `main`
+2. Version bump and changelog update
+3. npm publish with `--tag beta`
+4. GitHub release created
+5. Documentation updated
+
+---
+
+## Subscribe to Updates
+
+- **GitHub Releases**: Watch the [SDK repository](https://github.com/Veridex-Protocol/sdk)
+- **Discord**: Join [#announcements](https://discord.gg/veridex)
+- **Twitter/X**: Follow [@VeridexProtocol](https://twitter.com/VeridexProtocol)

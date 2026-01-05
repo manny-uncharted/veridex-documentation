@@ -1,0 +1,428 @@
+---
+title: DeFi Integration
+description: Integrate Veridex with DeFi protocols
+---
+
+# DeFi Integration
+
+Integrate Veridex passkey wallets with DeFi protocols for gasless, user-friendly DeFi.
+
+## Overview
+
+Enable your users to:
+- **Swap tokens** without gas
+- **Provide liquidity** with one click
+- **Stake assets** using FaceID/TouchID
+- **Manage DeFi positions** seamlessly
+
+## Token Swaps
+
+### Uniswap V3 Integration
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { ethers } from 'ethers';
+
+const sdk = createSDK('base', { 
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+const UNISWAP_ROUTER = '0x2626664c2603336E57B271c5C0b26F421741e481'; // Base
+
+interface SwapParams {
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: bigint;
+  slippagePercent: number;
+}
+
+async function swapTokens({ tokenIn, tokenOut, amountIn, slippagePercent }: SwapParams) {
+  // 1. Approve router
+  await sdk.approveViaRelayer({
+    token: tokenIn,
+    spender: UNISWAP_ROUTER,
+    amount: amountIn,
+  });
+
+  // 2. Get quote and calculate minimum out
+  const quote = await getQuote(tokenIn, tokenOut, amountIn);
+  const minAmountOut = quote * BigInt(100 - slippagePercent) / 100n;
+
+  // 3. Execute swap
+  const routerInterface = new ethers.Interface([
+    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)'
+  ]);
+
+  const tx = await sdk.executeViaRelayer({
+    target: UNISWAP_ROUTER,
+    data: routerInterface.encodeFunctionData('exactInputSingle', [{
+      tokenIn,
+      tokenOut,
+      fee: 3000, // 0.3%
+      recipient: sdk.getVaultAddress(),
+      amountIn,
+      amountOutMinimum: minAmountOut,
+      sqrtPriceLimitX96: 0,
+    }]),
+  });
+
+  return tx;
+}
+```
+
+### Swap Component
+
+```tsx
+import { useState } from 'react';
+import { parseUnits, formatUnits } from 'ethers';
+
+const TOKENS = {
+  ETH: { address: '0x4200000000000000000000000000000000000006', decimals: 18 },
+  USDC: { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
+  DAI: { address: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', decimals: 18 },
+};
+
+export function SwapWidget() {
+  const [tokenIn, setTokenIn] = useState('USDC');
+  const [tokenOut, setTokenOut] = useState('ETH');
+  const [amountIn, setAmountIn] = useState('');
+  const [quote, setQuote] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleQuote = async () => {
+    if (!amountIn) return;
+    
+    const amount = parseUnits(amountIn, TOKENS[tokenIn].decimals);
+    const quoteAmount = await getQuote(
+      TOKENS[tokenIn].address,
+      TOKENS[tokenOut].address,
+      amount
+    );
+    setQuote(formatUnits(quoteAmount, TOKENS[tokenOut].decimals));
+  };
+
+  const handleSwap = async () => {
+    setLoading(true);
+    try {
+      await swapTokens({
+        tokenIn: TOKENS[tokenIn].address,
+        tokenOut: TOKENS[tokenOut].address,
+        amountIn: parseUnits(amountIn, TOKENS[tokenIn].decimals),
+        slippagePercent: 1,
+      });
+      alert('Swap successful!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-6 border rounded-xl max-w-md">
+      <h3 className="font-bold mb-4">Swap Tokens</h3>
+      
+      {/* From */}
+      <div className="mb-4">
+        <label className="text-sm text-gray-500">From</label>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            value={amountIn}
+            onChange={(e) => setAmountIn(e.target.value)}
+            onBlur={handleQuote}
+            className="flex-1 p-2 border rounded"
+            placeholder="0.0"
+          />
+          <select
+            value={tokenIn}
+            onChange={(e) => setTokenIn(e.target.value)}
+            className="p-2 border rounded"
+          >
+            {Object.keys(TOKENS).map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* To */}
+      <div className="mb-4">
+        <label className="text-sm text-gray-500">To (estimated)</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={quote || ''}
+            readOnly
+            className="flex-1 p-2 border rounded bg-gray-50"
+            placeholder="0.0"
+          />
+          <select
+            value={tokenOut}
+            onChange={(e) => setTokenOut(e.target.value)}
+            className="p-2 border rounded"
+          >
+            {Object.keys(TOKENS).map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <button
+        onClick={handleSwap}
+        disabled={loading || !quote}
+        className="w-full bg-blue-600 text-white py-3 rounded-lg"
+      >
+        {loading ? 'Swapping...' : 'Swap'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Liquidity Provision
+
+### Add Liquidity
+
+```typescript
+const POSITION_MANAGER = '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1'; // Base
+
+async function addLiquidity(
+  token0: string,
+  token1: string,
+  amount0: bigint,
+  amount1: bigint,
+  tickLower: number,
+  tickUpper: number
+) {
+  // 1. Approve tokens
+  await sdk.approveViaRelayer({ token: token0, spender: POSITION_MANAGER, amount: amount0 });
+  await sdk.approveViaRelayer({ token: token1, spender: POSITION_MANAGER, amount: amount1 });
+
+  // 2. Mint position
+  const nftManagerInterface = new ethers.Interface([
+    'function mint((address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min, address recipient, uint256 deadline)) returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)'
+  ]);
+
+  return await sdk.executeViaRelayer({
+    target: POSITION_MANAGER,
+    data: nftManagerInterface.encodeFunctionData('mint', [{
+      token0,
+      token1,
+      fee: 3000,
+      tickLower,
+      tickUpper,
+      amount0Desired: amount0,
+      amount1Desired: amount1,
+      amount0Min: 0,
+      amount1Min: 0,
+      recipient: sdk.getVaultAddress(),
+      deadline: Math.floor(Date.now() / 1000) + 3600,
+    }]),
+  });
+}
+```
+
+## Staking
+
+### Stake Component
+
+```tsx
+const STAKING_CONTRACT = '0xYourStakingContract';
+
+export function StakingWidget({ token }: { token: string }) {
+  const [amount, setAmount] = useState('');
+  const [staked, setStaked] = useState(0n);
+  const [rewards, setRewards] = useState(0n);
+  const [loading, setLoading] = useState(false);
+
+  const handleStake = async () => {
+    setLoading(true);
+    try {
+      const amountWei = parseUnits(amount, 18);
+      
+      // Approve
+      await sdk.approveViaRelayer({
+        token,
+        spender: STAKING_CONTRACT,
+        amount: amountWei,
+      });
+
+      // Stake
+      await sdk.executeViaRelayer({
+        target: STAKING_CONTRACT,
+        data: stakingIface.encodeFunctionData('stake', [amountWei]),
+      });
+
+      setAmount('');
+      await loadStakeInfo();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const handleUnstake = async () => {
+    setLoading(true);
+    try {
+      await sdk.executeViaRelayer({
+        target: STAKING_CONTRACT,
+        data: stakingIface.encodeFunctionData('withdraw', [staked]),
+      });
+      await loadStakeInfo();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const handleClaim = async () => {
+    setLoading(true);
+    try {
+      await sdk.executeViaRelayer({
+        target: STAKING_CONTRACT,
+        data: stakingIface.encodeFunctionData('getReward', []),
+      });
+      await loadStakeInfo();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-6 border rounded-xl">
+      <h3 className="font-bold mb-4">Staking</h3>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="p-3 bg-gray-50 rounded">
+          <div className="text-sm text-gray-500">Staked</div>
+          <div className="font-mono">{formatUnits(staked, 18)}</div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded">
+          <div className="text-sm text-gray-500">Rewards</div>
+          <div className="font-mono">{formatUnits(rewards, 18)}</div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount to stake"
+          className="w-full p-2 border rounded"
+        />
+        <button onClick={handleStake} disabled={loading} className="w-full bg-green-600 text-white py-2 rounded">
+          {loading ? 'Staking...' : 'Stake'}
+        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={handleUnstake} disabled={loading} className="border py-2 rounded">
+            Unstake All
+          </button>
+          <button onClick={handleClaim} disabled={loading} className="border py-2 rounded">
+            Claim Rewards
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Lending Protocols
+
+### Aave Integration
+
+```typescript
+const AAVE_POOL = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5'; // Base
+
+// Supply tokens
+async function supply(token: string, amount: bigint) {
+  // Approve
+  await sdk.approveViaRelayer({ token, spender: AAVE_POOL, amount });
+
+  // Supply
+  const poolInterface = new ethers.Interface([
+    'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)'
+  ]);
+
+  return await sdk.executeViaRelayer({
+    target: AAVE_POOL,
+    data: poolInterface.encodeFunctionData('supply', [
+      token,
+      amount,
+      sdk.getVaultAddress(),
+      0,
+    ]),
+  });
+}
+
+// Borrow tokens
+async function borrow(token: string, amount: bigint, interestRateMode: 1 | 2) {
+  const poolInterface = new ethers.Interface([
+    'function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)'
+  ]);
+
+  return await sdk.executeViaRelayer({
+    target: AAVE_POOL,
+    data: poolInterface.encodeFunctionData('borrow', [
+      token,
+      amount,
+      interestRateMode, // 1 = stable, 2 = variable
+      0,
+      sdk.getVaultAddress(),
+    ]),
+  });
+}
+
+// Repay loan
+async function repay(token: string, amount: bigint, interestRateMode: 1 | 2) {
+  await sdk.approveViaRelayer({ token, spender: AAVE_POOL, amount });
+
+  const poolInterface = new ethers.Interface([
+    'function repay(address asset, uint256 amount, uint256 interestRateMode, address onBehalfOf) returns (uint256)'
+  ]);
+
+  return await sdk.executeViaRelayer({
+    target: AAVE_POOL,
+    data: poolInterface.encodeFunctionData('repay', [
+      token,
+      amount,
+      interestRateMode,
+      sdk.getVaultAddress(),
+    ]),
+  });
+}
+```
+
+## Session Keys for DeFi
+
+Enable automated DeFi operations:
+
+```typescript
+// Create session for DeFi operations
+const session = await sdk.sessions.create({
+  duration: 3600, // 1 hour
+  maxValue: parseUnits('1000', 6), // Max $1000
+  allowedTokens: [USDC, ETH],
+  allowedContracts: [UNISWAP_ROUTER, AAVE_POOL],
+});
+
+// Now operations within limits don't need biometric
+await swapTokens({ ... }); // Auto-approved ✓
+await supply(USDC, parseUnits('100', 6)); // Auto-approved ✓
+```
+
+## Best Practices
+
+1. **Slippage protection** - Always set reasonable slippage limits
+2. **Deadline handling** - Use deadlines for all DeFi transactions
+3. **Quote freshness** - Refresh quotes before execution
+4. **Session limits** - Set conservative session spending limits
+5. **Error handling** - Handle revert reasons gracefully
+
+## Security Considerations
+
+- Verify contract addresses against official sources
+- Use price oracles for sanity checks
+- Implement circuit breakers for large transactions
+- Monitor for frontrunning in quotes
+- Validate user inputs thoroughly

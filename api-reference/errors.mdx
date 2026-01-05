@@ -1,0 +1,215 @@
+---
+title: Error Codes
+description: Complete error code reference for Veridex SDK and Relayer
+---
+
+# Error Codes
+
+Complete reference for error codes returned by the Veridex SDK and Relayer.
+
+## SDK Errors
+
+### Authentication Errors
+
+| Code | Message | Cause | Solution |
+|------|---------|-------|----------|
+| `PASSKEY_NOT_SUPPORTED` | WebAuthn is not supported | Browser/device doesn't support passkeys | Use a supported browser (Chrome 67+, Safari 14+) |
+| `USER_CANCELLED` | User cancelled the operation | User dismissed biometric prompt | Prompt user to try again |
+| `CREDENTIAL_NOT_FOUND` | No stored credential found | User hasn't registered or credential cleared | Call `passkey.register()` |
+| `INVALID_CREDENTIAL` | Credential is invalid | Corrupted or expired credential | Clear and re-register |
+| `SECURITY_ERROR` | Security context required | Not running on HTTPS | Use HTTPS or localhost |
+
+### Transaction Errors
+
+| Code | Message | Cause | Solution |
+|------|---------|-------|----------|
+| `INSUFFICIENT_BALANCE` | Insufficient balance | Vault doesn't have enough tokens | Check balance before transfer |
+| `INVALID_RECIPIENT` | Invalid recipient address | Malformed address | Validate address format |
+| `INVALID_AMOUNT` | Invalid amount | Zero, negative, or malformed amount | Use positive bigint |
+| `INVALID_TOKEN` | Token not supported | Unknown token address | Use supported token |
+| `NONCE_MISMATCH` | Nonce mismatch | Transaction already processed or out of order | Refresh and retry |
+
+### Session Errors
+
+| Code | Message | Cause | Solution |
+|------|---------|-------|----------|
+| `SESSION_EXISTS` | Session already active | Tried to create while session exists | Revoke existing session first |
+| `SESSION_EXPIRED` | Session has expired | Session exceeded duration | Create new session |
+| `SESSION_LIMIT_EXCEEDED` | Session limit exceeded | Transfer exceeds session's maxValue | Create session with higher limit |
+| `SESSION_TOKEN_NOT_ALLOWED` | Token not allowed | Token not in session's allowedTokens | Use allowed token or create new session |
+| `SESSION_RECIPIENT_NOT_ALLOWED` | Recipient not allowed | Recipient not in allowedRecipients | Use allowed recipient or create new session |
+
+### Spending Limit Errors
+
+| Code | Message | Cause | Solution |
+|------|---------|-------|----------|
+| `SPENDING_LIMIT_EXCEEDED` | Spending limit exceeded | Transfer exceeds configured limit | Wait for reset or adjust limits |
+| `DAILY_LIMIT_EXCEEDED` | Daily limit exceeded | 24-hour limit reached | Wait for reset |
+| `PER_TX_LIMIT_EXCEEDED` | Per-transaction limit exceeded | Single transfer too large | Split into smaller transfers |
+
+### Chain Errors
+
+| Code | Message | Cause | Solution |
+|------|---------|-------|----------|
+| `UNSUPPORTED_CHAIN` | Chain not supported | Chain not in SDK configuration | Use supported chain |
+| `CHAIN_UNAVAILABLE` | Chain unavailable | RPC not responding | Try again or use different RPC |
+| `RPC_ERROR` | RPC request failed | Network or RPC issues | Retry with backoff |
+
+---
+
+## Relayer Errors
+
+### Submission Errors
+
+| Code | HTTP | Message | Cause | Solution |
+|------|------|---------|-------|----------|
+| `INVALID_SIGNATURE` | 400 | Signature verification failed | WebAuthn signature invalid | Ensure correct payload signing |
+| `INVALID_PAYLOAD` | 400 | Invalid request payload | Malformed JSON or missing fields | Check request format |
+| `UNSUPPORTED_ACTION` | 400 | Action not supported | Unknown action type | Use valid action |
+| `VAULT_NOT_FOUND` | 400 | Vault doesn't exist | Vault not deployed on target chain | Create vault first |
+
+### Rate Limiting
+
+| Code | HTTP | Message | Cause | Solution |
+|------|------|---------|-------|----------|
+| `RATE_LIMITED` | 429 | Too many requests | Exceeded rate limit | Wait and retry with exponential backoff |
+| `VAULT_RATE_LIMITED` | 429 | Vault rate limited | Too many requests from vault | Wait 60 seconds |
+
+### Relay Errors
+
+| Code | HTTP | Message | Cause | Solution |
+|------|------|---------|-------|----------|
+| `RELAY_FAILED` | 500 | Relay transaction failed | On-chain execution failed | Check error details, may need more gas |
+| `RELAYER_ERROR` | 500 | Internal relayer error | Relayer service issue | Retry or contact support |
+| `INSUFFICIENT_RELAYER_BALANCE` | 503 | Relayer out of funds | Relayer needs refunding | Use different relayer or wait |
+
+### Wormhole Errors
+
+| Code | HTTP | Message | Cause | Solution |
+|------|------|---------|-------|----------|
+| `VAA_NOT_FOUND` | 404 | VAA not yet available | Guardians haven't attested | Wait and retry (~60s) |
+| `VAA_EXPIRED` | 400 | VAA has expired | VAA too old | Re-initiate transaction |
+| `INVALID_VAA` | 400 | Invalid VAA | Malformed or tampered VAA | Re-initiate transaction |
+| `WORMHOLE_UNAVAILABLE` | 503 | Wormhole service unavailable | Guardian network issues | Wait and retry |
+
+---
+
+## Handling Errors
+
+### JavaScript/TypeScript
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+try {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount: parseUnits('100', 6),
+  });
+} catch (error) {
+  switch (error.code) {
+    case 'INSUFFICIENT_BALANCE':
+      showToast('Not enough tokens in your wallet');
+      break;
+    
+    case 'SPENDING_LIMIT_EXCEEDED':
+      showToast(`Limit exceeded. Available: ${error.available}`);
+      break;
+    
+    case 'SESSION_EXPIRED':
+      // Prompt to create new session
+      await sdk.sessions.create({ duration: 3600 });
+      // Retry transfer
+      break;
+    
+    case 'RATE_LIMITED':
+      // Wait and retry
+      await sleep(error.retryAfter * 1000);
+      // Retry transfer
+      break;
+    
+    case 'RELAYER_UNAVAILABLE':
+      showToast('Service temporarily unavailable. Please try again.');
+      break;
+    
+    default:
+      console.error('Unexpected error:', error);
+      showToast('Something went wrong. Please try again.');
+  }
+}
+```
+
+### React Error Boundary
+
+```tsx
+import { Component, ReactNode } from 'react';
+
+interface Props {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+class VeridexErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const code = (this.state.error as any)?.code;
+      
+      if (code === 'PASSKEY_NOT_SUPPORTED') {
+        return <div>Your browser doesn't support passkeys.</div>;
+      }
+      
+      return this.props.fallback;
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+---
+
+## Error Response Format
+
+All errors follow this format:
+
+```typescript
+interface VeridexError extends Error {
+  code: string;           // Machine-readable error code
+  message: string;        // Human-readable message
+  details?: {             // Additional context
+    [key: string]: any;
+  };
+  retryAfter?: number;    // Seconds to wait (for rate limits)
+  httpStatus?: number;    // HTTP status code (relayer errors)
+}
+```
+
+**Example:**
+
+```json
+{
+  "code": "SPENDING_LIMIT_EXCEEDED",
+  "message": "Transfer exceeds daily spending limit",
+  "details": {
+    "limitType": "daily",
+    "limit": "1000000000000000000",
+    "attempted": "2000000000000000000",
+    "available": "500000000000000000",
+    "resetsAt": 1704153600
+  }
+}
+```

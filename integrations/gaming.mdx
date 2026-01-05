@@ -1,0 +1,424 @@
+---
+title: Gaming Integration
+description: Integrate Veridex with blockchain games
+---
+
+# Gaming Integration
+
+Build blockchain games with seamless passkey authentication and gasless transactions.
+
+## Overview
+
+Veridex enables game developers to:
+- **No wallet popups** - Players authenticate with device biometrics
+- **Invisible transactions** - Gasless, auto-signed game actions
+- **Session keys** - Smooth gameplay without constant prompts
+- **Cross-chain assets** - Use items across games on different chains
+
+## Quick Start
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { 
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Player login - one-time biometric
+await sdk.passkey.login();
+
+// Create game session (1 hour, no prompts during gameplay)
+const session = await sdk.sessions.create({
+  duration: 3600,
+  maxValue: parseUnits('10', 6), // $10 max spend
+});
+
+// Now all game actions are frictionless!
+await claimDailyReward();
+await mintItem(itemId);
+await transferGold(playerId, 100);
+```
+
+## Session Keys for Gaming
+
+The key to smooth gaming is session keys:
+
+```typescript
+// Create optimized game session
+async function startGameSession() {
+  return await sdk.sessions.create({
+    duration: 7200, // 2 hour play session
+    maxValue: parseUnits('50', 6), // Max $50 in transactions
+    allowedTokens: [GAME_TOKEN, GOLD_TOKEN],
+    allowedContracts: [GAME_CONTRACT, MARKETPLACE],
+  });
+}
+
+// Check if session is still valid
+function canAutoSign(): boolean {
+  const session = sdk.sessions.getActive();
+  return session && session.expiresAt > Date.now();
+}
+
+// Game actions during session need no prompts
+async function gameAction() {
+  if (canAutoSign()) {
+    await sdk.execute(...); // Instant!
+  } else {
+    // Session expired, prompt for new one
+    await startGameSession();
+  }
+}
+```
+
+## In-Game Wallet UI
+
+```tsx
+import { useState, useEffect } from 'react';
+import { formatUnits } from 'ethers';
+import { sdk } from '@/lib/veridex';
+
+export function GameWallet() {
+  const [gold, setGold] = useState('0');
+  const [gems, setGems] = useState('0');
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    loadBalances();
+    setSession(sdk.sessions.getActive());
+  }, []);
+
+  const loadBalances = async () => {
+    const balances = await sdk.getBalances();
+    setGold(balances.base?.GOLD || '0');
+    setGems(balances.base?.GEMS || '0');
+  };
+
+  return (
+    <div className="fixed top-4 right-4 bg-black/80 text-white p-4 rounded-lg">
+      {/* Balances */}
+      <div className="flex gap-4 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-yellow-400">🪙</span>
+          <span>{gold}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-blue-400">💎</span>
+          <span>{gems}</span>
+        </div>
+      </div>
+
+      {/* Session Status */}
+      {session && (
+        <div className="text-xs text-green-400 flex items-center gap-1">
+          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+          Session active
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Game Actions
+
+### Claim Rewards
+
+```typescript
+async function claimDailyReward() {
+  const tx = await sdk.executeViaRelayer({
+    target: GAME_CONTRACT,
+    data: gameContract.interface.encodeFunctionData('claimDailyReward', []),
+  });
+  
+  // Refresh UI
+  await loadBalances();
+  showToast('Daily reward claimed!');
+}
+```
+
+### Mint Items
+
+```typescript
+async function mintItem(itemId: number) {
+  const tx = await sdk.executeViaRelayer({
+    target: GAME_CONTRACT,
+    data: gameContract.interface.encodeFunctionData('mintItem', [
+      sdk.getVaultAddress(),
+      itemId,
+    ]),
+  });
+  
+  return tx;
+}
+```
+
+### In-Game Purchases
+
+```typescript
+async function purchaseItem(itemId: number, price: bigint) {
+  // Approve spend (if using ERC-20)
+  await sdk.approveViaRelayer({
+    token: GOLD_TOKEN,
+    spender: MARKETPLACE,
+    amount: price,
+  });
+
+  // Purchase
+  await sdk.executeViaRelayer({
+    target: MARKETPLACE,
+    data: marketplaceIface.encodeFunctionData('purchase', [itemId]),
+  });
+  
+  showToast('Item purchased!');
+}
+```
+
+### Player-to-Player Trade
+
+```typescript
+async function tradeItem(
+  itemId: bigint,
+  partnerAddress: string,
+  goldAmount: bigint
+) {
+  // Create escrow trade
+  await sdk.executeViaRelayer({
+    target: TRADE_CONTRACT,
+    data: tradeIface.encodeFunctionData('createTrade', [
+      ITEM_CONTRACT,
+      itemId,
+      GOLD_TOKEN,
+      goldAmount,
+      partnerAddress,
+      Math.floor(Date.now() / 1000) + 3600, // 1 hour expiry
+    ]),
+  });
+}
+```
+
+## Inventory System
+
+```tsx
+interface GameItem {
+  tokenId: bigint;
+  itemType: number;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  stats: {
+    attack?: number;
+    defense?: number;
+    speed?: number;
+  };
+}
+
+export function Inventory() {
+  const [items, setItems] = useState<GameItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadInventory();
+  }, []);
+
+  const loadInventory = async () => {
+    setLoading(true);
+    const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+    const itemContract = new ethers.Contract(ITEM_CONTRACT, itemAbi, provider);
+    
+    const balance = await itemContract.balanceOf(sdk.getVaultAddress());
+    const loadedItems: GameItem[] = [];
+
+    for (let i = 0; i < balance; i++) {
+      const tokenId = await itemContract.tokenOfOwnerByIndex(sdk.getVaultAddress(), i);
+      const metadata = await itemContract.getItemMetadata(tokenId);
+      loadedItems.push({
+        tokenId,
+        itemType: metadata.itemType,
+        rarity: ['common', 'rare', 'epic', 'legendary'][metadata.rarity],
+        stats: {
+          attack: metadata.attack?.toNumber(),
+          defense: metadata.defense?.toNumber(),
+          speed: metadata.speed?.toNumber(),
+        },
+      });
+    }
+
+    setItems(loadedItems);
+    setLoading(false);
+  };
+
+  const equipItem = async (item: GameItem) => {
+    await sdk.executeViaRelayer({
+      target: GAME_CONTRACT,
+      data: gameIface.encodeFunctionData('equip', [item.tokenId]),
+    });
+    showToast('Item equipped!');
+  };
+
+  const sellItem = async (item: GameItem, price: bigint) => {
+    // Approve marketplace
+    await sdk.executeViaRelayer({
+      target: ITEM_CONTRACT,
+      data: itemIface.encodeFunctionData('approve', [MARKETPLACE, item.tokenId]),
+    });
+
+    // List for sale
+    await sdk.executeViaRelayer({
+      target: MARKETPLACE,
+      data: marketplaceIface.encodeFunctionData('list', [
+        ITEM_CONTRACT,
+        item.tokenId,
+        GOLD_TOKEN,
+        price,
+      ]),
+    });
+    
+    showToast('Item listed for sale!');
+  };
+
+  return (
+    <div className="grid grid-cols-4 gap-2 p-4">
+      {items.map((item) => (
+        <div
+          key={item.tokenId.toString()}
+          onClick={() => setSelectedItem(item)}
+          className={`
+            p-2 border rounded cursor-pointer
+            ${getRarityColor(item.rarity)}
+          `}
+        >
+          <img src={getItemImage(item.itemType)} alt="" className="w-full" />
+          <div className="text-xs mt-1">{getItemName(item.itemType)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Leaderboards & Achievements
+
+```typescript
+// Submit score (signed by passkey for authenticity)
+async function submitScore(score: number) {
+  const message = ethers.solidityPackedKeccak256(
+    ['address', 'uint256', 'uint256'],
+    [sdk.getVaultAddress(), score, Date.now()]
+  );
+
+  // Sign with passkey (proves authenticity)
+  const signature = await sdk.signMessage(message);
+
+  // Submit to game server
+  await fetch('/api/leaderboard', {
+    method: 'POST',
+    body: JSON.stringify({
+      player: sdk.getVaultAddress(),
+      score,
+      timestamp: Date.now(),
+      signature,
+    }),
+  });
+}
+
+// Claim achievement NFT
+async function claimAchievement(achievementId: number) {
+  await sdk.executeViaRelayer({
+    target: ACHIEVEMENT_CONTRACT,
+    data: achievementIface.encodeFunctionData('claim', [
+      sdk.getVaultAddress(),
+      achievementId,
+    ]),
+  });
+}
+```
+
+## Multiplayer Considerations
+
+```typescript
+// Join match with entry fee
+async function joinMatch(matchId: string, entryFee: bigint) {
+  await sdk.approveViaRelayer({
+    token: GOLD_TOKEN,
+    spender: MATCH_CONTRACT,
+    amount: entryFee,
+  });
+
+  await sdk.executeViaRelayer({
+    target: MATCH_CONTRACT,
+    data: matchIface.encodeFunctionData('join', [matchId]),
+  });
+}
+
+// Claim winnings
+async function claimWinnings(matchId: string) {
+  await sdk.executeViaRelayer({
+    target: MATCH_CONTRACT,
+    data: matchIface.encodeFunctionData('claimPrize', [matchId]),
+  });
+}
+```
+
+## Best Practices
+
+1. **Long sessions** - Create 2-4 hour game sessions for smooth play
+2. **Batch actions** - Combine multiple game actions when possible
+3. **Optimistic UI** - Update UI immediately, sync state async
+4. **Retry logic** - Handle network issues gracefully
+5. **Session refresh** - Prompt for new session before expiry
+
+## Session Management Pattern
+
+```typescript
+class GameSession {
+  private sessionPromise: Promise<void> | null = null;
+
+  async ensureSession(): Promise<void> {
+    const active = sdk.sessions.getActive();
+    
+    if (active && active.expiresAt > Date.now() + 300000) {
+      return; // Session valid for at least 5 more minutes
+    }
+
+    // Prevent multiple concurrent session creations
+    if (!this.sessionPromise) {
+      this.sessionPromise = this.createSession();
+    }
+    
+    await this.sessionPromise;
+    this.sessionPromise = null;
+  }
+
+  private async createSession(): Promise<void> {
+    showModal('Session expired. Touch to continue playing.');
+    
+    await sdk.sessions.create({
+      duration: 7200,
+      maxValue: parseUnits('50', 6),
+      allowedContracts: [GAME_CONTRACT, MARKETPLACE],
+    });
+    
+    hideModal();
+  }
+
+  async executeGameAction(action: () => Promise<void>): Promise<void> {
+    await this.ensureSession();
+    await action();
+  }
+}
+
+const gameSession = new GameSession();
+
+// Usage
+await gameSession.executeGameAction(() => claimReward());
+await gameSession.executeGameAction(() => mintItem(1));
+```
+
+## Security for Games
+
+- Use server-side validation for competitive games
+- Sign scores/actions with passkey for authenticity
+- Rate limit game actions to prevent abuse
+- Use commit-reveal for fairness in random outcomes
+- Store sensitive game state on-chain

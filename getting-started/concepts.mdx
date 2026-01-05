@@ -1,0 +1,214 @@
+---
+title: Core Concepts
+description: Understand the key concepts behind Veridex Protocol
+---
+
+# Core Concepts
+
+Understanding the fundamental concepts of Veridex will help you build better integrations.
+
+## Passkeys (WebAuthn)
+
+Passkeys are a modern authentication standard that replaces passwords with biometrics (FaceID, TouchID) or hardware security keys.
+
+### How Passkeys Work
+
+```
+User taps "Connect" → Device prompts for biometric → 
+Passkey signs challenge → Signature verified on-chain
+```
+
+### Key Properties
+
+- **Phishing-resistant**: Passkeys are bound to domains
+- **Cross-device**: Sync via iCloud Keychain, Google Password Manager
+- **Non-exportable**: Private key never leaves the device
+
+### Cryptography
+
+Veridex uses the **P-256 (secp256r1)** curve, supported natively by:
+
+- WebAuthn standard
+- RIP-7212 precompile on Base/Optimism/Arbitrum
+- All modern secure enclaves (TPM, Secure Enclave)
+
+## Hub and Spoke Architecture
+
+Veridex uses a hub-and-spoke model for cross-chain operations.
+
+```
+                    ┌─────────────┐
+                    │   Base      │
+                    │   (Hub)     │
+                    │             │
+                    │ ┌─────────┐ │
+                    │ │Passkey  │ │
+                    │ │Registry │ │
+                    │ └─────────┘ │
+                    └──────┬──────┘
+                           │
+              Wormhole Cross-Chain Messages
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   ┌────▼────┐       ┌─────▼─────┐      ┌─────▼─────┐
+   │Optimism │       │ Arbitrum  │      │  Solana   │
+   │ (Spoke) │       │  (Spoke)  │      │  (Spoke)  │
+   │         │       │           │      │           │
+   │┌───────┐│       │┌─────────┐│      │┌─────────┐│
+   ││ Vault ││       ││  Vault  ││      ││  Vault  ││
+   │└───────┘│       │└─────────┘│      │└─────────┘│
+   └─────────┘       └───────────┘      └───────────┘
+```
+
+### Hub (Base)
+
+- Stores passkey credentials (public key, credential ID)
+- Verifies WebAuthn signatures (P-256)
+- Emits cross-chain authorization messages
+- Single source of truth for identity
+
+### Spokes (Other Chains)
+
+- Hold user assets in deterministic vaults
+- Execute actions upon receiving Hub authorization
+- Support native token + ERC20/SPL transfers
+
+## Deterministic Vaults
+
+Each passkey generates a **deterministic vault address** that's the same across all EVM chains.
+
+### How It Works
+
+```typescript
+vaultAddress = CREATE2(
+  factory,
+  keccak256(publicKeyX, publicKeyY),
+  vaultBytecode
+)
+```
+
+### Benefits
+
+- **Single address**: Share one address for all EVM chains
+- **No deployment needed**: Address is known before vault exists
+- **Counterfactual**: Can receive funds before vault is deployed
+
+### Non-EVM Chains
+
+For Solana, Aptos, Sui, and Starknet, vault addresses are derived using chain-specific methods but still deterministic from the passkey.
+
+## Session Keys
+
+Session keys enable smooth UX by delegating limited authority to a temporary key.
+
+### Why Session Keys?
+
+Without session keys:
+```
+Action 1 → Biometric prompt
+Action 2 → Biometric prompt
+Action 3 → Biometric prompt
+```
+
+With session keys:
+```
+Create session → Biometric prompt (once)
+Action 1 → Auto-signed
+Action 2 → Auto-signed
+Action 3 → Auto-signed
+```
+
+### Session Constraints
+
+Sessions can be limited by:
+
+| Constraint | Description |
+|------------|-------------|
+| `duration` | Time limit (e.g., 1 hour) |
+| `maxValue` | Total value limit |
+| `allowedTokens` | Whitelist of tokens |
+| `allowedRecipients` | Whitelist of addresses |
+
+### Example
+
+```typescript
+const session = await sdk.sessions.create({
+  duration: 3600,           // 1 hour
+  maxValue: parseEther('0.1'), // Max 0.1 ETH worth
+  allowedTokens: [USDC],    // Only USDC
+});
+
+// Now transfers don't require biometric
+await sdk.transfer({ ... }); // Uses session key
+```
+
+## Cross-Chain Messaging
+
+Veridex uses Wormhole for secure cross-chain communication.
+
+### Message Flow
+
+1. **Hub signs action** → WebAuthn signature verified
+2. **Wormhole guardians attest** → 13/19 signatures required
+3. **Spoke verifies VAA** → Executes authorized action
+
+### Verification Paths
+
+| Path | Speed | Use Case |
+|------|-------|----------|
+| **Query (CCQ)** | ~5-7 seconds | Balance checks, low-value transfers |
+| **VAA** | ~60 seconds | High-value transfers, critical actions |
+
+The relayer automatically chooses the optimal path based on transaction value.
+
+## Gasless Transactions
+
+Users never need to hold gas tokens — the relayer pays gas fees.
+
+### How It Works
+
+```
+User signs payload with passkey
+        ↓
+Relayer receives signed payload
+        ↓
+Relayer submits transaction (pays gas)
+        ↓
+Contract verifies signature, executes action
+```
+
+### Fee Model
+
+- **User pays**: Token amount only
+- **Relayer pays**: Gas fees
+- **Relayer recovers**: Via protocol fee or sponsorship
+
+## Security Model
+
+### Trust Assumptions
+
+| Component | Trust Level |
+|-----------|-------------|
+| User's device | Fully trusted (holds passkey) |
+| Hub contract | Trustless (on-chain verification) |
+| Wormhole guardians | Honest majority (13/19) |
+| Relayer | Untrusted (can't forge signatures) |
+
+### Attack Resistance
+
+- **Replay attacks**: Nonces prevent replay
+- **Cross-chain replay**: Chain ID in signature
+- **Signature malleability**: Canonical encoding enforced
+- **Phishing**: Passkeys are domain-bound
+
+## Next Steps
+
+<Cards>
+  <Card title="Create Wallet" href="/guides/create-wallet">
+    Step-by-step wallet creation guide
+  </Card>
+  <Card title="Architecture Deep Dive" href="/api-reference/sdk">
+    Explore the SDK architecture
+  </Card>
+</Cards>

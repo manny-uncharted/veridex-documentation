@@ -1,0 +1,326 @@
+---
+title: Solana
+description: Integrate Veridex with Solana blockchain
+---
+
+# Solana Integration
+
+Use Veridex passkey wallets on Solana for gasless, cross-chain operations.
+
+## Overview
+
+Veridex on Solana enables:
+- **Same wallet address derivation** across EVM and Solana
+- **Cross-chain bridges** from EVM to Solana and back
+- **Gasless transactions** via relayer
+- **Native SPL token support**
+
+## Status
+
+| Feature | Status |
+|---------|--------|
+| Wallet derivation | ✅ Available |
+| Cross-chain bridge | ✅ Available |
+| Native transactions | 🔜 Coming |
+| SPL token transfers | 🔜 Coming |
+
+## Initialize SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const solanaSDK = createSDK('solana', {
+  network: 'mainnet', // or 'devnet'
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Login with passkey (registered on EVM hub)
+await solanaSDK.passkey.login();
+
+// Get Solana address (derived from same passkey)
+const solanaAddress = solanaSDK.getVaultAddress();
+console.log('Solana address:', solanaAddress);
+```
+
+## Address Derivation
+
+Veridex derives a Solana address from the same passkey credential:
+
+```typescript
+// EVM address (Base)
+const evmSDK = createSDK('base', { network: 'mainnet' });
+await evmSDK.passkey.login();
+console.log('EVM:', evmSDK.getVaultAddress()); // 0x...
+
+// Solana address (same passkey)
+const solanaSDK = createSDK('solana', { network: 'mainnet' });
+await solanaSDK.passkey.login();
+console.log('Solana:', solanaSDK.getVaultAddress()); // Solana public key
+```
+
+## Cross-Chain Bridge
+
+### EVM to Solana
+
+```typescript
+import { parseUnits } from 'ethers';
+
+// Bridge USDC from Base to Solana
+async function bridgeToSolana(amount: string) {
+  const evmSDK = createSDK('base', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await evmSDK.passkey.login();
+
+  const result = await evmSDK.crossChainTransfer({
+    token: BASE_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'solana',
+    recipient: evmSDK.getSolanaAddress(), // Derived Solana address
+  });
+
+  return result;
+}
+```
+
+### Solana to EVM
+
+```typescript
+// Bridge USDC from Solana to Base
+async function bridgeToEVM(amount: string) {
+  const solanaSDK = createSDK('solana', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await solanaSDK.passkey.login();
+
+  const result = await solanaSDK.crossChainTransfer({
+    token: SOLANA_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'base',
+    recipient: solanaSDK.getEVMAddress(), // Derived EVM address
+  });
+
+  return result;
+}
+```
+
+## SPL Token Operations
+
+### Get Balances
+
+```typescript
+async function getSolanaBalances() {
+  const solanaSDK = createSDK('solana', { network: 'mainnet' });
+  await solanaSDK.passkey.login();
+
+  const balances = await solanaSDK.getBalances();
+  
+  return {
+    SOL: balances.solana?.SOL || '0',
+    USDC: balances.solana?.USDC || '0',
+    USDT: balances.solana?.USDT || '0',
+  };
+}
+```
+
+### Transfer SPL Tokens
+
+```typescript
+async function transferSPL(
+  tokenMint: string,
+  recipient: string,
+  amount: bigint
+) {
+  const solanaSDK = createSDK('solana', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await solanaSDK.passkey.login();
+
+  const result = await solanaSDK.transferViaRelayer({
+    token: tokenMint,
+    recipient,
+    amount,
+  });
+
+  return result;
+}
+```
+
+## Configuration
+
+### RPC Endpoints
+
+```typescript
+const SOLANA_RPC = {
+  mainnet: 'https://api.mainnet-beta.solana.com',
+  devnet: 'https://api.devnet.solana.com',
+};
+```
+
+### Token Mints
+
+```typescript
+const SOLANA_TOKENS = {
+  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+};
+```
+
+## React Component
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+export function SolanaWallet() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  const sdk = createSDK('solana', { network: 'mainnet' });
+
+  const connect = async () => {
+    setLoading(true);
+    try {
+      await sdk.passkey.login();
+      setAddress(sdk.getVaultAddress());
+      await loadBalances();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const loadBalances = async () => {
+    const result = await sdk.getBalances();
+    setBalances(result.solana || {});
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">Solana Wallet</h3>
+      
+      {address ? (
+        <div>
+          <p className="font-mono text-sm mb-4">
+            {address.slice(0, 8)}...{address.slice(-8)}
+          </p>
+          
+          <div className="space-y-2">
+            {Object.entries(balances).map(([token, balance]) => (
+              <div key={token} className="flex justify-between">
+                <span>{token}</span>
+                <span className="font-mono">{balance}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={connect}
+          disabled={loading}
+          className="bg-purple-600 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Connecting...' : 'Connect Solana'}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+## Cross-Chain Component
+
+```tsx
+export function CrossChainBridge() {
+  const [fromChain, setFromChain] = useState<'base' | 'solana'>('base');
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleBridge = async () => {
+    setLoading(true);
+    try {
+      const sdk = createSDK(fromChain, {
+        network: 'mainnet',
+        relayerUrl: 'https://relayer.veridex.network',
+      });
+
+      await sdk.passkey.login();
+
+      const targetChain = fromChain === 'base' ? 'solana' : 'base';
+      
+      await sdk.crossChainTransfer({
+        token: fromChain === 'base' ? BASE_USDC : SOLANA_USDC,
+        amount: parseUnits(amount, 6),
+        targetChain,
+        recipient: fromChain === 'base' 
+          ? sdk.getSolanaAddress()
+          : sdk.getEVMAddress(),
+      });
+
+      alert('Bridge complete!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">Bridge USDC</h3>
+      
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setFromChain('base')}
+          className={fromChain === 'base' ? 'bg-blue-600 text-white' : 'border'}
+        >
+          Base → Solana
+        </button>
+        <button
+          onClick={() => setFromChain('solana')}
+          className={fromChain === 'solana' ? 'bg-purple-600 text-white' : 'border'}
+        >
+          Solana → Base
+        </button>
+      </div>
+
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="Amount USDC"
+        className="w-full p-2 border rounded mb-4"
+      />
+
+      <button
+        onClick={handleBridge}
+        disabled={loading || !amount}
+        className="w-full bg-green-600 text-white py-2 rounded"
+      >
+        {loading ? 'Bridging...' : 'Bridge'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Security Notes
+
+1. **Verify addresses** - Double-check derived Solana addresses match expectations
+2. **Test on devnet** - Always test bridges on devnet first
+3. **Monitor bridges** - Track bridge transactions for completion
+4. **Handle finality** - Solana has different finality guarantees
+
+## Coming Soon
+
+- Native Solana program execution
+- Jupiter aggregator integration
+- Marinade staking integration
+- Tensor NFT marketplace support

@@ -1,0 +1,383 @@
+---
+title: Account Recovery
+description: Recovery options for Veridex passkey wallets
+---
+
+# Account Recovery
+
+Understanding and implementing recovery options for Veridex passkey wallets.
+
+## Overview
+
+Passkey wallets are secure by design, but this security means careful planning is needed for recovery. Veridex provides multiple recovery mechanisms to ensure users never lose access to their funds.
+
+## Recovery Methods
+
+### 1. Platform Sync (Recommended)
+
+Modern platforms sync passkeys across devices automatically:
+
+| Platform | Sync Method |
+|----------|-------------|
+| Apple | iCloud Keychain |
+| Google | Google Password Manager |
+| Microsoft | Microsoft Account |
+
+```typescript
+// If user has a new device but same account
+await sdk.passkey.login();
+// The synced passkey works automatically!
+```
+
+### 2. Backup Passkey
+
+Register a second passkey as backup:
+
+```typescript
+// Register primary passkey
+const primary = await sdk.passkey.register('user@example.com', 'Primary');
+
+// Register backup passkey on a different device
+const backup = await sdk.passkey.registerBackup({
+  existingCredential: primary.credentialId,
+});
+
+// Either passkey can now access the wallet
+```
+
+### 3. Social Recovery
+
+Designate trusted guardians who can help recover the account:
+
+```typescript
+// Setup guardians (requires 2 of 3 to recover)
+await sdk.recovery.setupGuardians({
+  threshold: 2,
+  guardians: [
+    { address: '0xGuardian1...', email: 'guardian1@example.com' },
+    { address: '0xGuardian2...', email: 'guardian2@example.com' },
+    { address: '0xGuardian3...', email: 'guardian3@example.com' },
+  ],
+});
+```
+
+Guardian recovery process:
+
+```typescript
+// 1. User initiates recovery
+const recoveryRequest = await sdk.recovery.initiate({
+  newCredential: newPasskeyCredential,
+});
+
+// 2. Guardians approve (each guardian does this)
+await sdk.recovery.approveAsGuardian({
+  recoveryId: recoveryRequest.id,
+  guardianSignature: signature,
+});
+
+// 3. After threshold met, complete recovery
+await sdk.recovery.complete({
+  recoveryId: recoveryRequest.id,
+});
+```
+
+### 4. Time-Delayed Recovery
+
+Set up a recovery address with a time delay:
+
+```typescript
+// Setup recovery address with 7-day delay
+await sdk.recovery.setupDelayedRecovery({
+  recoveryAddress: '0xRecoveryWallet...',
+  delay: 7 * 24 * 60 * 60, // 7 days in seconds
+});
+```
+
+Recovery process:
+
+```typescript
+// 1. Initiate recovery (from recovery address)
+await sdk.recovery.initiateDelayed({
+  vaultAddress: '0xVaultToRecover...',
+});
+
+// 2. Wait for delay period (7 days)
+// User can cancel during this time if it's unauthorized
+
+// 3. Complete recovery after delay
+await sdk.recovery.completeDelayed({
+  vaultAddress: '0xVaultToRecover...',
+});
+```
+
+Cancel unauthorized recovery:
+
+```typescript
+// If user still has access, they can cancel
+await sdk.recovery.cancelDelayed();
+```
+
+## Recovery UI Components
+
+### Recovery Setup
+
+```tsx
+import { useState } from 'react';
+import { sdk } from '@/lib/veridex';
+
+export function RecoverySetup() {
+  const [method, setMethod] = useState<'backup' | 'guardian' | 'delayed'>('backup');
+  const [loading, setLoading] = useState(false);
+
+  const setupBackupPasskey = async () => {
+    setLoading(true);
+    try {
+      await sdk.passkey.registerBackup({
+        existingCredential: sdk.passkey.getStoredCredential()!,
+      });
+      alert('Backup passkey registered!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const setupGuardians = async (guardians: string[]) => {
+    setLoading(true);
+    try {
+      await sdk.recovery.setupGuardians({
+        threshold: 2,
+        guardians: guardians.map(addr => ({ address: addr })),
+      });
+      alert('Guardians configured!');
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-4">Setup Recovery</h2>
+      
+      <div className="space-y-4">
+        <button
+          onClick={() => setMethod('backup')}
+          className={method === 'backup' ? 'bg-blue-600 text-white' : 'border'}
+        >
+          Backup Passkey
+        </button>
+        
+        {method === 'backup' && (
+          <div>
+            <p className="text-sm text-gray-600 mb-4">
+              Register a second passkey on another device for backup access.
+            </p>
+            <button
+              onClick={setupBackupPasskey}
+              disabled={loading}
+              className="bg-green-600 text-white px-4 py-2 rounded"
+            >
+              {loading ? 'Setting up...' : 'Register Backup Passkey'}
+            </button>
+          </div>
+        )}
+        
+        {/* Add guardian and delayed recovery UI */}
+      </div>
+    </div>
+  );
+}
+```
+
+### Recovery Flow
+
+```tsx
+export function RecoveryFlow() {
+  const [step, setStep] = useState<'start' | 'verify' | 'complete'>('start');
+  const [recoveryMethod, setRecoveryMethod] = useState<string | null>(null);
+
+  return (
+    <div className="max-w-md mx-auto p-6">
+      <h2 className="text-xl font-bold mb-4">Account Recovery</h2>
+      
+      {step === 'start' && (
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Select how you'd like to recover your account:
+          </p>
+          
+          <button
+            onClick={() => {
+              setRecoveryMethod('sync');
+              setStep('verify');
+            }}
+            className="w-full p-4 border rounded-lg text-left"
+          >
+            <h3 className="font-medium">Synced Passkey</h3>
+            <p className="text-sm text-gray-500">
+              Use a passkey synced from another device
+            </p>
+          </button>
+          
+          <button
+            onClick={() => {
+              setRecoveryMethod('backup');
+              setStep('verify');
+            }}
+            className="w-full p-4 border rounded-lg text-left"
+          >
+            <h3 className="font-medium">Backup Passkey</h3>
+            <p className="text-sm text-gray-500">
+              Use your registered backup passkey
+            </p>
+          </button>
+          
+          <button
+            onClick={() => {
+              setRecoveryMethod('guardian');
+              setStep('verify');
+            }}
+            className="w-full p-4 border rounded-lg text-left"
+          >
+            <h3 className="font-medium">Guardian Recovery</h3>
+            <p className="text-sm text-gray-500">
+              Request recovery from your guardians
+            </p>
+          </button>
+        </div>
+      )}
+      
+      {step === 'verify' && recoveryMethod === 'sync' && (
+        <SyncedPasskeyRecovery onComplete={() => setStep('complete')} />
+      )}
+      
+      {step === 'complete' && (
+        <div className="text-center">
+          <span className="text-4xl">✓</span>
+          <h3 className="text-lg font-medium mt-2">Recovery Complete!</h3>
+          <p className="text-gray-600">Your account has been recovered.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+### During Onboarding
+
+1. **Encourage backup setup** - Prompt users to set up recovery immediately
+
+```tsx
+function OnboardingComplete() {
+  return (
+    <div>
+      <h2>Wallet Created! 🎉</h2>
+      <div className="mt-4 p-4 bg-yellow-50 rounded">
+        <h3>⚠️ Set Up Recovery</h3>
+        <p>Protect your wallet by setting up a backup method now.</p>
+        <button onClick={() => navigate('/recovery/setup')}>
+          Set Up Recovery →
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+2. **Explain platform sync** - Help users understand their passkey is backed up
+
+```tsx
+function PlatformSyncInfo() {
+  const platform = detectPlatform();
+  
+  const syncInfo = {
+    apple: 'Your passkey is synced via iCloud Keychain',
+    google: 'Your passkey is synced via Google Password Manager',
+    microsoft: 'Your passkey is synced via Microsoft Account',
+  };
+  
+  return (
+    <div className="p-4 bg-green-50 rounded">
+      <p>{syncInfo[platform]}</p>
+      <p className="text-sm mt-2">
+        You can access your wallet from any device signed into your {platform} account.
+      </p>
+    </div>
+  );
+}
+```
+
+### For High-Value Accounts
+
+1. **Multiple recovery methods** - Use both backup passkey AND guardians
+
+```typescript
+// Setup comprehensive recovery
+async function setupComprehensiveRecovery() {
+  // 1. Backup passkey
+  await sdk.passkey.registerBackup({...});
+  
+  // 2. Guardian recovery
+  await sdk.recovery.setupGuardians({
+    threshold: 2,
+    guardians: [...],
+  });
+  
+  // 3. Time-delayed recovery as last resort
+  await sdk.recovery.setupDelayedRecovery({
+    recoveryAddress: coldWalletAddress,
+    delay: 14 * 24 * 60 * 60, // 14 days
+  });
+}
+```
+
+2. **Regular testing** - Periodically verify recovery methods work
+
+## Emergency Recovery
+
+If all else fails, contact support with:
+
+- Proof of identity
+- Transaction history from the wallet
+- Original registration details
+
+Note: Emergency recovery is not instant and requires extensive verification.
+
+## Recovery Configuration
+
+```typescript
+interface RecoveryConfig {
+  // Backup passkey
+  backupEnabled: boolean;
+  backupCredentialId?: string;
+  
+  // Guardian recovery
+  guardians?: {
+    addresses: string[];
+    threshold: number;
+  };
+  
+  // Delayed recovery
+  delayedRecovery?: {
+    recoveryAddress: string;
+    delaySeconds: number;
+  };
+}
+```
+
+## FAQ
+
+**Q: What if I lose all my devices?**
+A: Use guardian recovery or time-delayed recovery. Platform sync also works if you can restore your account on a new device.
+
+**Q: Can guardians steal my funds?**
+A: No. Guardians can only help recover to a new passkey YOU control. They cannot access funds directly.
+
+**Q: What's the safest recovery setup?**
+A: Use platform sync (automatic) + backup passkey + 2-of-3 guardian recovery for comprehensive protection.
+
+**Q: How long does guardian recovery take?**
+A: Once threshold approvals are collected, recovery is immediate. Collecting approvals depends on guardian responsiveness.

@@ -1,0 +1,152 @@
+---
+title: Installation
+description: Install the Veridex SDK and set up your development environment
+---
+
+# Installation
+
+Get started with the Veridex SDK in your project.
+
+## Prerequisites
+
+- Node.js 18+ or Bun
+- A WebAuthn-compatible browser (Chrome, Safari, Firefox, Edge)
+- TypeScript 5.0+ (recommended)
+
+## Install the SDK
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @veridex/sdk ethers
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @veridex/sdk ethers
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @veridex/sdk ethers
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @veridex/sdk ethers
+    ```
+  </Tab>
+</Tabs>
+
+## Peer Dependencies
+
+The SDK requires `ethers` v6 as a peer dependency:
+
+```json
+{
+  "dependencies": {
+    "@veridex/sdk": "^1.0.0",
+    "ethers": "^6.11.0"
+  }
+}
+```
+
+## TypeScript Configuration
+
+For TypeScript projects, ensure your `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true
+  }
+}
+```
+
+## Browser Support
+
+Veridex uses WebAuthn (Passkeys) which requires:
+
+| Browser | Minimum Version |
+|---------|-----------------|
+| Chrome | 67+ |
+| Safari | 14+ |
+| Firefox | 60+ |
+| Edge | 79+ |
+
+<Callout type="info">
+  Passkeys require a secure context (HTTPS) in production. For local development, `localhost` is allowed.
+</Callout>
+
+## Framework Integration
+
+### React / Next.js
+
+```typescript
+// lib/veridex.ts
+import { createSDK } from '@veridex/sdk';
+
+export const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+});
+```
+
+### Vue
+
+```typescript
+// composables/useVeridex.ts
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+export function useVeridex() {
+  return { sdk };
+}
+```
+
+### Plain JavaScript
+
+```html
+<script type="module">
+  import { createSDK } from 'https://esm.sh/@veridex/sdk';
+  
+  const sdk = createSDK('base');
+  window.veridex = sdk;
+</script>
+```
+
+## Verify Installation
+
+Create a test file to verify the installation:
+
+```typescript
+// test-veridex.ts
+import { createSDK, getChainConfig } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+console.log('SDK initialized successfully!');
+console.log('Hub chain:', getChainConfig('base', 'testnet'));
+```
+
+Run it:
+
+```bash
+npx ts-node test-veridex.ts
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Quick Start" href="/getting-started/quick-start">
+    Build your first passkey wallet
+  </Card>
+  <Card title="Core Concepts" href="/getting-started/concepts">
+    Understand how Veridex works
+  </Card>
+</Cards>

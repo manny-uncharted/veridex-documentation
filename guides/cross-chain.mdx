@@ -1,0 +1,323 @@
+---
+title: Cross-Chain Transfers
+description: Transfer tokens between different blockchains
+---
+
+# Cross-Chain Transfers
+
+Send tokens from one blockchain to another using Veridex.
+
+## Overview
+
+Veridex uses Wormhole for cross-chain messaging. When you transfer cross-chain:
+
+1. Hub (Base) creates authorization message
+2. Wormhole guardians attest the message
+3. Destination spoke executes the transfer
+
+## Basic Cross-Chain Transfer
+
+```typescript
+import { createSDK, getChainConfig } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+await sdk.passkey.login();
+
+// Get Optimism's Wormhole chain ID
+const optimismConfig = getChainConfig('optimism', 'testnet');
+
+// Transfer USDC from Base → Optimism
+const result = await sdk.bridge({
+  targetChain: optimismConfig.wormholeChainId, // 10005 for Optimism Sepolia
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: parseUnits('100', 6), // 100 USDC
+});
+
+console.log('Bridge initiated:', result.txHash);
+console.log('Estimated confirmation:', result.estimatedTimeSeconds, 'seconds');
+```
+
+## Chain Configuration
+
+### Get Chain Info
+
+```typescript
+import { getChainConfig, getSupportedChains } from '@veridex/sdk';
+
+// Get all supported chains
+const chains = getSupportedChains('testnet');
+console.log(chains);
+// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet']
+
+// Get specific chain config
+const optimism = getChainConfig('optimism', 'testnet');
+console.log(optimism);
+// {
+//   name: 'optimism',
+//   chainId: 11155420,
+//   wormholeChainId: 10005,
+//   rpcUrl: 'https://sepolia.optimism.io',
+//   contracts: { factory: '0x...', implementation: '0x...' }
+// }
+```
+
+### Wormhole Chain IDs
+
+| Chain | Testnet | Mainnet |
+|-------|---------|---------|
+| Base | 10004 | 30 |
+| Optimism | 10005 | 24 |
+| Arbitrum | 10003 | 23 |
+| Solana | 1 | 1 |
+| Aptos | 22 | 22 |
+| Sui | 21 | 21 |
+| Starknet | 50001 | 50002 |
+
+## EVM to EVM Transfer
+
+```typescript
+// Base → Arbitrum
+const arbitrumConfig = getChainConfig('arbitrum', 'testnet');
+
+const result = await sdk.bridge({
+  targetChain: arbitrumConfig.wormholeChainId,
+  token: 'native', // ETH
+  recipient: '0x...', // Same vault address works!
+  amount: parseEther('0.01'),
+});
+```
+
+## EVM to Solana Transfer
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+const solanaRecipient = new PublicKey('your-solana-pubkey');
+
+const result = await sdk.bridge({
+  targetChain: 1, // Solana Wormhole chain ID
+  token: USDC_BASE,
+  recipient: solanaRecipient.toBase58(),
+  amount: parseUnits('50', 6),
+});
+```
+
+## EVM to Aptos Transfer
+
+```typescript
+const aptosRecipient = '0x1a89da9e9f8f0bc90d8d492890bd55fb261c6277d2a95dfcac70c268d0c23dcc';
+
+const result = await sdk.bridge({
+  targetChain: 22, // Aptos Wormhole chain ID
+  token: USDC_BASE,
+  recipient: aptosRecipient,
+  amount: parseUnits('25', 6),
+});
+```
+
+## Transfer Speed
+
+Veridex automatically chooses the optimal path:
+
+| Value | Path | Speed |
+|-------|------|-------|
+| < $100 | Query (CCQ) | ~5-7 seconds |
+| ≥ $100 | VAA | ~60 seconds |
+
+You can force a specific path:
+
+```typescript
+// Force VAA path for extra security
+const result = await sdk.bridge({
+  targetChain: optimismConfig.wormholeChainId,
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('50', 6),
+  path: 'vaa', // Force VAA path
+});
+
+// Force Query path for speed
+const result = await sdk.bridge({
+  targetChain: optimismConfig.wormholeChainId,
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('10', 6),
+  path: 'query', // Force Query path
+});
+```
+
+## Track Cross-Chain Status
+
+```typescript
+const result = await sdk.bridge({
+  targetChain: optimismConfig.wormholeChainId,
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('100', 6),
+});
+
+// Poll for status
+const checkStatus = async () => {
+  const status = await sdk.getBridgeStatus(result.txHash);
+  
+  console.log('Status:', status.state);
+  // 'pending' | 'attested' | 'completed' | 'failed'
+  
+  if (status.state === 'completed') {
+    console.log('Destination tx:', status.destinationTxHash);
+  }
+};
+
+// Check every 10 seconds
+const interval = setInterval(async () => {
+  const status = await sdk.getBridgeStatus(result.txHash);
+  if (status.state === 'completed' || status.state === 'failed') {
+    clearInterval(interval);
+    console.log('Final status:', status);
+  }
+}, 10000);
+```
+
+## React Example
+
+```tsx
+import { useState } from 'react';
+import { createSDK, getChainConfig, getSupportedChains } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', { 
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+export function BridgeForm() {
+  const [targetChain, setTargetChain] = useState('optimism');
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const chains = getSupportedChains('testnet').filter(c => c !== 'base');
+
+  const handleBridge = async () => {
+    setLoading(true);
+    setStatus('Initiating bridge...');
+
+    try {
+      const config = getChainConfig(targetChain, 'testnet');
+      const vault = sdk.getVaultAddress();
+
+      const result = await sdk.bridge({
+        targetChain: config.wormholeChainId,
+        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        recipient: vault, // Send to same vault on target chain
+        amount: parseUnits(amount, 6),
+      });
+
+      setStatus(`Bridge initiated! Waiting for confirmation...`);
+
+      // Poll for completion
+      const poll = setInterval(async () => {
+        const bridgeStatus = await sdk.getBridgeStatus(result.txHash);
+        if (bridgeStatus.state === 'completed') {
+          clearInterval(poll);
+          setStatus(`Completed! Tx: ${bridgeStatus.destinationTxHash}`);
+          setLoading(false);
+        }
+      }, 10000);
+
+    } catch (err) {
+      setStatus(`Error: ${err.message}`);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <select
+        value={targetChain}
+        onChange={(e) => setTargetChain(e.target.value)}
+        className="block w-full rounded-md border p-2"
+      >
+        {chains.map(chain => (
+          <option key={chain} value={chain}>
+            {chain.charAt(0).toUpperCase() + chain.slice(1)}
+          </option>
+        ))}
+      </select>
+
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="Amount (USDC)"
+        className="block w-full rounded-md border p-2"
+      />
+
+      <button
+        onClick={handleBridge}
+        disabled={loading}
+        className="w-full bg-purple-600 text-white py-2 rounded-lg"
+      >
+        {loading ? 'Bridging...' : `Bridge to ${targetChain}`}
+      </button>
+
+      {status && <p className="text-sm">{status}</p>}
+    </div>
+  );
+}
+```
+
+## Fee Estimation
+
+```typescript
+const fees = await sdk.estimateBridgeFee({
+  targetChain: optimismConfig.wormholeChainId,
+  token: USDC,
+  amount: parseUnits('100', 6),
+});
+
+console.log('Wormhole fee:', fees.wormholeFee);
+console.log('Relayer fee:', fees.relayerFee);
+console.log('Total fee:', fees.totalFee);
+console.log('Estimated time:', fees.estimatedTimeSeconds);
+```
+
+## Error Handling
+
+```typescript
+try {
+  await sdk.bridge({
+    targetChain: optimismConfig.wormholeChainId,
+    token: USDC,
+    recipient: '0x...',
+    amount: parseUnits('100', 6),
+  });
+} catch (error) {
+  if (error.code === 'UNSUPPORTED_CHAIN') {
+    console.log('Target chain not supported');
+  } else if (error.code === 'INSUFFICIENT_BALANCE') {
+    console.log('Not enough tokens for bridge');
+  } else if (error.code === 'VAA_NOT_FOUND') {
+    console.log('Wormhole attestation pending, retry later');
+  } else {
+    console.error('Bridge failed:', error);
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Smooth UX for multiple transfers
+  </Card>
+  <Card title="Spending Limits" href="/guides/spending-limits">
+    Configure safety limits for bridges
+  </Card>
+</Cards>

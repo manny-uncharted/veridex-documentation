@@ -1,0 +1,252 @@
+---
+title: Sui
+description: Integrate Veridex with Sui blockchain
+---
+
+# Sui Integration
+
+Use Veridex passkey wallets on Sui Move blockchain.
+
+## Overview
+
+Veridex on Sui provides:
+- **Object-based model** integration
+- **Cross-chain bridges** via Wormhole
+- **Native SUI and coin transfers**
+- **Move object interactions**
+
+## Status
+
+| Feature | Status |
+|---------|--------|
+| Wallet derivation | ✅ Available |
+| Cross-chain bridge | ✅ Available |
+| Native transactions | 🔜 Coming |
+| SUI transfers | 🔜 Coming |
+
+## Initialize SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const suiSDK = createSDK('sui', {
+  network: 'mainnet', // or 'testnet'
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Login with passkey
+await suiSDK.passkey.login();
+
+// Get Sui address
+const suiAddress = suiSDK.getVaultAddress();
+console.log('Sui address:', suiAddress);
+```
+
+## Cross-Chain Bridge
+
+### EVM to Sui
+
+```typescript
+import { parseUnits } from 'ethers';
+
+async function bridgeToSui(amount: string) {
+  const evmSDK = createSDK('base', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await evmSDK.passkey.login();
+
+  const result = await evmSDK.crossChainTransfer({
+    token: BASE_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'sui',
+    recipient: evmSDK.getSuiAddress(),
+  });
+
+  return result;
+}
+```
+
+### Sui to EVM
+
+```typescript
+async function bridgeToEVM(amount: string) {
+  const suiSDK = createSDK('sui', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await suiSDK.passkey.login();
+
+  const result = await suiSDK.crossChainTransfer({
+    token: SUI_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'base',
+    recipient: suiSDK.getEVMAddress(),
+  });
+
+  return result;
+}
+```
+
+## Coin Operations
+
+### Get Balances
+
+```typescript
+async function getSuiBalances() {
+  const suiSDK = createSDK('sui', { network: 'mainnet' });
+  await suiSDK.passkey.login();
+
+  const balances = await suiSDK.getBalances();
+  
+  return {
+    SUI: balances.sui?.SUI || '0',
+    USDC: balances.sui?.USDC || '0',
+  };
+}
+```
+
+### Transfer SUI
+
+```typescript
+async function transferSUI(recipient: string, amount: bigint) {
+  const suiSDK = createSDK('sui', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await suiSDK.passkey.login();
+
+  const result = await suiSDK.transferViaRelayer({
+    token: '0x2::sui::SUI',
+    recipient,
+    amount,
+  });
+
+  return result;
+}
+```
+
+## Configuration
+
+### Network Endpoints
+
+```typescript
+const SUI_ENDPOINTS = {
+  mainnet: 'https://fullnode.mainnet.sui.io:443',
+  testnet: 'https://fullnode.testnet.sui.io:443',
+};
+```
+
+### Common Coin Types
+
+```typescript
+const SUI_COINS = {
+  SUI: '0x2::sui::SUI',
+  USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+  USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+};
+```
+
+## React Component
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+export function SuiWallet() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  const sdk = createSDK('sui', { network: 'mainnet' });
+
+  const connect = async () => {
+    setLoading(true);
+    try {
+      await sdk.passkey.login();
+      setAddress(sdk.getVaultAddress());
+      await loadBalances();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const loadBalances = async () => {
+    const result = await sdk.getBalances();
+    setBalances(result.sui || {});
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">Sui Wallet</h3>
+      
+      {address ? (
+        <div>
+          <p className="font-mono text-sm mb-4">
+            {address.slice(0, 10)}...{address.slice(-8)}
+          </p>
+          
+          <div className="space-y-2">
+            {Object.entries(balances).map(([coin, balance]) => (
+              <div key={coin} className="flex justify-between">
+                <span>{coin}</span>
+                <span className="font-mono">{balance}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={connect}
+          disabled={loading}
+          className="bg-cyan-600 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Connecting...' : 'Connect Sui'}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+## Object Model
+
+Sui uses an object-centric model:
+
+```typescript
+// Owned objects are transferred directly
+async function transferObject(objectId: string, recipient: string) {
+  const suiSDK = createSDK('sui', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await suiSDK.passkey.login();
+
+  const result = await suiSDK.executeViaRelayer({
+    target: '0x2::transfer::transfer',
+    typeArguments: ['0x2::coin::Coin<0x2::sui::SUI>'],
+    arguments: [objectId, recipient],
+  });
+
+  return result;
+}
+```
+
+## Security Notes
+
+1. **Object ownership** - Objects are owned by addresses
+2. **Gas objects** - SUI coins used for gas must be owned
+3. **Shared objects** - Require consensus for access
+4. **Programmable transactions** - Multiple operations in one tx
+
+## Sui-Specific Features
+
+- **Parallel execution** - Independent objects processed in parallel
+- **Programmable Transaction Blocks** - Compose multiple operations
+- **Dynamic fields** - Extensible object storage
+- **Sponsored transactions** - Third-party gas payment

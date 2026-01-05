@@ -1,0 +1,310 @@
+---
+title: EVM Chains
+description: Integrate Veridex with EVM-compatible chains
+---
+
+# EVM Chains
+
+Deploy and integrate Veridex on any EVM-compatible blockchain.
+
+## Supported EVM Chains
+
+| Chain | Status | Chain ID | Hub |
+|-------|--------|----------|-----|
+| Base | ✅ Mainnet | 8453 | ✓ (Primary) |
+| Base Sepolia | ✅ Testnet | 84532 | ✓ (Testnet) |
+| Optimism | ✅ Mainnet | 10 | Spoke |
+| Arbitrum | ✅ Mainnet | 42161 | Spoke |
+| Ethereum | 🔜 Coming | 1 | Spoke |
+| Polygon | 🔜 Coming | 137 | Spoke |
+
+## Initialize SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+// Hub chain (Base)
+const hubSDK = createSDK('base', {
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Spoke chain (Optimism)
+const opSDK = createSDK('optimism', {
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+## Hub vs Spoke Chains
+
+### Hub Chain (Base)
+
+The hub chain is where the master passkey is registered:
+
+```typescript
+// Register passkey on hub (Base)
+const result = await hubSDK.passkey.register('user@example.com', 'My Wallet');
+// result.vaultAddress = '0x...' (same on all chains)
+```
+
+### Spoke Chains
+
+Spoke chains derive the same vault address:
+
+```typescript
+// Login on spoke chain (Optimism)
+await opSDK.passkey.login();
+
+// Same vault address as hub!
+console.log(opSDK.getVaultAddress()); // 0x...same address
+```
+
+## Chain Configuration
+
+### RPC URLs
+
+```typescript
+const RPC_URLS = {
+  // Mainnets
+  base: 'https://mainnet.base.org',
+  optimism: 'https://mainnet.optimism.io',
+  arbitrum: 'https://arb1.arbitrum.io/rpc',
+  
+  // Testnets
+  'base-sepolia': 'https://sepolia.base.org',
+  'optimism-sepolia': 'https://sepolia.optimism.io',
+  'arbitrum-sepolia': 'https://sepolia-rollup.arbitrum.io/rpc',
+};
+```
+
+### Contract Addresses
+
+```typescript
+const CONTRACTS = {
+  base: {
+    vaultFactory: '0x...',
+    paymaster: '0x...',
+    entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  },
+  optimism: {
+    vaultFactory: '0x...',
+    paymaster: '0x...',
+    entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  },
+  arbitrum: {
+    vaultFactory: '0x...',
+    paymaster: '0x...',
+    entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  },
+};
+```
+
+## Multi-Chain Balances
+
+```typescript
+async function getAllBalances() {
+  // Get balances from all chains
+  const balances = await hubSDK.getBalances();
+  
+  // Returns:
+  // {
+  //   base: { ETH: '1.5', USDC: '100.00' },
+  //   optimism: { ETH: '0.5', USDC: '50.00' },
+  //   arbitrum: { ETH: '0.2', USDC: '25.00' }
+  // }
+  
+  return balances;
+}
+```
+
+## Cross-Chain Transfers
+
+### Via Wormhole (Fast Path - 5-7s)
+
+```typescript
+import { parseUnits } from 'ethers';
+
+async function bridgeUSDC(
+  fromChain: 'base' | 'optimism' | 'arbitrum',
+  toChain: 'base' | 'optimism' | 'arbitrum',
+  amount: string
+) {
+  const sdk = createSDK(fromChain, { network: 'mainnet' });
+  await sdk.passkey.login();
+
+  const result = await sdk.crossChainTransfer({
+    token: USDC_ADDRESSES[fromChain],
+    amount: parseUnits(amount, 6),
+    targetChain: toChain,
+    recipient: sdk.getVaultAddress(), // Same address on target
+    path: 'fast', // CCQ path
+  });
+
+  return result;
+}
+```
+
+### Via VAA (Standard Path - ~60s)
+
+```typescript
+async function bridgeUSDCStandard(
+  fromChain: 'base' | 'optimism' | 'arbitrum',
+  toChain: 'base' | 'optimism' | 'arbitrum',
+  amount: string
+) {
+  const sdk = createSDK(fromChain, { network: 'mainnet' });
+  await sdk.passkey.login();
+
+  const result = await sdk.crossChainTransfer({
+    token: USDC_ADDRESSES[fromChain],
+    amount: parseUnits(amount, 6),
+    targetChain: toChain,
+    recipient: sdk.getVaultAddress(),
+    path: 'standard', // VAA path
+  });
+
+  return result;
+}
+```
+
+## Chain-Specific Considerations
+
+### Base
+
+- Primary hub chain
+- Lowest gas fees
+- Best for passkey registration
+
+```typescript
+// Recommended: Register on Base
+const sdk = createSDK('base', { network: 'mainnet' });
+await sdk.passkey.register('user@example.com', 'Wallet');
+```
+
+### Optimism
+
+- L2 with low fees
+- EIP-4844 blob support
+- Superchain compatibility
+
+```typescript
+const sdk = createSDK('optimism', { network: 'mainnet' });
+await sdk.passkey.login();
+
+// Works identically to Base
+await sdk.transferViaRelayer({
+  token: OP_USDC,
+  recipient: '0x...',
+  amount: parseUnits('10', 6),
+});
+```
+
+### Arbitrum
+
+- Highest throughput L2
+- Nitro architecture
+- Full EVM equivalence
+
+```typescript
+const sdk = createSDK('arbitrum', { network: 'mainnet' });
+await sdk.passkey.login();
+
+await sdk.transferViaRelayer({
+  token: ARB_USDC,
+  recipient: '0x...',
+  amount: parseUnits('10', 6),
+});
+```
+
+## Custom EVM Chain
+
+Add support for any EVM chain:
+
+```typescript
+import { createSDK, registerChain } from '@veridex/sdk';
+
+// Register custom chain
+registerChain({
+  name: 'polygon',
+  chainId: 137,
+  rpcUrl: 'https://polygon-rpc.com',
+  wormholeChainId: 5,
+  contracts: {
+    vaultFactory: '0x...',
+    paymaster: '0x...',
+    entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  },
+  tokens: {
+    USDC: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    USDT: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+  },
+});
+
+// Now use it
+const polygonSDK = createSDK('polygon', { network: 'mainnet' });
+```
+
+## Gas Estimation
+
+```typescript
+async function estimateGas(chain: string, tx: TransactionRequest) {
+  const sdk = createSDK(chain, { network: 'mainnet' });
+  
+  const estimate = await sdk.estimateGas({
+    target: tx.to,
+    value: tx.value || 0n,
+    data: tx.data || '0x',
+  });
+
+  return {
+    gasLimit: estimate.gasLimit,
+    gasPrice: estimate.gasPrice,
+    maxFeePerGas: estimate.maxFeePerGas,
+    maxPriorityFeePerGas: estimate.maxPriorityFeePerGas,
+    estimatedCostETH: formatUnits(estimate.totalCost, 18),
+    estimatedCostUSD: await getUSDValue(estimate.totalCost),
+  };
+}
+```
+
+## Transaction Monitoring
+
+```typescript
+async function waitForTransaction(chain: string, txHash: string) {
+  const provider = new ethers.JsonRpcProvider(RPC_URLS[chain]);
+  
+  // Wait for confirmation
+  const receipt = await provider.waitForTransaction(txHash, 1);
+  
+  if (receipt?.status === 0) {
+    throw new Error('Transaction reverted');
+  }
+  
+  return receipt;
+}
+```
+
+## Contract Deployment
+
+Deploy Veridex contracts to new EVM chains:
+
+```bash
+# Clone contracts repo
+git clone https://github.com/Veridex-Protocol/contracts
+
+# Configure deployment
+cp .env.example .env
+# Edit .env with chain RPC and deployer key
+
+# Deploy
+npx hardhat run scripts/deploy.ts --network polygon
+```
+
+## Security Notes
+
+1. **Verify contracts** - Always verify deployed contracts on block explorer
+2. **Test on testnet** - Deploy to testnet first
+3. **Check gas limits** - Some chains have different limits
+4. **Monitor finality** - Different chains have different finality times
+5. **RPC reliability** - Use reliable RPC providers for production

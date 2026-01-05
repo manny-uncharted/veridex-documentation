@@ -1,0 +1,378 @@
+---
+title: Relayer API
+description: REST API reference for the Veridex Relayer
+---
+
+# Relayer API Reference
+
+The Veridex Relayer provides a REST API for gasless transactions and cross-chain messaging.
+
+## Base URL
+
+| Environment | URL |
+|-------------|-----|
+| Testnet | `https://relayer.veridex.network` |
+| Local | `http://localhost:3001` |
+
+## Authentication
+
+Most endpoints are public. Rate limiting is applied per IP address.
+
+---
+
+## Health & Info
+
+### GET /health
+
+Health check endpoint.
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "uptime": 3600,
+  "chains": {
+    "base-sepolia": "connected",
+    "optimism-sepolia": "connected",
+    "arbitrum-sepolia": "connected",
+    "solana-devnet": "connected"
+  }
+}
+```
+
+**Status Codes:**
+
+| Code | Description |
+|------|-------------|
+| 200 | Healthy or degraded |
+| 503 | Unhealthy |
+
+---
+
+### GET /api/v1/info
+
+Get relayer configuration.
+
+**Response:**
+
+```json
+{
+  "relayer": {
+    "address": "0x...",
+    "version": "1.0.0"
+  },
+  "hub": {
+    "chainId": 84532,
+    "wormholeChainId": 10004,
+    "contracts": {
+      "hub": "0x..."
+    }
+  },
+  "supportedChains": [
+    {
+      "name": "optimism-sepolia",
+      "chainId": 11155420,
+      "wormholeChainId": 10005,
+      "type": "evm"
+    }
+  ],
+  "capabilities": {
+    "gaslessSubmit": true,
+    "vaaRelay": true,
+    "balanceQueries": true
+  }
+}
+```
+
+---
+
+## Transactions
+
+### POST /api/v1/submit
+
+Submit a gasless transaction.
+
+**Request Body:**
+
+```json
+{
+  "action": "transfer",
+  "targetChain": 10005,
+  "payload": {
+    "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "recipient": "0x742d35Cc6634C0532925a3b844Bc9e7595f5A234",
+    "amount": "1000000"
+  },
+  "signature": {
+    "r": "0x...",
+    "s": "0x...",
+    "authenticatorData": "0x...",
+    "clientDataJSON": "..."
+  },
+  "credentialId": "base64-encoded-id",
+  "vaultAddress": "0x..."
+}
+```
+
+**Parameters:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `action` | string | Action type (`transfer`, `bridge`, `createVault`) |
+| `targetChain` | number | Wormhole chain ID |
+| `payload` | object | Action-specific payload |
+| `signature` | object | WebAuthn signature |
+| `credentialId` | string | Base64 credential ID |
+| `vaultAddress` | string | User's vault address |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "txHash": "0x...",
+  "targetChain": 10005,
+  "estimatedConfirmation": 60
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "error": "INVALID_SIGNATURE",
+  "message": "WebAuthn signature verification failed",
+  "details": {
+    "expected": "0x...",
+    "received": "0x..."
+  }
+}
+```
+
+---
+
+### POST /api/v1/submit/query
+
+Submit via Wormhole Query path (faster).
+
+**Request Body:** Same as `/api/v1/submit`
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "txHash": "0x...",
+  "path": "query",
+  "confirmationTime": 5200
+}
+```
+
+---
+
+### GET /api/v1/status/:txHash
+
+Get transaction status.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `txHash` | string | Transaction hash |
+
+**Response:**
+
+```json
+{
+  "txHash": "0x...",
+  "status": "confirmed",
+  "blockNumber": 12345678,
+  "timestamp": 1704067200,
+  "action": "transfer",
+  "targetChain": 10005,
+  "destinationTxHash": "0x..."
+}
+```
+
+**Status Values:**
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Submitted, awaiting confirmation |
+| `attested` | VAA attested by guardians |
+| `confirmed` | Confirmed on destination chain |
+| `failed` | Transaction failed |
+
+---
+
+## Fees
+
+### GET /api/v1/fee
+
+Get fee quote.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `targetChain` | number | Wormhole chain ID (optional) |
+| `action` | string | Action type (optional) |
+
+**Response:**
+
+```json
+{
+  "fees": {
+    "wormhole": "100000000000000",
+    "relayer": "500000000000000",
+    "total": "600000000000000"
+  },
+  "targetChain": 10005,
+  "estimatedTimeSeconds": 60,
+  "currency": "ETH"
+}
+```
+
+---
+
+## Balances
+
+### GET /api/v1/balances/:address
+
+Get multi-chain balances for an address.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | string | Vault address |
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chains` | string | Comma-separated chain names (optional) |
+
+**Response:**
+
+```json
+{
+  "address": "0x...",
+  "balances": {
+    "base-sepolia": {
+      "native": "100000000000000000",
+      "tokens": {
+        "0x036CbD53842c5426634e7929541eC2318f3dCF7e": {
+          "symbol": "USDC",
+          "decimals": 6,
+          "balance": "100000000"
+        }
+      }
+    },
+    "optimism-sepolia": {
+      "native": "50000000000000000",
+      "tokens": {}
+    }
+  },
+  "timestamp": 1704067200
+}
+```
+
+---
+
+## Vaults
+
+### POST /api/v1/vault/create
+
+Create a vault on a spoke chain.
+
+**Request Body:**
+
+```json
+{
+  "targetChain": 10005,
+  "credentialId": "base64-encoded-id",
+  "publicKey": {
+    "x": "0x...",
+    "y": "0x..."
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "vaultAddress": "0x...",
+  "txHash": "0x...",
+  "targetChain": 10005
+}
+```
+
+---
+
+## Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `INVALID_SIGNATURE` | 400 | WebAuthn signature verification failed |
+| `INSUFFICIENT_BALANCE` | 400 | Vault doesn't have enough tokens |
+| `UNSUPPORTED_CHAIN` | 400 | Target chain not configured |
+| `INVALID_PAYLOAD` | 400 | Malformed request payload |
+| `NONCE_MISMATCH` | 400 | Transaction nonce mismatch |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `RELAYER_ERROR` | 500 | Internal relayer error |
+| `CHAIN_UNAVAILABLE` | 503 | Target chain not responding |
+| `VAA_NOT_FOUND` | 404 | Wormhole VAA not yet available |
+
+---
+
+## Rate Limits
+
+| Endpoint | Limit |
+|----------|-------|
+| All endpoints | 100 requests/minute per IP |
+| `/api/v1/submit` | 10 requests/minute per vault |
+| `/api/v1/balances` | 30 requests/minute per IP |
+
+---
+
+## WebSocket (Coming Soon)
+
+Real-time transaction status updates:
+
+```javascript
+const ws = new WebSocket('wss://relayer.veridex.network/ws');
+
+ws.send(JSON.stringify({
+  type: 'subscribe',
+  txHash: '0x...'
+}));
+
+ws.onmessage = (event) => {
+  const { type, data } = JSON.parse(event.data);
+  if (type === 'status') {
+    console.log('Status update:', data);
+  }
+};
+```
+
+---
+
+## Self-Hosting
+
+See the [Relayer README](/api-reference/relayer-setup) for self-hosting instructions.
+
+```bash
+# Clone and setup
+git clone https://github.com/Veridex-Protocol/demo
+cd demo/packages/relayer
+cp .env.example .env
+
+# Configure .env with your keys
+# Start relayer
+npm run dev
+```

@@ -1,0 +1,333 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Veridex integrations
+---
+
+# Troubleshooting
+
+Solutions for common issues when integrating Veridex.
+
+## Passkey Issues
+
+### "NotAllowedError: The operation either timed out or was not allowed"
+
+**Cause:** User cancelled the passkey prompt, or it timed out.
+
+**Solutions:**
+1. Ensure user interaction triggered the request (button click, not page load)
+2. Increase timeout if needed
+3. Check that the user has a compatible authenticator
+
+```typescript
+// ✅ Triggered by user interaction
+<button onClick={() => sdk.passkey.login()}>Login</button>
+
+// ❌ May fail - not user triggered
+useEffect(() => {
+  sdk.passkey.login(); // May be blocked
+}, []);
+```
+
+### "InvalidStateError: An authenticator was created with this credential ID"
+
+**Cause:** Trying to register a passkey that already exists.
+
+**Solution:** Check for existing credential first:
+
+```typescript
+const existing = sdk.passkey.getStoredCredential();
+if (existing) {
+  await sdk.passkey.login();
+} else {
+  await sdk.passkey.register(email, name);
+}
+```
+
+### "NotSupportedError: The authenticator doesn't support this algorithm"
+
+**Cause:** Browser or device doesn't support P-256/secp256r1.
+
+**Solution:** Check WebAuthn support and show appropriate message:
+
+```typescript
+async function checkPasskeySupport(): Promise<boolean> {
+  if (!window.PublicKeyCredential) {
+    return false;
+  }
+  
+  // Check if platform authenticator available
+  const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  return available;
+}
+
+// Usage
+const supported = await checkPasskeySupport();
+if (!supported) {
+  showMessage('Your device does not support passkeys. Please use a different device.');
+}
+```
+
+### "SecurityError: The operation is insecure"
+
+**Cause:** Not running on HTTPS or localhost.
+
+**Solution:** WebAuthn requires a secure context:
+- Use `https://` in production
+- Use `localhost` for development (not `127.0.0.1` or IP addresses)
+
+## Transaction Issues
+
+### "Transaction reverted: insufficient funds for gas"
+
+**Cause:** Relayer doesn't have gas funds, or paymaster issue.
+
+**Solutions:**
+1. Check relayer status: `GET /api/v1/health`
+2. Verify paymaster is funded
+3. Contact support if issue persists
+
+```typescript
+// Check relayer health
+const health = await fetch(`${RELAYER_URL}/api/v1/health`);
+const status = await health.json();
+console.log('Relayer status:', status);
+```
+
+### "Transaction reverted: execution reverted"
+
+**Cause:** The on-chain transaction itself failed.
+
+**Solution:** Check the specific revert reason:
+
+```typescript
+try {
+  await sdk.transferViaRelayer({ token, recipient, amount });
+} catch (error) {
+  if (error.message.includes('ERC20: transfer amount exceeds balance')) {
+    showError('Insufficient token balance');
+  } else if (error.message.includes('ERC20: insufficient allowance')) {
+    showError('Token approval needed');
+  } else {
+    showError('Transaction failed: ' + error.message);
+  }
+}
+```
+
+### "NONCE_TOO_LOW" or "replacement transaction underpriced"
+
+**Cause:** Transaction ordering issue.
+
+**Solution:** Wait for pending transactions to complete:
+
+```typescript
+// The SDK handles nonces automatically, but if issues occur:
+await sdk.waitForPendingTransactions();
+await sdk.transferViaRelayer({ token, recipient, amount });
+```
+
+### Transaction stuck pending
+
+**Cause:** Network congestion or low gas price.
+
+**Solutions:**
+1. Check transaction on block explorer
+2. Wait for network congestion to clear
+3. Contact support for stuck relayer transactions
+
+## SDK Issues
+
+### "Cannot read properties of undefined (reading 'passkey')"
+
+**Cause:** SDK not properly initialized.
+
+**Solution:** Ensure SDK is created before use:
+
+```typescript
+// ✅ Correct
+const sdk = createSDK('base', { network: 'testnet' });
+await sdk.passkey.login();
+
+// ❌ Incorrect
+let sdk;
+sdk.passkey.login(); // sdk is undefined!
+```
+
+### "Network mismatch" or wrong chain
+
+**Cause:** SDK initialized for different network than expected.
+
+**Solution:** Verify network configuration:
+
+```typescript
+const sdk = createSDK('base', { 
+  network: 'testnet', // or 'mainnet'
+});
+
+// Verify
+console.log('Chain:', sdk.getChain());
+console.log('Network:', sdk.getNetwork());
+```
+
+### TypeScript errors with SDK
+
+**Cause:** Type definitions not matching usage.
+
+**Solution:** Import types correctly:
+
+```typescript
+import { createSDK, type SDKConfig, type TransferParams } from '@veridex/sdk';
+
+const config: SDKConfig = {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+};
+
+const sdk = createSDK('base', config);
+```
+
+## Relayer Issues
+
+### "Relayer unavailable" or connection refused
+
+**Cause:** Relayer is down or unreachable.
+
+**Solutions:**
+1. Check relayer URL is correct
+2. Verify network connectivity
+3. Check relayer status page
+4. Use fallback relayer if available
+
+```typescript
+const sdk = createSDK('base', {
+  network: 'mainnet',
+  relayerUrl: 'https://relayer.veridex.network',
+  fallbackRelayerUrl: 'https://relayer-backup.veridex.network',
+});
+```
+
+### "Rate limit exceeded"
+
+**Cause:** Too many requests to relayer.
+
+**Solution:** Implement backoff:
+
+```typescript
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.message.includes('rate limit') && i < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
+// Usage
+await withRetry(() => sdk.transferViaRelayer({ token, recipient, amount }));
+```
+
+### "Invalid signature" from relayer
+
+**Cause:** Signature verification failed.
+
+**Solutions:**
+1. Ensure vault is deployed on the chain
+2. Check that the correct credential is being used
+3. Verify the passkey hasn't been revoked
+
+## Cross-Chain Issues
+
+### Bridge transaction stuck
+
+**Cause:** Wormhole guardian attestation delay.
+
+**Solution:** Check bridge status and wait:
+
+```typescript
+const status = await sdk.getBridgeStatus(txHash);
+console.log('Bridge status:', status);
+// { state: 'pending' | 'attested' | 'completed', estimatedTime: number }
+```
+
+### "Wormhole: VAA not found"
+
+**Cause:** Attestation not yet available.
+
+**Solution:** Wait for attestation (can take up to 60 seconds):
+
+```typescript
+async function waitForBridge(txHash: string, maxWait = 120000) {
+  const start = Date.now();
+  
+  while (Date.now() - start < maxWait) {
+    const status = await sdk.getBridgeStatus(txHash);
+    if (status.state === 'completed') return status;
+    if (status.state === 'failed') throw new Error('Bridge failed');
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  
+  throw new Error('Bridge timeout');
+}
+```
+
+## Browser-Specific Issues
+
+### Safari: Passkey not working
+
+**Solution:** Ensure:
+1. iCloud Keychain is enabled
+2. User is signed into iCloud
+3. Safari version 16+
+
+### Firefox: WebAuthn issues
+
+**Solution:** 
+1. Update to Firefox 119+
+2. Check `security.webauthn.ctap2` is enabled in about:config
+
+### Chrome: "An internal error has occurred"
+
+**Solutions:**
+1. Clear browser cache
+2. Update Chrome
+3. Check for conflicting extensions
+4. Try incognito mode
+
+## Debug Mode
+
+Enable debug mode for detailed logs:
+
+```typescript
+const sdk = createSDK('base', {
+  network: 'testnet',
+  debug: true, // Enable debug logs
+});
+
+// All SDK operations will now log details
+await sdk.passkey.login();
+// [Veridex] Starting login...
+// [Veridex] WebAuthn credential retrieved
+// [Veridex] Signature generated
+// [Veridex] Login complete
+```
+
+## Getting Help
+
+If you're still stuck:
+
+1. **Check documentation**: [docs.veridex.network](https://docs.veridex.network)
+2. **Search issues**: [GitHub Issues](https://github.com/Veridex-Protocol/sdk/issues)
+3. **Ask community**: [Discord](https://discord.gg/veridex)
+4. **Contact support**: support@veridex.network
+
+When reporting issues, include:
+- SDK version
+- Browser and version
+- Device/OS
+- Error message and stack trace
+- Steps to reproduce

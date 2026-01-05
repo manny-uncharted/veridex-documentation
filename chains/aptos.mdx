@@ -1,0 +1,357 @@
+---
+title: Aptos
+description: Integrate Veridex with Aptos blockchain
+---
+
+# Aptos Integration
+
+Use Veridex passkey wallets on Aptos Move blockchain.
+
+## Overview
+
+Veridex on Aptos provides:
+- **Native secp256r1 support** - Aptos natively supports P-256 curves
+- **Same passkey, same security** across EVM and Aptos
+- **Cross-chain bridges** via Wormhole
+- **Move-based smart accounts**
+
+## Status
+
+| Feature | Status |
+|---------|--------|
+| Wallet derivation | ✅ Available |
+| Cross-chain bridge | ✅ Available |
+| Native transactions | ✅ Available |
+| APT transfers | ✅ Available |
+| Coin transfers | ✅ Available |
+
+## Initialize SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const aptosSDK = createSDK('aptos', {
+  network: 'mainnet', // or 'testnet'
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Login with passkey
+await aptosSDK.passkey.login();
+
+// Get Aptos address
+const aptosAddress = aptosSDK.getVaultAddress();
+console.log('Aptos address:', aptosAddress);
+```
+
+## Native Aptos Features
+
+Aptos has native support for secp256r1 (P-256) curve, making passkey integration seamless:
+
+```typescript
+// The passkey's P-256 public key works directly on Aptos
+// No additional abstraction layer needed!
+```
+
+## Cross-Chain Bridge
+
+### EVM to Aptos
+
+```typescript
+import { parseUnits } from 'ethers';
+
+async function bridgeToAptos(amount: string) {
+  const evmSDK = createSDK('base', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await evmSDK.passkey.login();
+
+  const result = await evmSDK.crossChainTransfer({
+    token: BASE_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'aptos',
+    recipient: evmSDK.getAptosAddress(),
+  });
+
+  return result;
+}
+```
+
+### Aptos to EVM
+
+```typescript
+async function bridgeToEVM(amount: string) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  const result = await aptosSDK.crossChainTransfer({
+    token: APTOS_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'base',
+    recipient: aptosSDK.getEVMAddress(),
+  });
+
+  return result;
+}
+```
+
+## Coin Operations
+
+### Get Balances
+
+```typescript
+async function getAptosBalances() {
+  const aptosSDK = createSDK('aptos', { network: 'mainnet' });
+  await aptosSDK.passkey.login();
+
+  const balances = await aptosSDK.getBalances();
+  
+  return {
+    APT: balances.aptos?.APT || '0',
+    USDC: balances.aptos?.USDC || '0',
+  };
+}
+```
+
+### Transfer APT
+
+```typescript
+async function transferAPT(recipient: string, amount: bigint) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  // Native APT transfer
+  const result = await aptosSDK.transferViaRelayer({
+    token: '0x1::aptos_coin::AptosCoin',
+    recipient,
+    amount,
+  });
+
+  return result;
+}
+```
+
+### Transfer Other Coins
+
+```typescript
+async function transferCoin(
+  coinType: string,
+  recipient: string,
+  amount: bigint
+) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  const result = await aptosSDK.transferViaRelayer({
+    token: coinType, // e.g., '0x1::usdc::USDC'
+    recipient,
+    amount,
+  });
+
+  return result;
+}
+```
+
+## Move Module Interaction
+
+Execute arbitrary Move functions:
+
+```typescript
+async function callMoveFunction(
+  moduleAddress: string,
+  moduleName: string,
+  functionName: string,
+  typeArgs: string[],
+  args: any[]
+) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  const result = await aptosSDK.executeViaRelayer({
+    target: `${moduleAddress}::${moduleName}::${functionName}`,
+    typeArguments: typeArgs,
+    arguments: args,
+  });
+
+  return result;
+}
+
+// Example: Register a coin
+await callMoveFunction(
+  '0x1',
+  'managed_coin',
+  'register',
+  ['0x1::usdc::USDC'],
+  []
+);
+```
+
+## Configuration
+
+### Network Endpoints
+
+```typescript
+const APTOS_ENDPOINTS = {
+  mainnet: 'https://fullnode.mainnet.aptoslabs.com/v1',
+  testnet: 'https://fullnode.testnet.aptoslabs.com/v1',
+};
+```
+
+### Common Coin Types
+
+```typescript
+const APTOS_COINS = {
+  APT: '0x1::aptos_coin::AptosCoin',
+  USDC: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDC',
+  USDT: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDT',
+};
+```
+
+## React Component
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+export function AptosWallet() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  const sdk = createSDK('aptos', { network: 'mainnet' });
+
+  const connect = async () => {
+    setLoading(true);
+    try {
+      await sdk.passkey.login();
+      setAddress(sdk.getVaultAddress());
+      await loadBalances();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const loadBalances = async () => {
+    const result = await sdk.getBalances();
+    setBalances(result.aptos || {});
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">Aptos Wallet</h3>
+      
+      {address ? (
+        <div>
+          <p className="font-mono text-sm mb-4">
+            {address.slice(0, 10)}...{address.slice(-8)}
+          </p>
+          
+          <div className="space-y-2">
+            {Object.entries(balances).map(([coin, balance]) => (
+              <div key={coin} className="flex justify-between">
+                <span>{coin}</span>
+                <span className="font-mono">{balance}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={connect}
+          disabled={loading}
+          className="bg-teal-600 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Connecting...' : 'Connect Aptos'}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+## NFT Operations
+
+### Mint NFT
+
+```typescript
+async function mintNFT(
+  collection: string,
+  name: string,
+  description: string,
+  uri: string
+) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  const result = await aptosSDK.executeViaRelayer({
+    target: '0x4::token::mint',
+    typeArguments: [],
+    arguments: [collection, name, description, uri],
+  });
+
+  return result;
+}
+```
+
+### Transfer NFT
+
+```typescript
+async function transferNFT(
+  recipient: string,
+  creator: string,
+  collection: string,
+  name: string,
+  propertyVersion: number
+) {
+  const aptosSDK = createSDK('aptos', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await aptosSDK.passkey.login();
+
+  const result = await aptosSDK.executeViaRelayer({
+    target: '0x3::token::transfer',
+    typeArguments: [],
+    arguments: [recipient, creator, collection, name, propertyVersion, 1],
+  });
+
+  return result;
+}
+```
+
+## Security Notes
+
+1. **Native P-256** - Aptos natively supports the passkey curve
+2. **Account model** - Aptos uses resource-based accounts
+3. **Gas estimation** - Gas units differ from EVM gas
+4. **Sequence numbers** - Aptos uses sequence numbers instead of nonces
+
+## Aptos-Specific Features
+
+- **Parallel execution** - Transactions can execute in parallel
+- **Move language** - Type-safe smart contracts
+- **Upgradeability** - Modules can be upgraded
+- **Resources** - Data stored as typed resources

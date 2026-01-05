@@ -1,0 +1,242 @@
+---
+title: Migration Guide
+description: Upgrade guides for Veridex SDK versions
+---
+
+# Migration Guide
+
+Guides for upgrading between Veridex SDK versions.
+
+## Migrating to 1.0.0-beta.1
+
+### From 0.x
+
+The 1.0.0 beta introduces a new API structure for better TypeScript support and modularity.
+
+#### SDK Initialization
+
+```typescript
+// ❌ Old (0.x)
+import Veridex from '@veridex/sdk';
+const sdk = new Veridex({
+  chain: 'base',
+  testnet: true,
+  relayerUrl: 'https://...',
+});
+
+// ✅ New (1.0.0-beta.1)
+import { createSDK } from '@veridex/sdk';
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://...',
+});
+```
+
+#### Passkey Methods
+
+```typescript
+// ❌ Old
+await sdk.register(email, name);
+await sdk.login();
+await sdk.getStoredCredential();
+
+// ✅ New
+await sdk.passkey.register(email, name);
+await sdk.passkey.login();
+sdk.passkey.getStoredCredential();
+```
+
+#### Session Keys
+
+```typescript
+// ❌ Old
+await sdk.createSession({ duration: 3600 });
+await sdk.getActiveSession();
+await sdk.revokeSession();
+
+// ✅ New
+await sdk.sessions.create({ duration: 3600 });
+sdk.sessions.getActive();
+await sdk.sessions.revoke();
+```
+
+#### Transfers
+
+```typescript
+// ❌ Old
+await sdk.transfer({
+  token: '0x...',
+  to: '0x...',
+  amount: 1000000n,
+  gasless: true,
+});
+
+// ✅ New
+await sdk.transferViaRelayer({
+  token: '0x...',
+  recipient: '0x...',
+  amount: 1000000n,
+});
+
+// Or for self-paid gas:
+await sdk.transfer({
+  token: '0x...',
+  recipient: '0x...',
+  amount: 1000000n,
+});
+```
+
+#### Cross-Chain
+
+```typescript
+// ❌ Old
+await sdk.bridge({
+  token: '0x...',
+  amount: 1000000n,
+  toChain: 'optimism',
+  toAddress: '0x...',
+});
+
+// ✅ New
+await sdk.crossChainTransfer({
+  token: '0x...',
+  amount: 1000000n,
+  targetChain: 'optimism',
+  recipient: '0x...',
+  path: 'fast', // 'fast' (CCQ) or 'standard' (VAA)
+});
+```
+
+#### Getting Addresses
+
+```typescript
+// ❌ Old
+const address = sdk.address;
+const evmAddress = sdk.getEVMAddress();
+const solanaAddress = sdk.getSolanaAddress();
+
+// ✅ New
+const address = sdk.getVaultAddress();
+const evmAddress = sdk.getVaultAddress('base');
+const solanaAddress = sdk.getVaultAddress('solana');
+// Or use chain-specific getters
+const solana = sdk.getSolanaAddress();
+const aptos = sdk.getAptosAddress();
+```
+
+#### Balances
+
+```typescript
+// ❌ Old
+const balance = await sdk.getBalance('0x...'); // Single token
+const allBalances = await sdk.getAllBalances();
+
+// ✅ New
+const balance = await sdk.getBalance('0x...'); // Single token
+const allBalances = await sdk.getBalances(); // All chains, all tokens
+// Returns:
+// {
+//   base: { ETH: '1.5', USDC: '100.00' },
+//   optimism: { ETH: '0.5', USDC: '50.00' },
+// }
+```
+
+### Type Changes
+
+```typescript
+// ❌ Old
+interface TransferParams {
+  token: string;
+  to: string;
+  amount: bigint;
+  gasless?: boolean;
+}
+
+// ✅ New
+interface TransferParams {
+  token: string;
+  recipient: string;
+  amount: bigint;
+}
+
+interface TransferViaRelayerParams {
+  token: string;
+  recipient: string;
+  amount: bigint;
+}
+```
+
+### Import Changes
+
+```typescript
+// ❌ Old
+import Veridex, { TransferParams, SessionConfig } from '@veridex/sdk';
+
+// ✅ New
+import { 
+  createSDK, 
+  type TransferParams, 
+  type SessionConfig,
+  type SDKConfig,
+  type VeridexSDK,
+} from '@veridex/sdk';
+```
+
+### Error Handling
+
+```typescript
+// ❌ Old
+try {
+  await sdk.transfer(...);
+} catch (error) {
+  if (error.code === 'INSUFFICIENT_FUNDS') { ... }
+}
+
+// ✅ New
+import { VeridexError, ErrorCodes } from '@veridex/sdk';
+
+try {
+  await sdk.transferViaRelayer(...);
+} catch (error) {
+  if (error instanceof VeridexError) {
+    if (error.code === ErrorCodes.INSUFFICIENT_BALANCE) { ... }
+  }
+}
+```
+
+## Breaking Changes Summary
+
+| Old | New |
+|-----|-----|
+| `new Veridex(config)` | `createSDK(chain, config)` |
+| `sdk.register()` | `sdk.passkey.register()` |
+| `sdk.login()` | `sdk.passkey.login()` |
+| `sdk.createSession()` | `sdk.sessions.create()` |
+| `sdk.transfer({ gasless: true })` | `sdk.transferViaRelayer()` |
+| `sdk.bridge()` | `sdk.crossChainTransfer()` |
+| `sdk.address` | `sdk.getVaultAddress()` |
+| `testnet: true` | `network: 'testnet'` |
+| `to` parameter | `recipient` parameter |
+| `toChain` parameter | `targetChain` parameter |
+
+## Codemods
+
+We provide a codemod to automatically migrate your codebase:
+
+```bash
+npx @veridex/codemod@latest migrate-to-1.0
+```
+
+This will update:
+- Import statements
+- SDK initialization
+- Method calls
+- Type imports
+
+Review the changes before committing.
+
+## Need Help?
+
+- [Discord](https://discord.gg/veridex) - Ask in #migration channel
+- [GitHub Issues](https://github.com/Veridex-Protocol/sdk/issues) - Report migration issues
+- [Documentation](https://docs.veridex.network) - Full API reference

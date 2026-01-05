@@ -1,0 +1,371 @@
+---
+title: Security Best Practices
+description: Security recommendations for Veridex integrations
+---
+
+# Security Best Practices
+
+Essential security guidelines for integrating Veridex passkey wallets.
+
+## Passkey Security
+
+### Credential Storage
+
+```typescript
+// ✅ Good: Let the browser/OS manage credentials
+await sdk.passkey.register('user@example.com', 'My Wallet');
+// Credential stored securely in platform authenticator
+
+// ❌ Bad: Don't try to extract or store private keys
+// The private key never leaves the secure enclave
+```
+
+### User Verification
+
+```typescript
+// ✅ Require user verification for sensitive operations
+await sdk.passkey.login({ userVerification: 'required' });
+
+// The platform will require biometric/PIN verification
+```
+
+### Credential Binding
+
+```typescript
+// Bind credentials to your domain
+const credential = await sdk.passkey.register('user@example.com', 'Wallet', {
+  // Only your domain can use this credential
+  rp: {
+    id: 'yourdomain.com',
+    name: 'Your App',
+  },
+});
+```
+
+## Session Key Security
+
+### Limit Session Scope
+
+```typescript
+// ✅ Good: Minimal permissions
+const session = await sdk.sessions.create({
+  duration: 1800, // 30 minutes, not days
+  maxValue: parseUnits('100', 6), // $100 max, not unlimited
+  allowedTokens: [USDC], // Only needed tokens
+  allowedContracts: [SPECIFIC_CONTRACT], // Only needed contracts
+});
+
+// ❌ Bad: Overly permissive
+const session = await sdk.sessions.create({
+  duration: 86400 * 30, // 30 days
+  maxValue: parseUnits('1000000', 6), // $1M max
+  // No token/contract restrictions
+});
+```
+
+### Session Expiry Handling
+
+```typescript
+function isSessionValid(): boolean {
+  const session = sdk.sessions.getActive();
+  if (!session) return false;
+  
+  // Add buffer for network latency
+  const buffer = 60 * 1000; // 1 minute
+  return session.expiresAt > Date.now() + buffer;
+}
+
+async function ensureValidSession() {
+  if (!isSessionValid()) {
+    await sdk.sessions.create({ duration: 1800 });
+  }
+}
+```
+
+### Revoke Sessions
+
+```typescript
+// Revoke session on logout
+async function logout() {
+  await sdk.sessions.revoke();
+  sdk.passkey.clearCredential();
+}
+
+// Revoke session on suspicious activity
+async function handleSuspiciousActivity() {
+  await sdk.sessions.revoke();
+  notifyUser('Session terminated for security');
+}
+```
+
+## Transaction Security
+
+### Validate Recipients
+
+```typescript
+// ✅ Validate addresses before sending
+function isValidAddress(address: string): boolean {
+  return ethers.isAddress(address);
+}
+
+async function safeSend(recipient: string, amount: bigint) {
+  if (!isValidAddress(recipient)) {
+    throw new Error('Invalid recipient address');
+  }
+  
+  // Additional checks
+  if (recipient === ethers.ZeroAddress) {
+    throw new Error('Cannot send to zero address');
+  }
+  
+  return await sdk.transferViaRelayer({ token, recipient, amount });
+}
+```
+
+### Amount Validation
+
+```typescript
+// ✅ Validate amounts
+async function validateTransfer(amount: bigint, token: string) {
+  const balance = await sdk.getBalance(token);
+  
+  if (amount <= 0n) {
+    throw new Error('Amount must be positive');
+  }
+  
+  if (amount > balance) {
+    throw new Error('Insufficient balance');
+  }
+  
+  // Check against user's spending limit
+  const limit = await getUserSpendingLimit();
+  if (amount > limit) {
+    throw new Error('Exceeds spending limit');
+  }
+}
+```
+
+### Transaction Signing
+
+```typescript
+// ✅ Always verify what you're signing
+async function signTransaction(tx: TransactionRequest) {
+  // Show user what they're signing
+  const confirmed = await showConfirmationDialog({
+    to: tx.to,
+    value: tx.value,
+    data: tx.data,
+  });
+  
+  if (!confirmed) {
+    throw new Error('User rejected transaction');
+  }
+  
+  return await sdk.signAndSend(tx);
+}
+```
+
+## Contract Interaction Security
+
+### Verify Contract Addresses
+
+```typescript
+// ✅ Maintain allowlist of known contracts
+const VERIFIED_CONTRACTS = {
+  uniswap: '0x2626664c2603336E57B271c5C0b26F421741e481',
+  aave: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
+};
+
+async function safeContractCall(contract: string, data: string) {
+  const isVerified = Object.values(VERIFIED_CONTRACTS).includes(contract);
+  
+  if (!isVerified) {
+    // Require additional confirmation for unknown contracts
+    const confirmed = await confirmUnknownContract(contract);
+    if (!confirmed) throw new Error('Rejected unknown contract');
+  }
+  
+  return await sdk.executeViaRelayer({ target: contract, data });
+}
+```
+
+### Decode Transaction Data
+
+```typescript
+// ✅ Show users decoded transaction data
+import { Interface } from 'ethers';
+
+function decodeTransaction(to: string, data: string) {
+  const knownInterfaces = {
+    erc20: new Interface([
+      'function transfer(address to, uint256 amount)',
+      'function approve(address spender, uint256 amount)',
+    ]),
+    // Add more known interfaces
+  };
+  
+  for (const [name, iface] of Object.entries(knownInterfaces)) {
+    try {
+      const decoded = iface.parseTransaction({ data });
+      return {
+        contract: name,
+        method: decoded.name,
+        args: decoded.args,
+      };
+    } catch {
+      continue;
+    }
+  }
+  
+  return { contract: 'unknown', method: 'unknown', args: [] };
+}
+```
+
+## API Security
+
+### Secure Relayer Communication
+
+```typescript
+// ✅ Always use HTTPS
+const sdk = createSDK('base', {
+  relayerUrl: 'https://relayer.veridex.network', // HTTPS only
+});
+
+// ❌ Never use HTTP in production
+// relayerUrl: 'http://...' // INSECURE
+```
+
+### Rate Limiting
+
+```typescript
+// Implement client-side rate limiting
+class RateLimiter {
+  private requests: number[] = [];
+  private limit: number;
+  private window: number;
+  
+  constructor(limit: number, windowMs: number) {
+    this.limit = limit;
+    this.window = windowMs;
+  }
+  
+  canRequest(): boolean {
+    const now = Date.now();
+    this.requests = this.requests.filter(t => t > now - this.window);
+    return this.requests.length < this.limit;
+  }
+  
+  recordRequest() {
+    this.requests.push(Date.now());
+  }
+}
+
+const limiter = new RateLimiter(10, 60000); // 10 requests per minute
+
+async function rateLimitedCall(fn: () => Promise<any>) {
+  if (!limiter.canRequest()) {
+    throw new Error('Rate limit exceeded');
+  }
+  limiter.recordRequest();
+  return await fn();
+}
+```
+
+## Error Handling
+
+### Don't Expose Sensitive Information
+
+```typescript
+// ✅ Safe error handling
+try {
+  await sdk.transferViaRelayer({ token, recipient, amount });
+} catch (error) {
+  // Log full error internally
+  console.error('Transfer failed:', error);
+  
+  // Show generic message to user
+  showError('Transfer failed. Please try again.');
+}
+
+// ❌ Don't expose internal errors
+// showError(error.message); // May contain sensitive info
+```
+
+### Handle Authentication Errors
+
+```typescript
+async function handleAuthError(error: Error) {
+  if (error.message.includes('NotAllowedError')) {
+    // User cancelled or timeout
+    showMessage('Authentication cancelled');
+  } else if (error.message.includes('InvalidStateError')) {
+    // Credential not found
+    showMessage('Please register a passkey first');
+  } else if (error.message.includes('NotSupportedError')) {
+    // Browser doesn't support WebAuthn
+    showMessage('Your browser does not support passkeys');
+  }
+}
+```
+
+## Monitoring & Logging
+
+### Audit Logging
+
+```typescript
+// Log security-relevant events
+function auditLog(event: string, data: object) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    event,
+    data,
+    // Don't log sensitive data like credentials
+  };
+  
+  // Send to logging service
+  sendToLogger(entry);
+}
+
+// Usage
+auditLog('session_created', { duration: 1800, maxValue: '100' });
+auditLog('transfer_initiated', { to: recipient, amount: '50' });
+```
+
+### Monitor for Anomalies
+
+```typescript
+// Detect unusual activity
+async function checkForAnomalies(tx: Transaction) {
+  const recentTxs = await getRecentTransactions();
+  
+  // Check for unusual patterns
+  const unusualAmount = tx.amount > averageAmount(recentTxs) * 10;
+  const newRecipient = !recentTxs.some(t => t.to === tx.to);
+  const highFrequency = recentTxs.length > 10;
+  
+  if (unusualAmount || newRecipient && highFrequency) {
+    await requestAdditionalVerification();
+  }
+}
+```
+
+## Checklist
+
+### Before Launch
+
+- [ ] All API calls use HTTPS
+- [ ] Session keys have reasonable limits
+- [ ] Error messages don't expose internals
+- [ ] Rate limiting implemented
+- [ ] Audit logging in place
+- [ ] Contract addresses verified
+- [ ] Amount validation implemented
+- [ ] User verification required for sensitive ops
+
+### Ongoing
+
+- [ ] Monitor for unusual activity
+- [ ] Keep SDK updated
+- [ ] Review session configurations
+- [ ] Audit access logs regularly
+- [ ] Test recovery procedures

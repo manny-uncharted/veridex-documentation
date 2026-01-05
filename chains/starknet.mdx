@@ -1,0 +1,300 @@
+---
+title: Starknet
+description: Integrate Veridex with Starknet blockchain
+---
+
+# Starknet Integration
+
+Use Veridex passkey wallets on Starknet L2.
+
+## Overview
+
+Veridex on Starknet provides:
+- **Native account abstraction** - Starknet has built-in AA
+- **Cairo smart accounts** - Passkey verification in Cairo
+- **Cross-chain bridges** via Wormhole
+- **ZK-proof based scaling**
+
+## Status
+
+| Feature | Status |
+|---------|--------|
+| Wallet derivation | ✅ Available |
+| Cross-chain bridge | ✅ Available |
+| Native transactions | 🔜 Coming |
+| ERC-20 transfers | 🔜 Coming |
+
+## Initialize SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const starknetSDK = createSDK('starknet', {
+  network: 'mainnet', // or 'testnet'
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Login with passkey
+await starknetSDK.passkey.login();
+
+// Get Starknet address
+const starknetAddress = starknetSDK.getVaultAddress();
+console.log('Starknet address:', starknetAddress);
+```
+
+## Native Account Abstraction
+
+Starknet has native account abstraction, making passkey wallets a natural fit:
+
+```typescript
+// Starknet accounts are smart contracts by design
+// Our Cairo account verifies P-256 passkey signatures natively
+```
+
+## Cross-Chain Bridge
+
+### EVM to Starknet
+
+```typescript
+import { parseUnits } from 'ethers';
+
+async function bridgeToStarknet(amount: string) {
+  const evmSDK = createSDK('base', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await evmSDK.passkey.login();
+
+  const result = await evmSDK.crossChainTransfer({
+    token: BASE_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'starknet',
+    recipient: evmSDK.getStarknetAddress(),
+  });
+
+  return result;
+}
+```
+
+### Starknet to EVM
+
+```typescript
+async function bridgeToEVM(amount: string) {
+  const starknetSDK = createSDK('starknet', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await starknetSDK.passkey.login();
+
+  const result = await starknetSDK.crossChainTransfer({
+    token: STARKNET_USDC,
+    amount: parseUnits(amount, 6),
+    targetChain: 'base',
+    recipient: starknetSDK.getEVMAddress(),
+  });
+
+  return result;
+}
+```
+
+## Token Operations
+
+### Get Balances
+
+```typescript
+async function getStarknetBalances() {
+  const starknetSDK = createSDK('starknet', { network: 'mainnet' });
+  await starknetSDK.passkey.login();
+
+  const balances = await starknetSDK.getBalances();
+  
+  return {
+    ETH: balances.starknet?.ETH || '0',
+    USDC: balances.starknet?.USDC || '0',
+    STRK: balances.starknet?.STRK || '0',
+  };
+}
+```
+
+### Transfer Tokens
+
+```typescript
+async function transferToken(
+  tokenAddress: string,
+  recipient: string,
+  amount: bigint
+) {
+  const starknetSDK = createSDK('starknet', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await starknetSDK.passkey.login();
+
+  const result = await starknetSDK.transferViaRelayer({
+    token: tokenAddress,
+    recipient,
+    amount,
+  });
+
+  return result;
+}
+```
+
+## Configuration
+
+### Network Endpoints
+
+```typescript
+const STARKNET_ENDPOINTS = {
+  mainnet: 'https://starknet-mainnet.public.blastapi.io',
+  testnet: 'https://starknet-sepolia.public.blastapi.io',
+};
+```
+
+### Token Addresses
+
+```typescript
+const STARKNET_TOKENS = {
+  ETH: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+  USDC: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
+  STRK: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+};
+```
+
+## React Component
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+export function StarknetWallet() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  const sdk = createSDK('starknet', { network: 'mainnet' });
+
+  const connect = async () => {
+    setLoading(true);
+    try {
+      await sdk.passkey.login();
+      setAddress(sdk.getVaultAddress());
+      await loadBalances();
+    } catch (error) {
+      console.error(error);
+    }
+    setLoading(false);
+  };
+
+  const loadBalances = async () => {
+    const result = await sdk.getBalances();
+    setBalances(result.starknet || {});
+  };
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <h3 className="font-bold mb-4">Starknet Wallet</h3>
+      
+      {address ? (
+        <div>
+          <p className="font-mono text-sm mb-4">
+            {address.slice(0, 10)}...{address.slice(-8)}
+          </p>
+          
+          <div className="space-y-2">
+            {Object.entries(balances).map(([token, balance]) => (
+              <div key={token} className="flex justify-between">
+                <span>{token}</span>
+                <span className="font-mono">{balance}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={connect}
+          disabled={loading}
+          className="bg-orange-600 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Connecting...' : 'Connect Starknet'}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+## Cairo Contracts
+
+### P-256 Verification
+
+Starknet's Cairo supports P-256 signature verification:
+
+```cairo
+// Our Cairo account contract
+#[starknet::contract]
+mod PasskeyAccount {
+    use starknet::secp256r1::{secp256r1_verify, Secp256r1Point};
+    
+    #[storage]
+    struct Storage {
+        public_key: Secp256r1Point,
+    }
+    
+    #[external(v0)]
+    fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
+        // Verify P-256 signature from passkey
+        let signature = get_tx_signature();
+        let tx_hash = get_tx_hash();
+        
+        assert(
+            secp256r1_verify(tx_hash, signature, self.public_key.read()),
+            'Invalid signature'
+        );
+        
+        VALIDATED
+    }
+}
+```
+
+## Multi-Call Transactions
+
+Starknet supports multiple calls in one transaction:
+
+```typescript
+async function multiCall(calls: Array<{to: string, selector: string, calldata: string[]}>) {
+  const starknetSDK = createSDK('starknet', {
+    network: 'mainnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  await starknetSDK.passkey.login();
+
+  const result = await starknetSDK.executeViaRelayer({
+    calls: calls.map(call => ({
+      contractAddress: call.to,
+      entrypoint: call.selector,
+      calldata: call.calldata,
+    })),
+  });
+
+  return result;
+}
+```
+
+## Security Notes
+
+1. **ZK-proofs** - All transactions are verified via STARK proofs
+2. **Native AA** - Account abstraction is built into the protocol
+3. **Felt arithmetic** - Uses 252-bit field elements
+4. **Cairo VM** - Provable execution environment
+
+## Starknet-Specific Features
+
+- **STARK proofs** - Computational integrity proofs
+- **Native AA** - All accounts are smart contracts
+- **Fee abstraction** - Pay gas in any token
+- **Multi-call** - Multiple operations in single tx

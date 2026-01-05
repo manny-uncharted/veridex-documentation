@@ -1,0 +1,184 @@
+---
+title: FAQ
+description: Frequently asked questions about Veridex Protocol
+---
+
+# Frequently Asked Questions
+
+## General
+
+### What is Veridex?
+
+Veridex is a cross-chain passkey authentication protocol. It lets users control assets on any blockchain using FaceID/TouchID — no seed phrases, no wallet apps, no chain switching.
+
+### Is Veridex self-custodial?
+
+**Yes, 100%.** Your passkey's private key never leaves your device. Veridex contracts verify signatures on-chain without ever seeing your private key.
+
+### How is this different from Privy/Dynamic/Web3Auth?
+
+| Feature | Privy/Dynamic | Veridex |
+|---------|--------------|---------|
+| Custody | MPC (they hold shards) | Fully self-custodial |
+| Trust | Trust their servers | Trustless (on-chain) |
+| Cross-chain | Limited | Native multi-chain |
+| Open source | No | Yes |
+
+### What chains are supported?
+
+- **EVM**: Base (hub), Optimism, Arbitrum, Polygon, Ethereum
+- **Non-EVM**: Solana, Aptos, Sui, Starknet
+
+### Is it production ready?
+
+Veridex is currently on **testnet**. Mainnet launch is planned for Q2 2026 after security audits.
+
+## Technical
+
+### What happens if I lose my device?
+
+Veridex supports **on-chain social recovery**. You can designate guardians who can collectively recover your account. See [Recovery Guide](/guides/recovery).
+
+### Can I use the same passkey on multiple devices?
+
+Yes! Passkeys sync via:
+- iCloud Keychain (Apple devices)
+- Google Password Manager (Android/Chrome)
+- Windows Hello (Windows devices)
+
+### Why Base as the hub chain?
+
+Base was chosen because:
+1. **RIP-7212 support**: Native P-256 verification (~3,450 gas)
+2. **Low fees**: Sub-cent transactions
+3. **Coinbase ecosystem**: Large user base
+4. **EVM compatibility**: Easy spoke deployment
+
+### How fast are cross-chain transfers?
+
+| Path | Time | Use Case |
+|------|------|----------|
+| Query (CCQ) | ~5-7 seconds | Low-value transfers |
+| VAA | ~60 seconds | High-value transfers |
+
+The SDK/relayer automatically chooses the optimal path.
+
+### What's the difference between Query and VAA paths?
+
+- **Query (CCQ)**: Wormhole Cross-Chain Queries. Faster but relies on guardian attestation of current state.
+- **VAA**: Verified Action Approval. Full 13/19 guardian consensus. More secure for high-value operations.
+
+### Do users need to hold gas tokens?
+
+**No.** The relayer pays gas fees. Users only need the tokens they want to transfer.
+
+### How does the deterministic vault address work?
+
+Your vault address is derived from your passkey's public key using CREATE2:
+
+```
+vaultAddress = CREATE2(factory, hash(publicKey), bytecode)
+```
+
+This means:
+- Same passkey → same address on all EVM chains
+- Address is known before vault exists
+- You can receive funds before deploying
+
+## Security
+
+### Is my passkey secure?
+
+Yes. Passkeys use:
+- **Hardware security**: TPM, Secure Enclave, or similar
+- **Biometric protection**: FaceID, TouchID, fingerprint
+- **Non-exportable keys**: Private key never leaves the device
+
+### What if Veridex gets hacked?
+
+Even if Veridex infrastructure is compromised:
+- Your private key is on your device, not our servers
+- Contracts are immutable after deployment
+- Guardians can recover via social recovery
+
+### Can the relayer steal my funds?
+
+**No.** The relayer only submits transactions — it cannot forge your passkey signature. All signatures are verified on-chain.
+
+### What about Wormhole security?
+
+Wormhole uses a 13/19 guardian quorum. Veridex verifies:
+- Guardian signatures
+- Message origin (hub emitter)
+- Replay protection (nonces)
+
+## Integration
+
+### How do I integrate Veridex?
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+await sdk.passkey.register('user@example.com', 'My App');
+```
+
+See the [Quick Start Guide](/getting-started/quick-start).
+
+### Is there a React component library?
+
+Not yet, but planned. For now, use the SDK directly in your React components.
+
+### Can I run my own relayer?
+
+Yes! The relayer is open source. See [Relayer Setup](/api-reference/relayer).
+
+### What's the cost of integration?
+
+The SDK and protocol are **free and open source**. Costs are:
+- **Gas fees**: Paid by relayer (can be sponsored)
+- **Wormhole fees**: ~0.0001 ETH per cross-chain message
+
+### Do you have a grant program?
+
+We're exploring partnerships with ecosystem partners. Contact us at [team@veridex.network](mailto:team@veridex.network).
+
+## Troubleshooting
+
+### "Passkey not supported" error
+
+Ensure you're using:
+- A supported browser (Chrome 67+, Safari 14+, Firefox 60+)
+- HTTPS (or localhost for development)
+- A device with biometric capability
+
+### "Signature verification failed" error
+
+Common causes:
+1. Credential was created on a different domain
+2. Passkey was deleted from device
+3. Wrong network (testnet vs mainnet)
+
+### Transaction stuck or failing
+
+Check:
+1. Vault has sufficient balance
+2. Relayer is running and healthy (`/health` endpoint)
+3. Destination chain is responding
+
+### Session key expired
+
+Sessions have a time limit. Create a new session:
+
+```typescript
+const newSession = await sdk.sessions.create({
+  duration: 3600, // 1 hour
+});
+```
+
+## Contact
+
+- **GitHub**: [github.com/Veridex-Protocol](https://github.com/Veridex-Protocol)
+- **Discord**: [discord.gg/veridex](https://discord.gg/veridex)
+- **Twitter**: [@VeridexProtocol](https://twitter.com/VeridexProtocol)
+- **Email**: [team@veridex.network](mailto:team@veridex.network)

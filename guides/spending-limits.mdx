@@ -1,0 +1,302 @@
+---
+title: Spending Limits
+description: Configure spending limits for vault safety
+---
+
+# Spending Limits
+
+Spending limits add an extra layer of security to your vault by capping how much can be transferred within a time period.
+
+## Overview
+
+Spending limits protect against:
+- Compromised session keys
+- Stolen devices (before recovery)
+- Accidental large transfers
+
+## Configure Spending Limits
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { parseEther, parseUnits } from 'ethers';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+await sdk.passkey.login();
+
+// Set spending limits
+await sdk.spendingLimits.configure({
+  daily: parseEther('1'), // 1 ETH per day
+  perTransaction: parseEther('0.1'), // 0.1 ETH max per tx
+  tokens: {
+    [USDC]: {
+      daily: parseUnits('1000', 6), // 1000 USDC per day
+      perTransaction: parseUnits('100', 6), // 100 USDC per tx
+    },
+  },
+});
+```
+
+## Limit Types
+
+### Daily Limit
+
+```typescript
+await sdk.spendingLimits.configure({
+  daily: parseEther('1'), // Resets every 24 hours
+});
+```
+
+### Per-Transaction Limit
+
+```typescript
+await sdk.spendingLimits.configure({
+  perTransaction: parseEther('0.1'), // Max per single transfer
+});
+```
+
+### Token-Specific Limits
+
+```typescript
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+await sdk.spendingLimits.configure({
+  tokens: {
+    [USDC]: {
+      daily: parseUnits('500', 6),
+      perTransaction: parseUnits('100', 6),
+    },
+  },
+});
+```
+
+### Combined Limits
+
+```typescript
+await sdk.spendingLimits.configure({
+  // Global limits (in ETH equivalent)
+  daily: parseEther('2'),
+  perTransaction: parseEther('0.5'),
+  
+  // Token-specific overrides
+  tokens: {
+    [USDC]: {
+      daily: parseUnits('1000', 6),
+      perTransaction: parseUnits('250', 6),
+    },
+    [WETH]: {
+      daily: parseEther('0.5'),
+      perTransaction: parseEther('0.1'),
+    },
+  },
+});
+```
+
+## Check Current Limits
+
+```typescript
+const limits = await sdk.spendingLimits.get();
+
+console.log('Daily limit:', limits.daily);
+console.log('Per-tx limit:', limits.perTransaction);
+console.log('Used today:', limits.usedToday);
+console.log('Remaining:', limits.remaining);
+console.log('Resets at:', new Date(limits.resetsAt));
+```
+
+## Check Before Transfer
+
+```typescript
+const amount = parseUnits('500', 6);
+
+const canTransfer = await sdk.spendingLimits.check({
+  token: USDC,
+  amount,
+});
+
+if (canTransfer.allowed) {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount,
+  });
+} else {
+  console.log('Limit exceeded:', canTransfer.reason);
+  console.log('Available:', canTransfer.available);
+  console.log('Resets at:', new Date(canTransfer.resetsAt));
+}
+```
+
+## Remove Limits
+
+```typescript
+// Remove all limits (requires passkey auth)
+await sdk.spendingLimits.remove();
+```
+
+## React Example
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+import { parseEther, formatEther } from 'ethers';
+
+const sdk = createSDK('base', { 
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+export function SpendingLimitsPanel() {
+  const [limits, setLimits] = useState<any>(null);
+  const [dailyLimit, setDailyLimit] = useState('1');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadLimits();
+  }, []);
+
+  const loadLimits = async () => {
+    const current = await sdk.spendingLimits.get();
+    setLimits(current);
+  };
+
+  const updateLimits = async () => {
+    setLoading(true);
+    try {
+      await sdk.spendingLimits.configure({
+        daily: parseEther(dailyLimit),
+      });
+      await loadLimits();
+    } catch (error) {
+      console.error('Failed to update limits:', error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-4 border rounded-lg space-y-4">
+      <h3 className="font-bold">Spending Limits</h3>
+
+      {limits && (
+        <div className="bg-gray-50 p-3 rounded">
+          <p>Daily: {formatEther(limits.daily)} ETH</p>
+          <p>Used today: {formatEther(limits.usedToday)} ETH</p>
+          <p>Remaining: {formatEther(limits.remaining)} ETH</p>
+          <p className="text-sm text-gray-500">
+            Resets: {new Date(limits.resetsAt).toLocaleString()}
+          </p>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <input
+          type="number"
+          value={dailyLimit}
+          onChange={(e) => setDailyLimit(e.target.value)}
+          placeholder="Daily limit (ETH)"
+          className="flex-1 rounded border p-2"
+        />
+        <button
+          onClick={updateLimits}
+          disabled={loading}
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Saving...' : 'Set Limit'}
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+## Usage Progress Widget
+
+```tsx
+export function SpendingProgress() {
+  const [limits, setLimits] = useState<any>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const current = await sdk.spendingLimits.get();
+      setLimits(current);
+    };
+    load();
+  }, []);
+
+  if (!limits) return <div>Loading...</div>;
+
+  const used = Number(limits.usedToday);
+  const total = Number(limits.daily);
+  const percentage = total > 0 ? (used / total) * 100 : 0;
+
+  return (
+    <div className="p-4 border rounded-lg">
+      <div className="flex justify-between mb-2">
+        <span>Daily Spending</span>
+        <span>{percentage.toFixed(1)}%</span>
+      </div>
+      <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all ${
+            percentage > 90 ? 'bg-red-500' : 
+            percentage > 70 ? 'bg-yellow-500' : 'bg-green-500'
+          }`}
+          style={{ width: `${Math.min(percentage, 100)}%` }}
+        />
+      </div>
+      <p className="text-sm text-gray-500 mt-1">
+        {formatEther(limits.usedToday)} / {formatEther(limits.daily)} ETH
+      </p>
+    </div>
+  );
+}
+```
+
+## Limit Exceeded Behavior
+
+When a transfer exceeds limits:
+
+```typescript
+try {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount: parseUnits('10000', 6), // Exceeds limit
+  });
+} catch (error) {
+  if (error.code === 'SPENDING_LIMIT_EXCEEDED') {
+    console.log('Transfer blocked by spending limit');
+    console.log('Limit type:', error.limitType); // 'daily' | 'perTransaction'
+    console.log('Limit:', error.limit);
+    console.log('Attempted:', error.attempted);
+    console.log('Available:', error.available);
+  }
+}
+```
+
+## Security Considerations
+
+<Callout type="warning">
+  Spending limits are enforced on-chain and cannot be bypassed by the SDK or relayer. Changing limits requires passkey authentication.
+</Callout>
+
+Best practices:
+
+1. **Set conservative defaults**: Start low, increase as needed
+2. **Use token-specific limits**: Stablecoins may need different limits
+3. **Review periodically**: Adjust limits based on usage patterns
+4. **Combine with session keys**: Sessions have their own limits too
+
+## Next Steps
+
+<Cards>
+  <Card title="Recovery Setup" href="/guides/recovery">
+    Configure account recovery
+  </Card>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Session-level spending limits
+  </Card>
+</Cards>

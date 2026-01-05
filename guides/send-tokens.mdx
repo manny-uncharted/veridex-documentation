@@ -1,0 +1,272 @@
+---
+title: Send Tokens
+description: Transfer tokens using your passkey wallet
+---
+
+# Send Tokens
+
+Transfer tokens from your Veridex vault to any address.
+
+## Prerequisites
+
+- Wallet connected (see [Create Wallet](/guides/create-wallet))
+- Tokens in your vault (use testnet faucets)
+- SDK initialized
+
+## Basic Transfer
+
+### Same-Chain Transfer
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { parseEther, parseUnits } from 'ethers';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Login first
+await sdk.passkey.login();
+
+// Transfer native token (ETH)
+const result = await sdk.transferViaRelayer({
+  token: 'native', // or use token address for ERC20
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: parseEther('0.01'), // 0.01 ETH
+});
+
+console.log('Transaction hash:', result.txHash);
+```
+
+### ERC20 Transfer
+
+```typescript
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+
+const result = await sdk.transferViaRelayer({
+  token: USDC,
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: parseUnits('10', 6), // 10 USDC (6 decimals)
+});
+
+console.log('USDC transfer:', result.txHash);
+```
+
+## Gasless Transfers
+
+With Veridex, users **never need gas tokens**. The relayer pays gas fees.
+
+```typescript
+// User has USDC but no ETH - this still works!
+const result = await sdk.transferViaRelayer({
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('100', 6),
+});
+
+// Relayer paid the gas, user only sent USDC
+```
+
+## Transfer with Session Key
+
+For better UX, use session keys to avoid repeated biometric prompts:
+
+```typescript
+// Create a session (one biometric prompt)
+const session = await sdk.sessions.create({
+  duration: 3600, // 1 hour
+  maxValue: parseEther('0.1'), // Max 0.1 ETH worth
+});
+
+// Multiple transfers without prompts
+await sdk.transfer({ token: USDC, recipient: addr1, amount: amount1 });
+await sdk.transfer({ token: USDC, recipient: addr2, amount: amount2 });
+await sdk.transfer({ token: USDC, recipient: addr3, amount: amount3 });
+// All auto-signed with session key!
+```
+
+## Check Balance Before Transfer
+
+```typescript
+// Get vault balances
+const balances = await sdk.getBalances();
+
+const usdcBalance = balances['base-sepolia']?.USDC;
+console.log('USDC Balance:', usdcBalance);
+
+// Check if sufficient
+const transferAmount = parseUnits('100', 6);
+if (BigInt(usdcBalance) >= transferAmount) {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount: transferAmount,
+  });
+}
+```
+
+## Transaction Status
+
+Track transaction status:
+
+```typescript
+const result = await sdk.transferViaRelayer({
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('10', 6),
+});
+
+console.log('Status:', result.status);
+console.log('Tx Hash:', result.txHash);
+console.log('Block:', result.blockNumber);
+```
+
+## React Example
+
+```tsx
+import { useState } from 'react';
+import { createSDK } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', { 
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+export function SendForm() {
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setTxHash(null);
+
+    try {
+      const result = await sdk.transferViaRelayer({
+        token: USDC,
+        recipient,
+        amount: parseUnits(amount, 6),
+      });
+
+      setTxHash(result.txHash);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Transfer failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSend} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium">Recipient</label>
+        <input
+          type="text"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          placeholder="0x..."
+          className="mt-1 block w-full rounded-md border p-2"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Amount (USDC)</label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="10.00"
+          step="0.01"
+          className="mt-1 block w-full rounded-md border p-2"
+          required
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg"
+      >
+        {loading ? 'Sending...' : 'Send USDC'}
+      </button>
+
+      {txHash && (
+        <p className="text-green-600">
+          Success!{' '}
+          <a 
+            href={`https://sepolia.basescan.org/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            View on Explorer
+          </a>
+        </p>
+      )}
+
+      {error && <p className="text-red-600">{error}</p>}
+    </form>
+  );
+}
+```
+
+## Common Token Addresses
+
+### Base Sepolia (Testnet)
+
+| Token | Address |
+|-------|---------|
+| USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| WETH | `0x4200000000000000000000000000000000000006` |
+
+### Base Mainnet
+
+| Token | Address |
+|-------|---------|
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| WETH | `0x4200000000000000000000000000000000000006` |
+
+## Error Handling
+
+```typescript
+try {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount: parseUnits('100', 6),
+  });
+} catch (error) {
+  if (error.code === 'INSUFFICIENT_BALANCE') {
+    console.log('Not enough tokens');
+  } else if (error.code === 'INVALID_RECIPIENT') {
+    console.log('Invalid recipient address');
+  } else if (error.code === 'RELAYER_ERROR') {
+    console.log('Relayer unavailable, try again');
+  } else {
+    console.error('Transfer failed:', error);
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Cross-Chain Transfers" href="/guides/cross-chain">
+    Send tokens between different blockchains
+  </Card>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Enable smooth UX for multiple transfers
+  </Card>
+  <Card title="Spending Limits" href="/guides/spending-limits">
+    Set up safety limits
+  </Card>
+</Cards>

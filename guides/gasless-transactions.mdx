@@ -1,0 +1,264 @@
+---
+title: Gasless Transactions
+description: Enable transactions without requiring users to hold gas tokens
+---
+
+# Gasless Transactions
+
+Veridex enables truly gasless transactions — users never need to hold ETH or other gas tokens.
+
+## How It Works
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    User     │     │   Relayer   │     │  Blockchain │
+│             │     │             │     │             │
+│ Signs with  │────▶│ Receives    │────▶│ Verifies    │
+│ passkey     │     │ and submits │     │ signature   │
+│             │     │ (pays gas)  │     │ on-chain    │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
+1. User signs a payload with their passkey
+2. Relayer receives the signed payload
+3. Relayer submits the transaction and pays gas
+4. Contract verifies the passkey signature on-chain
+
+## Basic Usage
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network', // Veridex relayer
+});
+
+await sdk.passkey.login();
+
+// This transfer is gasless - user doesn't need ETH!
+const result = await sdk.transferViaRelayer({
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: parseUnits('100', 6),
+});
+
+console.log('Gasless transfer complete:', result.txHash);
+```
+
+## Relayer Configuration
+
+### Use Veridex Relayer
+
+```typescript
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+### Run Your Own Relayer
+
+```typescript
+// Point to your self-hosted relayer
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'http://localhost:3001',
+});
+```
+
+See [Relayer Setup](/api-reference/relayer) for self-hosting instructions.
+
+## Sponsored Vault Creation
+
+New vaults can also be created gaslessly:
+
+```typescript
+// User has no ETH, but can still create a vault
+const result = await sdk.createVaultViaRelayer({
+  targetChain: optimismConfig.wormholeChainId,
+});
+
+console.log('Vault created on Optimism:', result.vaultAddress);
+```
+
+## Fee Model
+
+While users don't pay gas, the relayer does. Relayer economics:
+
+| Model | Description |
+|-------|-------------|
+| **Sponsored** | Relayer absorbs gas costs (promotional/enterprise) |
+| **Protocol Fee** | Small fee deducted from transfer amount |
+| **Subscription** | User/app pays monthly for gasless access |
+
+### Check Relayer Fees
+
+```typescript
+const fees = await sdk.getRelayerFees();
+
+console.log('Relayer fee:', fees.relayerFee);
+console.log('Wormhole fee:', fees.wormholeFee);
+console.log('Total overhead:', fees.totalFee);
+```
+
+## Non-Relayer Fallback
+
+If you want direct on-chain transactions (user pays gas):
+
+```typescript
+import { ethers } from 'ethers';
+
+// Connect user's wallet for gas
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  signer, // User's wallet for gas
+});
+
+// This transfer requires user to have ETH
+await sdk.transfer({
+  token: USDC,
+  recipient: '0x...',
+  amount: parseUnits('100', 6),
+});
+```
+
+## React Integration
+
+```tsx
+import { useState } from 'react';
+import { createSDK } from '@veridex/sdk';
+import { parseUnits } from 'ethers';
+
+// Gasless SDK (relayer pays gas)
+const gaslessSdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+export function GaslessTransfer() {
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const handleTransfer = async () => {
+    setLoading(true);
+    try {
+      const tx = await gaslessSdk.transferViaRelayer({
+        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        recipient,
+        amount: parseUnits(amount, 6),
+      });
+      setResult(`Success! Tx: ${tx.txHash}`);
+    } catch (error) {
+      setResult(`Error: ${error.message}`);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 p-4 rounded-lg">
+        <p className="text-blue-800 font-medium">
+          ⛽ Gasless Transfer
+        </p>
+        <p className="text-blue-600 text-sm">
+          You don't need ETH — the relayer pays gas fees
+        </p>
+      </div>
+
+      <input
+        type="text"
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+        placeholder="Recipient address"
+        className="block w-full rounded-md border p-2"
+      />
+
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="Amount (USDC)"
+        className="block w-full rounded-md border p-2"
+      />
+
+      <button
+        onClick={handleTransfer}
+        disabled={loading}
+        className="w-full bg-green-600 text-white py-2 rounded-lg"
+      >
+        {loading ? 'Sending...' : 'Send (Gasless)'}
+      </button>
+
+      {result && (
+        <p className={result.startsWith('Error') ? 'text-red-600' : 'text-green-600'}>
+          {result}
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+## Relayer Health Check
+
+```typescript
+// Check if relayer is available
+const health = await sdk.getRelayerHealth();
+
+if (health.status === 'healthy') {
+  console.log('Relayer is ready');
+  console.log('Supported chains:', health.chains);
+} else {
+  console.log('Relayer degraded:', health.issues);
+}
+```
+
+## Error Handling
+
+```typescript
+try {
+  await sdk.transferViaRelayer({
+    token: USDC,
+    recipient: '0x...',
+    amount: parseUnits('100', 6),
+  });
+} catch (error) {
+  if (error.code === 'RELAYER_UNAVAILABLE') {
+    // Fallback to direct transaction
+    console.log('Relayer down, user needs gas');
+  } else if (error.code === 'RATE_LIMITED') {
+    console.log('Too many requests, try again later');
+  } else if (error.code === 'INSUFFICIENT_RELAYER_BALANCE') {
+    console.log('Relayer out of gas funds');
+  } else {
+    console.error('Transfer failed:', error);
+  }
+}
+```
+
+## Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Zero gas UX** | Users never see "insufficient ETH" errors |
+| **Lower friction** | No need to acquire gas tokens first |
+| **Cross-chain ready** | Gasless on all supported chains |
+| **Enterprise friendly** | Predictable costs for sponsors |
+
+## Next Steps
+
+<Cards>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Combine gasless with session keys
+  </Card>
+  <Card title="Relayer API" href="/api-reference/relayer">
+    Self-host your own relayer
+  </Card>
+</Cards>

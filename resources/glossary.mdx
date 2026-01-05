@@ -1,0 +1,150 @@
+---
+title: Glossary
+description: Terminology and definitions for Veridex
+---
+
+# Glossary
+
+Key terms and concepts used in Veridex documentation.
+
+## A
+
+### Account Abstraction (AA)
+A paradigm where user accounts are smart contracts instead of externally owned accounts (EOAs). Enables features like gasless transactions, session keys, and custom authentication.
+
+### Authenticator
+A device or software that can generate and verify passkey credentials. Examples: TouchID, FaceID, Windows Hello, hardware security keys.
+
+## B
+
+### Biometric Authentication
+Using biological characteristics (fingerprint, face, iris) to verify identity. Passkeys use biometrics to protect the signing key.
+
+### Bridge
+A protocol for moving assets between different blockchains. Veridex uses Wormhole for cross-chain transfers.
+
+### Bundler
+In ERC-4337, the service that bundles multiple UserOperations into a single transaction for submission to the blockchain.
+
+## C
+
+### CCQ (Cross-Chain Query)
+Wormhole's fast path for cross-chain operations, providing 5-7 second finality instead of the standard 60+ seconds.
+
+### Credential ID
+A unique identifier for a passkey credential, used to look up the correct key during authentication.
+
+## E
+
+### EIP-4337
+Ethereum Improvement Proposal defining the Account Abstraction standard, enabling smart contract wallets without protocol changes.
+
+### Entry Point
+The singleton contract in ERC-4337 that validates and executes UserOperations.
+
+### EVM (Ethereum Virtual Machine)
+The runtime environment for smart contracts on Ethereum and compatible chains (Base, Optimism, Arbitrum, etc.).
+
+## F
+
+### FIDO2
+An authentication standard that includes WebAuthn and CTAP protocols, enabling passwordless authentication.
+
+## G
+
+### Gasless Transactions
+Transactions where the user doesn't pay gas fees directly. A relayer or paymaster covers the gas costs.
+
+### Guardian
+A trusted party who can help recover a wallet if access is lost. Used in social recovery systems.
+
+## H
+
+### Hub Chain
+In Veridex's hub-and-spoke architecture, the central chain (Base) where passkeys are registered and master state is maintained.
+
+### Hub-and-Spoke
+Architecture pattern where a central hub coordinates with multiple spoke chains. Veridex uses this for cross-chain passkey authentication.
+
+## P
+
+### P-256 (secp256r1)
+The elliptic curve used by WebAuthn/passkeys. Also known as prime256v1 or NIST P-256.
+
+### Passkey
+A cryptographic credential that replaces passwords, using public-key cryptography with biometric protection.
+
+### Paymaster
+In ERC-4337, a contract that sponsors gas fees for users, enabling gasless transactions.
+
+### Platform Authenticator
+A passkey authenticator built into the device (TouchID, FaceID, Windows Hello) as opposed to a roaming authenticator (USB security key).
+
+## R
+
+### Relayer
+A service that submits transactions on behalf of users, enabling gasless operations. Veridex's relayer handles transaction submission and gas payment.
+
+### RP (Relying Party)
+The website or app that uses passkeys for authentication. In WebAuthn, the RP receives and verifies credentials.
+
+### Roaming Authenticator
+A portable passkey authenticator like a USB security key that can be used across multiple devices.
+
+## S
+
+### secp256r1
+See P-256. The elliptic curve standard used by passkeys.
+
+### secp256k1
+The elliptic curve used by Bitcoin and Ethereum for traditional wallets. Different from secp256r1 used by passkeys.
+
+### Session Key
+A temporary key with limited permissions that can sign transactions without requiring passkey authentication for each action.
+
+### Smart Contract Wallet
+A wallet implemented as a smart contract, enabling features like multi-sig, recovery, and custom authentication.
+
+### Social Recovery
+A recovery mechanism where designated guardians can help restore access to a wallet.
+
+### Spoke Chain
+In hub-and-spoke architecture, a chain that syncs with the hub. Veridex supports Optimism, Arbitrum, Solana, Aptos, Sui, and Starknet as spokes.
+
+## U
+
+### UserOperation
+In ERC-4337, the data structure representing a user's intended transaction, processed by bundlers and the entry point.
+
+## V
+
+### VAA (Verifiable Action Approval)
+Wormhole's standard message format, signed by guardians to verify cross-chain messages.
+
+### Vault
+In Veridex, the smart contract wallet controlled by a passkey. Each user has one vault address across all chains.
+
+### Vault Factory
+The contract that deploys new vault instances with deterministic addresses.
+
+## W
+
+### WebAuthn
+The W3C standard for web authentication using public-key cryptography, the foundation of passkeys.
+
+### Wormhole
+A cross-chain messaging protocol used by Veridex for bridging assets and syncing state between chains.
+
+## Common Acronyms
+
+| Acronym | Meaning |
+|---------|---------|
+| AA | Account Abstraction |
+| CCQ | Cross-Chain Query |
+| EIP | Ethereum Improvement Proposal |
+| EOA | Externally Owned Account |
+| EVM | Ethereum Virtual Machine |
+| RP | Relying Party |
+| SDK | Software Development Kit |
+| SPL | Solana Program Library |
+| VAA | Verifiable Action Approval |

@@ -1,0 +1,470 @@
+---
+title: SDK Reference
+description: Complete TypeScript SDK API documentation
+---
+
+# SDK Reference
+
+Complete API reference for the Veridex SDK.
+
+## Installation
+
+```bash
+npm install @veridex/sdk ethers
+```
+
+## Initialization
+
+### createSDK
+
+Creates a new SDK instance.
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK(chain, options);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chain` | `string` | Chain name (`'base'`, `'optimism'`, `'arbitrum'`, etc.) |
+| `options` | `SDKOptions` | Configuration options |
+
+**Options:**
+
+```typescript
+interface SDKOptions {
+  network?: 'testnet' | 'mainnet';  // Default: 'testnet'
+  relayerUrl?: string;               // Relayer API URL
+  relayerApiKey?: string;            // Wormhole Query API key
+  rpcUrl?: string;                   // Custom RPC URL
+  signer?: Signer;                   // Ethers signer (for non-gasless)
+  storage?: StorageAdapter;          // Custom storage adapter
+}
+```
+
+**Example:**
+
+```typescript
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+---
+
+## Passkey Management
+
+### sdk.passkey.register
+
+Register a new passkey.
+
+```typescript
+const credential = await sdk.passkey.register(username, displayName);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `username` | `string` | Username (shown in passkey prompt) |
+| `displayName` | `string` | Display name for the credential |
+
+**Returns:** `Promise<Credential>`
+
+```typescript
+interface Credential {
+  id: string;           // Base64 credential ID
+  publicKey: {
+    x: string;          // Public key X coordinate (hex)
+    y: string;          // Public key Y coordinate (hex)
+  };
+  rawId: ArrayBuffer;   // Raw credential ID
+}
+```
+
+---
+
+### sdk.passkey.login
+
+Authenticate with an existing passkey.
+
+```typescript
+await sdk.passkey.login();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+### sdk.passkey.getStoredCredential
+
+Get the stored credential from localStorage.
+
+```typescript
+const credential = sdk.passkey.getStoredCredential();
+```
+
+**Returns:** `Credential | null`
+
+---
+
+### sdk.passkey.clearCredential
+
+Clear the stored credential.
+
+```typescript
+sdk.passkey.clearCredential();
+```
+
+---
+
+## Vault Management
+
+### sdk.getVaultAddress
+
+Get the deterministic vault address.
+
+```typescript
+const address = sdk.getVaultAddress();
+```
+
+**Returns:** `string` - The vault address (same on all EVM chains)
+
+---
+
+### sdk.getBalances
+
+Get balances across all supported chains.
+
+```typescript
+const balances = await sdk.getBalances();
+```
+
+**Returns:** `Promise<ChainBalances>`
+
+```typescript
+interface ChainBalances {
+  [chainName: string]: {
+    [symbol: string]: string; // Balance as decimal string
+  };
+}
+```
+
+**Example:**
+
+```typescript
+const balances = await sdk.getBalances();
+// {
+//   'base-sepolia': { ETH: '0.1', USDC: '100.0' },
+//   'optimism-sepolia': { ETH: '0.05', USDC: '50.0' },
+// }
+```
+
+---
+
+## Transfers
+
+### sdk.transfer
+
+Execute a transfer (requires signer or active session).
+
+```typescript
+const result = await sdk.transfer(params);
+```
+
+**Parameters:**
+
+```typescript
+interface TransferParams {
+  token: string;        // Token address or 'native'
+  recipient: string;    // Recipient address
+  amount: bigint;       // Amount in smallest unit
+}
+```
+
+**Returns:** `Promise<TransferResult>`
+
+---
+
+### sdk.transferViaRelayer
+
+Execute a gasless transfer via relayer.
+
+```typescript
+const result = await sdk.transferViaRelayer(params);
+```
+
+**Parameters:** Same as `transfer`
+
+**Returns:** `Promise<TransferResult>`
+
+```typescript
+interface TransferResult {
+  success: boolean;
+  txHash: string;
+  blockNumber?: number;
+  status: 'pending' | 'confirmed' | 'failed';
+}
+```
+
+---
+
+## Cross-Chain
+
+### sdk.bridge
+
+Bridge tokens to another chain.
+
+```typescript
+const result = await sdk.bridge(params);
+```
+
+**Parameters:**
+
+```typescript
+interface BridgeParams {
+  targetChain: number;  // Wormhole chain ID
+  token: string;        // Token address or 'native'
+  recipient: string;    // Recipient on target chain
+  amount: bigint;       // Amount in smallest unit
+  path?: 'query' | 'vaa'; // Force specific path (optional)
+}
+```
+
+**Returns:** `Promise<BridgeResult>`
+
+```typescript
+interface BridgeResult {
+  success: boolean;
+  txHash: string;
+  estimatedTimeSeconds: number;
+  path: 'query' | 'vaa';
+}
+```
+
+---
+
+### sdk.getBridgeStatus
+
+Check bridge transaction status.
+
+```typescript
+const status = await sdk.getBridgeStatus(txHash);
+```
+
+**Returns:** `Promise<BridgeStatus>`
+
+```typescript
+interface BridgeStatus {
+  state: 'pending' | 'attested' | 'completed' | 'failed';
+  sourceTxHash: string;
+  destinationTxHash?: string;
+  error?: string;
+}
+```
+
+---
+
+## Sessions
+
+### sdk.sessions.create
+
+Create a new session key.
+
+```typescript
+const session = await sdk.sessions.create(params);
+```
+
+**Parameters:**
+
+```typescript
+interface SessionParams {
+  duration: number;              // Duration in seconds
+  maxValue?: bigint;             // Max total value
+  allowedTokens?: string[];      // Token whitelist
+  allowedRecipients?: string[];  // Recipient whitelist
+}
+```
+
+**Returns:** `Promise<Session>`
+
+```typescript
+interface Session {
+  id: string;
+  expiresAt: number;        // Unix timestamp
+  maxValue: bigint;
+  usedValue: bigint;
+  remainingValue: bigint;
+  allowedTokens?: string[];
+  allowedRecipients?: string[];
+}
+```
+
+---
+
+### sdk.sessions.getActive
+
+Get the active session.
+
+```typescript
+const session = sdk.sessions.getActive();
+```
+
+**Returns:** `Session | null`
+
+---
+
+### sdk.sessions.revoke
+
+Revoke the active session.
+
+```typescript
+await sdk.sessions.revoke();
+```
+
+---
+
+## Spending Limits
+
+### sdk.spendingLimits.configure
+
+Configure spending limits.
+
+```typescript
+await sdk.spendingLimits.configure(config);
+```
+
+**Parameters:**
+
+```typescript
+interface SpendingLimitConfig {
+  daily?: bigint;
+  perTransaction?: bigint;
+  tokens?: {
+    [address: string]: {
+      daily?: bigint;
+      perTransaction?: bigint;
+    };
+  };
+}
+```
+
+---
+
+### sdk.spendingLimits.get
+
+Get current spending limits.
+
+```typescript
+const limits = await sdk.spendingLimits.get();
+```
+
+**Returns:** `Promise<SpendingLimits>`
+
+---
+
+### sdk.spendingLimits.check
+
+Check if a transfer is allowed.
+
+```typescript
+const result = await sdk.spendingLimits.check({
+  token: USDC,
+  amount: parseUnits('100', 6),
+});
+```
+
+**Returns:** `Promise<SpendingCheck>`
+
+```typescript
+interface SpendingCheck {
+  allowed: boolean;
+  reason?: string;
+  available: bigint;
+  resetsAt: number;
+}
+```
+
+---
+
+## Utilities
+
+### getChainConfig
+
+Get chain configuration.
+
+```typescript
+import { getChainConfig } from '@veridex/sdk';
+
+const config = getChainConfig('optimism', 'testnet');
+```
+
+**Returns:** `ChainConfig`
+
+```typescript
+interface ChainConfig {
+  name: string;
+  chainId: number;
+  wormholeChainId: number;
+  rpcUrl: string;
+  contracts: {
+    factory?: string;
+    implementation?: string;
+    hub?: string;
+  };
+}
+```
+
+---
+
+### getSupportedChains
+
+Get list of supported chains.
+
+```typescript
+import { getSupportedChains } from '@veridex/sdk';
+
+const chains = getSupportedChains('testnet');
+// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet']
+```
+
+---
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `PASSKEY_NOT_SUPPORTED` | WebAuthn not available |
+| `USER_CANCELLED` | User cancelled biometric prompt |
+| `CREDENTIAL_NOT_FOUND` | No stored credential |
+| `INSUFFICIENT_BALANCE` | Not enough tokens |
+| `SPENDING_LIMIT_EXCEEDED` | Transfer exceeds limit |
+| `SESSION_EXPIRED` | Session key expired |
+| `RELAYER_UNAVAILABLE` | Relayer not responding |
+| `UNSUPPORTED_CHAIN` | Chain not configured |
+| `INVALID_SIGNATURE` | Signature verification failed |
+
+---
+
+## Types
+
+Full TypeScript types are available:
+
+```typescript
+import type {
+  SDKOptions,
+  Credential,
+  TransferParams,
+  TransferResult,
+  BridgeParams,
+  BridgeResult,
+  Session,
+  SessionParams,
+  SpendingLimitConfig,
+  ChainConfig,
+} from '@veridex/sdk';
+```

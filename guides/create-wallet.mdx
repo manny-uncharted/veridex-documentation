@@ -1,0 +1,261 @@
+---
+title: Create Wallet
+description: Step-by-step guide to creating a passkey wallet
+---
+
+# Create Wallet
+
+This guide walks through creating a passkey-authenticated wallet with Veridex.
+
+## Prerequisites
+
+- Veridex SDK installed (`npm install @veridex/sdk`)
+- WebAuthn-compatible browser
+- Device with biometric capability (FaceID, TouchID, fingerprint)
+
+## Basic Wallet Creation
+
+### 1. Initialize the SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', {
+  network: 'testnet', // or 'mainnet'
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+### 2. Register a Passkey
+
+```typescript
+const credential = await sdk.passkey.register(
+  'user@example.com',  // Username (shown in passkey prompt)
+  'My Veridex Wallet'  // Display name
+);
+
+console.log('Credential ID:', credential.id);
+console.log('Public Key:', credential.publicKey);
+```
+
+<Callout type="info">
+  The browser will prompt the user for biometric authentication (FaceID, TouchID, etc.).
+</Callout>
+
+### 3. Get Your Vault Address
+
+```typescript
+const vaultAddress = sdk.getVaultAddress();
+console.log('Your vault address:', vaultAddress);
+
+// This address is the SAME on all EVM chains!
+// You can share it as your receiving address
+```
+
+## Returning Users (Login)
+
+### Check for Existing Credential
+
+```typescript
+// Check if user has a stored credential
+const storedCredential = sdk.passkey.getStoredCredential();
+
+if (storedCredential) {
+  // User has previously registered
+  console.log('Found existing passkey');
+} else {
+  // First time user
+  console.log('No passkey found, will need to register');
+}
+```
+
+### Login with Existing Passkey
+
+```typescript
+// Authenticate with stored passkey
+await sdk.passkey.login();
+
+// Now the SDK is authenticated and ready to use
+const vault = sdk.getVaultAddress();
+console.log('Logged in, vault:', vault);
+```
+
+## Complete Flow Example
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+async function connectWallet() {
+  const sdk = createSDK('base', {
+    network: 'testnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  // Check for existing credential
+  const existingCredential = sdk.passkey.getStoredCredential();
+
+  if (existingCredential) {
+    // Returning user - login
+    console.log('Logging in with existing passkey...');
+    await sdk.passkey.login();
+  } else {
+    // New user - register
+    console.log('Creating new passkey wallet...');
+    await sdk.passkey.register(
+      'user@example.com',
+      'My Veridex Wallet'
+    );
+  }
+
+  // Get vault info
+  const vaultAddress = sdk.getVaultAddress();
+  const credential = sdk.passkey.getStoredCredential();
+
+  return {
+    vaultAddress,
+    credentialId: credential?.id,
+  };
+}
+
+// Usage
+connectWallet()
+  .then(({ vaultAddress }) => {
+    console.log('Connected! Vault:', vaultAddress);
+  })
+  .catch((error) => {
+    console.error('Failed to connect:', error);
+  });
+```
+
+## React Component Example
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { 
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+export function ConnectButton() {
+  const [vault, setVault] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check for existing credential on mount
+  useEffect(() => {
+    const stored = sdk.passkey.getStoredCredential();
+    if (stored) {
+      // Auto-login if credential exists
+      handleConnect();
+    }
+  }, []);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const existing = sdk.passkey.getStoredCredential();
+      
+      if (existing) {
+        await sdk.passkey.login();
+      } else {
+        await sdk.passkey.register('user@example.com', 'My Wallet');
+      }
+
+      setVault(sdk.getVaultAddress());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = () => {
+    sdk.passkey.clearCredential();
+    setVault(null);
+  };
+
+  if (vault) {
+    return (
+      <div className="flex items-center gap-4">
+        <span className="text-sm font-mono">
+          {vault.slice(0, 6)}...{vault.slice(-4)}
+        </span>
+        <button 
+          onClick={handleDisconnect}
+          className="text-red-500 text-sm"
+        >
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleConnect}
+        disabled={loading}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+      >
+        {loading ? 'Connecting...' : 'Connect with Passkey'}
+      </button>
+      {error && (
+        <p className="text-red-500 text-sm mt-2">{error}</p>
+      )}
+    </div>
+  );
+}
+```
+
+## Credential Storage
+
+By default, credentials are stored in `localStorage`. You can customize storage:
+
+```typescript
+const sdk = createSDK('base', {
+  storage: {
+    get: (key) => myCustomStorage.get(key),
+    set: (key, value) => myCustomStorage.set(key, value),
+    remove: (key) => myCustomStorage.remove(key),
+  },
+});
+```
+
+## Error Handling
+
+```typescript
+try {
+  await sdk.passkey.register('user@example.com', 'My Wallet');
+} catch (error) {
+  if (error.name === 'NotAllowedError') {
+    // User cancelled the passkey prompt
+    console.log('User cancelled passkey creation');
+  } else if (error.name === 'NotSupportedError') {
+    // WebAuthn not supported
+    console.log('Passkeys not supported on this device');
+  } else if (error.name === 'SecurityError') {
+    // Not in secure context (need HTTPS)
+    console.log('HTTPS required for passkeys');
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Send Tokens" href="/guides/send-tokens">
+    Transfer tokens from your wallet
+  </Card>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Enable smooth UX without repeated prompts
+  </Card>
+  <Card title="Cross-Chain" href="/guides/cross-chain">
+    Send tokens between different chains
+  </Card>
+</Cards>
