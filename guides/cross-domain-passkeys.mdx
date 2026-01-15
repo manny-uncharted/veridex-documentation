@@ -5,331 +5,149 @@ description: Enable Veridex passkey authentication in your third-party applicati
 
 # Cross-Domain Passkey Integration
 
-This guide explains how third-party applications can enable Veridex passkey authentication, allowing users to sign in with passkeys they've already created on veridex.network.
+This guide explains how third-party applications can enable Veridex passkey authentication, allowing users to sign in with passkeys they've already created on `veridex.network`.
 
 ## Overview
 
-Veridex supports two methods for cross-domain passkey authentication:
+Veridex supports a "Google-style" authentication flow that works across all domains. This allows users to carry their identity (and assets) with them to your application without creating new accounts.
 
-1. **Related Origin Requests** (Recommended) - Uses WebAuthn Level 3 standard for seamless authentication
-2. **Auth Portal Flow** - Popup/redirect-based fallback for broader browser support
+We support two methods:
+1.  **Related Origin Requests (ROR)**: The modern WebAuthn standard (Level 3) that allows direct passkey access if your domain is allowed.
+2.  **Auth Portal Fallback**: A reliable popup/redirect flow for browsers that don't support ROR or domains that aren't yet fully verified.
 
 ## Quick Start
 
+### 1. Register Your App
+
+Before writing code, you need to register your application in the **Veridex Developer Portal**.
+
+1.  Go to the [Developer Portal](https://developers.veridex.network).
+2.  Enter your **Application Name** and **Origin** (e.g., `https://myapp.com`).
+3.  Receive your **App ID**.
+
+This links your domain to a trusted identity that users will see when they sign in.
+
+### 2. Install the SDK
+
+```bash
+npm install @veridex/sdk
+```
+
+### 3. Implement Authentication
+
+The SDK provides a simple interface that handles both ROR and the Auth Portal fallback automatically.
+
 ```typescript
-import { createCrossOriginAuth } from '@veridex/sdk';
+import { createSDK, createCrossOriginAuth } from '@veridex/sdk';
 
-const auth = createCrossOriginAuth();
+// Initialize the auth client
+// Note: You can also use createSDK({ ... }).auth if using the full SDK
+const auth = createCrossOriginAuth({
+  rpId: 'veridex.network', // The canonical RP ID
+});
 
-// Authenticate the user
-async function login() {
-  // Check if browser supports Related Origin Requests
-  if (await auth.supportsRelatedOrigins()) {
-    // Direct passkey authentication (best UX)
-    const { credential, signature } = await auth.authenticate();
-    console.log('Authenticated with vault:', credential.keyHash);
-  } else {
-    // Fallback to Auth Portal popup
+async function signIn() {
+  try {
+    // 1. Check if we can use the seamless ROR flow
+    if (await auth.supportsRelatedOrigins()) {
+      console.log("Using Related Origin Requests (Seamless)");
+      const result = await auth.authenticate();
+      
+      console.log("Signed in!", result.credential);
+      return result;
+    } 
+    
+    // 2. Fallback to Auth Portal (Popup/Redirect)
+    console.log("Using Auth Portal (Popup)");
     const session = await auth.connectWithVeridex();
-    console.log('Session:', session.address);
+    
+    console.log("Signed in via Portal!", session.address);
+    return session;
+
+  } catch (error) {
+    console.error("Sign in failed", error);
   }
 }
 ```
 
-## Method 1: Related Origin Requests (Recommended)
+## How It Works
 
-This method uses the [WebAuthn Related Origin Requests](https://w3c.github.io/webauthn/#sctn-related-origins) standard to allow your domain to use passkeys registered at `veridex.network`.
+### The User Experience
 
-### Prerequisites
+1.  User clicks **"Connect Veridex"** on your site.
+2.  **If ROR is supported**: The browser native passkey dialog appears immediately. User verifies. Done.
+3.  **If ROR is not supported**:
+    *   A popup opens to `auth.veridex.network`.
+    *   User sees a clean, simple "Sign in to [Your App]" card.
+    *   User verifies with their passkey.
+    *   Popup closes (or redirects back) with the session.
 
-1. Your domain must be listed in Veridex's `.well-known/webauthn` file
-2. User's browser must support Related Origin Requests (Chrome 128+, Safari 18+)
+### The Developer Experience
 
-### Request Domain Allowlisting
+You don't need to build complex registration or recovery flows. You simply request an identity, and Veridex returns a cryptographic session that allows you to:
+-   Know the user's wallet address.
+-   Request transaction signatures (if permitted).
+-   Decrypt session keys for seamless interactions.
 
-To have your domain added to Veridex's allowed origins list, please:
+## Configuration Options
 
-1. Open a PR to [veridex-protocol/veridex](https://github.com/veridex-protocol/veridex)
-2. Add your production domain(s) to `documentation/public/.well-known/webauthn`
-3. Provide your application details in the PR description
-
-Example addition:
-```json
-{
-  "origins": [
-    "https://your-app.com",
-    "https://app.your-domain.io"
-  ]
-}
-```
-
-### Usage
+### `createCrossOriginAuth`
 
 ```typescript
-import { createCrossOriginAuth } from '@veridex/sdk';
-
 const auth = createCrossOriginAuth({
-  rpId: 'veridex.network', // Default, can be omitted
-});
+  /** 
+   * The Relying Party ID. Must be 'veridex.network' for cross-domain.
+   */
+  rpId: 'veridex.network',
 
-// Check browser support
-const supportsRelatedOrigins = await auth.supportsRelatedOrigins();
-
-if (supportsRelatedOrigins) {
-  // Authenticate using discoverable credentials
-  const result = await auth.authenticate();
-  
-  // result.credential contains the user's passkey info
-  // result.signature is the WebAuthn assertion signature
-}
-```
-
-## Method 2: Auth Portal Flow
-
-For browsers that don't support Related Origin Requests, use the Auth Portal flow. This opens a popup (or redirect) to `auth.veridex.network` where the user authenticates with their passkey.
-
-### Popup Mode (Default)
-
-```typescript
-import { createCrossOriginAuth } from '@veridex/sdk';
-
-const auth = createCrossOriginAuth({
-  mode: 'popup',
+  /**
+   * Auth Portal URL. Defaults to production (https://auth.veridex.network).
+   * You can point this to localhost for testing.
+   */
   authPortalUrl: 'https://auth.veridex.network',
-  timeout: 120000, // 2 minutes
-});
 
-try {
-  const session = await auth.connectWithVeridex();
-  
-  // session contains:
-  // - address: User's vault address
-  // - sessionPublicKey: For verifying subsequent transactions
-  // - expiresAt: Session expiration timestamp
-  // - signature: Proof of passkey ownership
-  // - credential: Passkey metadata
-  
-  console.log('Logged in:', session.address);
-} catch (error) {
-  if (error.message === 'User cancelled') {
-    console.log('User closed the auth popup');
-  } else {
-    console.error('Authentication failed:', error);
-  }
-}
+  /**
+   * 'popup' (default) or 'redirect'.
+   * Use 'redirect' for mobile browsers where popups might be blocked.
+   */
+  mode: 'popup',
+
+  /**
+   * URL to redirect back to (only for mode: 'redirect').
+   */
+  redirectUri: 'https://myapp.com/callback'
+});
 ```
 
-### Redirect Mode
+### Redirect Mode Handling
 
-For mobile browsers where popups are unreliable:
-
-```typescript
-const auth = createCrossOriginAuth({
-  mode: 'redirect',
-  redirectUri: 'https://your-app.com/auth/callback',
-});
-
-// Start authentication (navigates away from page)
-await auth.connectWithVeridex();
-```
-
-On your callback page:
+If using `mode: 'redirect'`, you need to handle the callback on your `redirectUri` page:
 
 ```typescript
-// auth/callback/page.tsx
+// pages/callback.tsx
 import { createCrossOriginAuth } from '@veridex/sdk';
+import { useEffect } from 'react';
 
-const auth = createCrossOriginAuth();
-
-try {
-  const session = auth.completeRedirectAuth();
-  
-  if (session) {
-    // Save session to state/storage
-    console.log('Logged in:', session.address);
-    // Redirect to main app
-    router.push('/dashboard');
-  }
-} catch (error) {
-  console.error('Auth failed:', error);
-}
-```
-
-## API Reference
-
-### `createCrossOriginAuth(config?)`
-
-Creates a CrossOriginAuth instance.
-
-```typescript
-interface CrossOriginAuthConfig {
-  /** The Veridex RP ID (defaults to veridex.network) */
-  rpId?: string;
-  
-  /** Auth portal URL for popup/redirect flow */
-  authPortalUrl?: string;
-  
-  /** Authentication mode: popup or redirect */
-  mode?: 'popup' | 'redirect';
-  
-  /** Popup window features */
-  popupFeatures?: string;
-  
-  /** Timeout for auth operations (ms) */
-  timeout?: number;
-  
-  /** Callback URL for redirect mode */
-  redirectUri?: string;
-}
-```
-
-### `CrossOriginAuth` Methods
-
-| Method | Description |
-|--------|-------------|
-| `supportsRelatedOrigins()` | Check if browser supports Related Origin Requests |
-| `isSupported()` | Check if WebAuthn is supported |
-| `authenticate(challenge?)` | Authenticate using Related Origins |
-| `connectWithVeridex()` | Authenticate via Auth Portal (popup/redirect) |
-| `completeRedirectAuth()` | Complete redirect-based auth on callback page |
-| `getRpId()` | Get the current RP ID |
-| `getAuthPortalUrl()` | Get the auth portal URL |
-
-### `CrossOriginSession`
-
-The session object returned after successful authentication:
-
-```typescript
-interface CrossOriginSession {
-  /** User's vault address */
-  address: string;
-  
-  /** Session key public key (for signing transactions) */
-  sessionPublicKey: string;
-  
-  /** When the session expires */
-  expiresAt: number;
-  
-  /** Proof of passkey ownership */
-  signature: WebAuthnSignature;
-  
-  /** The credential used */
-  credential: PasskeyCredential;
-}
-```
-
-## Security Considerations
-
-### Origin Validation
-
-- Only domains listed in Veridex's `.well-known/webauthn` file can use Related Origin Requests
-- The Auth Portal validates the `origin` parameter to prevent phishing
-- State parameter is used to prevent CSRF attacks in redirect flow
-
-### Session Security
-
-- Sessions are short-lived (24 hours by default)
-- Session tokens should be stored securely (httpOnly cookies recommended)
-- Never expose session tokens in URLs for extended periods
-
-### Passkey Privacy
-
-- Passkey private keys never leave the user's device
-- Only public keys and signatures are transmitted
-- Each authentication generates a fresh signature
-
-## Browser Support
-
-| Browser | Related Origins | Auth Portal |
-|---------|----------------|-------------|
-| Chrome 128+ | ✅ | ✅ |
-| Safari 18+ | ✅ | ✅ |
-| Firefox 128+ | ✅ | ✅ |
-| Edge 128+ | ✅ | ✅ |
-| Chrome < 128 | ❌ | ✅ |
-| Safari < 18 | ❌ | ✅ |
-| All mobile browsers | ⚠️ | ✅ |
-
-## Troubleshooting
-
-### "SecurityError: The RP ID is not valid"
-
-- Your domain isn't listed in `.well-known/webauthn`
-- Open a PR to add your domain or use Auth Portal flow
-
-### "User cancelled"
-
-- User closed the popup or cancelled the passkey prompt
-- Handle this gracefully in your UI
-
-### Popup blocked
-
-- User has popup blocker enabled
-- Switch to redirect mode on failure:
-
-```typescript
-try {
-  const session = await auth.connectWithVeridex();
-} catch (error) {
-  if (error.message.includes('popup')) {
-    // Fallback to redirect mode
-    const redirectAuth = createCrossOriginAuth({ mode: 'redirect' });
-    await redirectAuth.connectWithVeridex();
-  }
-}
-```
-
-## Example: Full Integration
-
-```typescript
-import { createCrossOriginAuth, type CrossOriginSession } from '@veridex/sdk';
-
-class VeridexAuth {
-  private auth = createCrossOriginAuth();
-  private session: CrossOriginSession | null = null;
-
-  async login(): Promise<CrossOriginSession> {
-    // Try Related Origins first (best UX)
-    if (await this.auth.supportsRelatedOrigins()) {
-      const result = await this.auth.authenticate();
-      this.session = {
-        address: this.computeAddress(result.credential),
-        sessionPublicKey: '',
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-        signature: result.signature,
-        credential: result.credential,
-      };
-      return this.session;
+export default function Callback() {
+  useEffect(() => {
+    const auth = createCrossOriginAuth();
+    
+    // Parse the URL fragment/query for the session
+    const session = auth.completeRedirectAuth();
+    
+    if (session) {
+      // Save session and redirect to dashboard
+      localStorage.setItem('veridex_session', JSON.stringify(session));
+      window.location.href = '/dashboard';
     }
+  }, []);
 
-    // Fallback to Auth Portal
-    this.session = await this.auth.connectWithVeridex();
-    return this.session;
-  }
-
-  isLoggedIn(): boolean {
-    return this.session !== null && this.session.expiresAt > Date.now();
-  }
-
-  logout(): void {
-    this.session = null;
-  }
-
-  getAddress(): string | null {
-    return this.session?.address ?? null;
-  }
-
-  private computeAddress(credential: PasskeyCredential): string {
-    // Compute vault address from credential public key
-    return `0x${credential.keyHash.slice(0, 40)}`;
-  }
+  return <div>Completing sign in...</div>;
 }
-
-export const veridexAuth = new VeridexAuth();
 ```
 
-## Next Steps
+## Security Best Practices
 
-- [Session Keys](/guides/session-keys) - Create scoped session keys for transaction signing
-- [Spending Limits](/guides/spending-limits) - Configure per-transaction and daily limits
-- [Cross-Chain Transactions](/guides/cross-chain) - Bridge assets using Veridex vaults
+1.  **Always Verify Origins**: The Developer Portal limits your App ID to specific origins. Ensure you register your production domain.
+2.  **Session Management**: The returned session contains a `signature`. Verification of this signature on your backend is recommended for critical sessions.
+3.  **Local Testing**: You can restart the Auth Portal locally and point `authPortalUrl` to `http://localhost:3000` to test the full flow without deploying.
