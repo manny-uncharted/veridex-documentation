@@ -1,13 +1,18 @@
 {
-  "name": "documentation",
+  "name": "@veridex/documentation",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Veridex Protocol documentation — powered by Mintlify",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "mintlify dev",
+    "dev:port": "mintlify dev --port 3333",
+    "lint": "mintlify broken-links",
+    "build": "echo 'Mintlify builds are handled by the Mintlify platform or Docker (see Dockerfile)'",
+    "docker:build": "docker build -t veridex-docs .",
+    "docker:run": "docker run -p 3333:3333 veridex-docs"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["veridex", "documentation", "mintlify"],
+  "author": "Veridex Protocol",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

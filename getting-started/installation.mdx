@@ -1,21 +1,25 @@
 ---
 title: Installation
-description: Install the Veridex SDK and set up your development environment
+description: Install the Veridex SDK and Agent SDK for your development environment
 ---
 
 # Installation
 
-Get started with the Veridex SDK in your project.
+Veridex provides two packages depending on your use case:
 
-[![npm version](https://img.shields.io/npm/v/@veridex/sdk.svg)](https://www.npmjs.com/package/@veridex/sdk)
+- **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, and cross-chain transfers
+- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools
 
 ## Prerequisites
 
 - Node.js 18+ or Bun
 - A WebAuthn-compatible browser (Chrome, Safari, Firefox, Edge)
 - TypeScript 5.0+ (recommended)
+- `ethers` v6 (peer dependency for the core SDK)
 
-## Install the SDK
+## Install the Core SDK
+
+For building passkey-authenticated wallets and dApps:
 
 <Tabs>
   <Tab title="npm">
@@ -40,18 +44,53 @@ Get started with the Veridex SDK in your project.
   </Tab>
 </Tabs>
 
-## Peer Dependencies
+## Install the Agent SDK
 
-The SDK requires `ethers` v6 as a peer dependency:
+For building autonomous AI agents that can make payments:
 
-```json
-{
-  "dependencies": {
-    "@veridex/sdk": "^1.0.0",
-    "ethers": "^6.11.0"
-  }
-}
-```
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @veridex/agentic-payments
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @veridex/agentic-payments
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @veridex/agentic-payments
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @veridex/agentic-payments
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+  The Agent SDK (`@veridex/agentic-payments`) includes `@veridex/sdk` as a dependency and re-exports core functions like `createSDK` and `generateSecp256k1KeyPair` for convenience.
+</Callout>
+
+## Package Comparison
+
+| Feature | `@veridex/sdk` | `@veridex/agentic-payments` |
+|---------|---------------|---------------------------|
+| Passkey registration & login | ✅ | ✅ (via re-export) |
+| Vault management | ✅ | ✅ |
+| Session key management | ✅ `SessionManager` | ✅ `SessionKeyManager` (enhanced) |
+| Spending limits | ✅ `SpendingLimitsManager` | ✅ `SpendingTracker` (USD-aware) |
+| Cross-chain transfers | ✅ | ✅ `CrossChainRouter` |
+| x402 HTTP payments | — | ✅ `X402Client` |
+| AI agent orchestration | — | ✅ `AgentWallet` |
+| MCP tools (Claude/Cursor) | — | ✅ `MCPServer` |
+| UCP credentials | — | ✅ `UCPCredentialProvider` |
+| Audit logging & compliance | — | ✅ `AuditLogger`, `ComplianceExporter` |
+| Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks | All + `StacksChainClient`, `StacksSpendingTracker` |
+| Pyth price oracle | — | ✅ `PythOracle` |
 
 ## TypeScript Configuration
 
@@ -86,7 +125,7 @@ Veridex uses WebAuthn (Passkeys) which requires:
 
 ## Framework Integration
 
-### React / Next.js
+### React / Next.js (Core SDK)
 
 ```typescript
 // lib/veridex.ts
@@ -98,48 +137,73 @@ export const sdk = createSDK('base', {
 });
 ```
 
-### Vue
+### Node.js / Backend (Agent SDK)
 
 ```typescript
-// composables/useVeridex.ts
-import { createSDK } from '@veridex/sdk';
+// agent.ts
+import { createAgentWallet } from '@veridex/agentic-payments';
 
-const sdk = createSDK('base', { network: 'testnet' });
-
-export function useVeridex() {
-  return { sdk };
-}
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: process.env.CREDENTIAL_ID!,
+    publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+    publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+    keyHash: process.env.KEY_HASH!,
+  },
+  session: {
+    dailyLimitUSD: 100,
+    perTransactionLimitUSD: 25,
+    expiryHours: 24,
+    allowedChains: [10004],
+  },
+});
 ```
 
-### Plain JavaScript
+### Stacks Integration
 
-```html
-<script type="module">
-  import { createSDK } from 'https://esm.sh/@veridex/sdk';
-  
-  const sdk = createSDK('base');
-  window.veridex = sdk;
-</script>
+```typescript
+// For Stacks-specific operations
+import { createSDK, StacksClient } from '@veridex/sdk';
+
+const sdk = createSDK('stacks', { network: 'testnet' });
 ```
 
 ## Verify Installation
 
-Create a test file to verify the installation:
+### Core SDK
 
 ```typescript
-// test-veridex.ts
-import { createSDK, getChainConfig } from '@veridex/sdk';
+// test-sdk.ts
+import { createSDK, getChainConfig, getSupportedChains } from '@veridex/sdk';
 
 const sdk = createSDK('base', { network: 'testnet' });
+const chains = getSupportedChains('testnet');
 
 console.log('SDK initialized successfully!');
-console.log('Hub chain:', getChainConfig('base', 'testnet'));
+console.log('Supported chains:', chains);
+console.log('Base config:', getChainConfig('base', 'testnet'));
 ```
 
-Run it:
+### Agent SDK
+
+```typescript
+// test-agent.ts
+import { createAgentWallet, PythOracle } from '@veridex/agentic-payments';
+
+// Test Pyth oracle
+const oracle = new PythOracle();
+const ethPrice = await oracle.getPrice('ETH');
+const stxPrice = await oracle.getPrice('STX');
+
+console.log('Agent SDK loaded successfully!');
+console.log('ETH price:', ethPrice);
+console.log('STX price:', stxPrice);
+```
+
+Run with:
 
 ```bash
-npx ts-node test-veridex.ts
+npx tsx test-sdk.ts
 ```
 
 ## Next Steps
@@ -150,5 +214,8 @@ npx ts-node test-veridex.ts
   </Card>
   <Card title="Core Concepts" href="/getting-started/concepts">
     Understand how Veridex works
+  </Card>
+  <Card title="Agent SDK Guide" href="/guides/agent-payments">
+    Build autonomous agent payments
   </Card>
 </Cards>

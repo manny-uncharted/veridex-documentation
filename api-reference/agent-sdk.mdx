@@ -1,0 +1,620 @@
+---
+title: Agent SDK Reference
+description: Complete API reference for the Veridex Agent SDK (@veridex/agentic-payments)
+---
+
+# Agent SDK Reference
+
+Complete API reference for `@veridex/agentic-payments` — the autonomous payment layer for AI agents.
+
+## Installation
+
+```bash
+npm install @veridex/agentic-payments
+```
+
+## Core: AgentWallet
+
+The `AgentWallet` is the central orchestration class. It manages session keys, x402 negotiation, multi-chain execution, and monitoring.
+
+### createAgentWallet
+
+Factory function that creates and initializes an `AgentWallet`.
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet(config);
+```
+
+**Parameters:**
+
+```typescript
+interface AgentWalletConfig {
+  masterCredential: {
+    credentialId: string;
+    publicKeyX: bigint;
+    publicKeyY: bigint;
+    keyHash: string;
+  };
+  session: {
+    dailyLimitUSD: number;
+    perTransactionLimitUSD?: number;
+    expiryHours: number;
+    allowedChains?: number[];
+  };
+  relayerUrl?: string;
+  relayerApiKey?: string;
+  x402?: X402ClientConfig;
+  mcp?: { enabled: boolean };
+}
+```
+
+**Example:**
+
+```typescript
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: 'abc123',
+    publicKeyX: BigInt('0x...'),
+    publicKeyY: BigInt('0x...'),
+    keyHash: '0x...',
+  },
+  session: {
+    dailyLimitUSD: 100,
+    perTransactionLimitUSD: 25,
+    expiryHours: 24,
+    allowedChains: [10004], // Base Sepolia
+  },
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+---
+
+### agent.fetch
+
+Make an HTTP request with automatic x402 payment handling. If the server responds with `402 Payment Required`, the agent automatically negotiates and pays.
+
+```typescript
+const response = await agent.fetch(url, options?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `url` | `string` | URL to fetch |
+| `options` | `RequestInit` | Standard fetch options |
+
+**Returns:** `Promise<Response>`
+
+**Example:**
+
+```typescript
+// Agent automatically handles 402 Payment Required responses
+const response = await agent.fetch('https://paid-api.example.com/market-data');
+const data = await response.json();
+console.log('Market data:', data);
+```
+
+---
+
+### agent.pay
+
+Execute a direct token payment.
+
+```typescript
+const receipt = await agent.pay(params);
+```
+
+**Parameters:**
+
+```typescript
+interface PaymentParams {
+  chain: number;        // Wormhole chain ID (e.g., 10004 for Base Sepolia)
+  token: string;        // Token symbol ('ETH', 'USDC', 'native')
+  amount: string;       // Amount in smallest unit (e.g., '1000000' for 1 USDC)
+  recipient: string;    // Recipient address
+  protocol?: string;    // Payment protocol (default: 'direct')
+}
+```
+
+**Returns:**
+
+```typescript
+interface PaymentReceipt {
+  txHash: string;
+  status: 'confirmed' | 'pending' | 'failed';
+  chain: number;
+  token: string;
+  amount: bigint;
+  recipient: string;
+  protocol: string;
+  timestamp: number;
+}
+```
+
+**Example:**
+
+```typescript
+const receipt = await agent.pay({
+  chain: 10004,          // Base Sepolia
+  token: 'USDC',
+  amount: '5000000',     // 5 USDC (6 decimals)
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+});
+
+console.log('Tx:', receipt.txHash);
+console.log('Status:', receipt.status);
+```
+
+---
+
+### agent.getSessionStatus
+
+Get the current session's status including spending limits and usage.
+
+```typescript
+const status = agent.getSessionStatus();
+```
+
+**Returns:**
+
+```typescript
+interface SessionStatus {
+  isValid: boolean;
+  keyHash: string;
+  expiry: number;                    // Unix timestamp
+  remainingDailyLimitUSD: number;
+  totalSpentUSD: number;
+  masterKeyHash: string;
+  address: string;                   // Session wallet address
+  limits: {
+    dailyLimitUSD: number;
+    perTransactionLimitUSD: number;
+  };
+}
+```
+
+**Example:**
+
+```typescript
+const status = agent.getSessionStatus();
+
+console.log('Session valid:', status.isValid);
+console.log('Spent today:', `$${status.totalSpentUSD.toFixed(2)}`);
+console.log('Remaining:', `$${status.remainingDailyLimitUSD.toFixed(2)}`);
+console.log('Wallet:', status.address);
+```
+
+---
+
+### agent.getBalance
+
+Get token balances for the session wallet.
+
+```typescript
+const balances = await agent.getBalance(chain?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chain` | `number` | Wormhole chain ID (default: 30 for Base) |
+
+**Returns:** `Promise<TokenBalance[]>`
+
+**Example:**
+
+```typescript
+const balances = await agent.getBalance(10004);
+for (const token of balances) {
+  console.log(`${token.symbol}: ${token.formattedBalance}`);
+}
+```
+
+---
+
+### agent.getMultiChainBalance
+
+Get balances across all supported chains.
+
+```typescript
+const portfolio = await agent.getMultiChainBalance();
+```
+
+**Returns:** `Promise<PortfolioBalance>`
+
+---
+
+### agent.getPaymentHistory
+
+Get the agent's payment history with optional filtering.
+
+```typescript
+const history = await agent.getPaymentHistory(options?);
+```
+
+**Parameters:**
+
+```typescript
+interface HistoryOptions {
+  limit?: number;
+  offset?: number;
+  chain?: number;
+  token?: string;
+  since?: number;    // Unix timestamp
+}
+```
+
+**Returns:** `Promise<PaymentRecord[]>`
+
+---
+
+### agent.revokeSession
+
+Revoke the current session key.
+
+```typescript
+await agent.revokeSession();
+```
+
+---
+
+### agent.exportAuditLog
+
+Export the agent's payment audit log for compliance.
+
+```typescript
+const log = await agent.exportAuditLog(format?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `format` | `'json' \| 'csv'` | Export format (default: `'json'`) |
+
+**Returns:** `Promise<string>`
+
+---
+
+### agent.onSpendingAlert
+
+Register a callback for spending limit alerts.
+
+```typescript
+agent.onSpendingAlert((alert) => {
+  console.log('Alert:', alert.type, alert.message);
+});
+```
+
+**Alert types:**
+
+| Type | Description |
+|------|-------------|
+| `approaching_limit` | Spending is near the daily limit |
+| `limit_exceeded` | Transaction was blocked by limit |
+| `session_expiring` | Session key is about to expire |
+
+---
+
+### agent.getMCPTools
+
+Get MCP tools for integration with AI assistants (Claude, Cursor).
+
+```typescript
+const tools = agent.getMCPTools();
+```
+
+**Returns:** `any[]` — Array of MCP tool definitions
+
+---
+
+## Session Management
+
+### SessionKeyManager
+
+Manages session key lifecycle, spending tracking, and limit enforcement.
+
+```typescript
+import { SessionKeyManager } from '@veridex/agentic-payments';
+
+const manager = new SessionKeyManager();
+
+// Create a session
+const session = await manager.createSession(masterCredential, {
+  dailyLimitUSD: 50,
+  perTransactionLimitUSD: 10,
+  expiryTimestamp: Date.now() + 24 * 60 * 60 * 1000,
+});
+
+// Check limits before payment
+const check = manager.checkLimits(session, amountUSD);
+if (check.allowed) {
+  // Execute payment...
+  await manager.recordSpending(session, amountUSD);
+}
+
+// Revoke when done
+await manager.revokeSession(session.keyHash);
+```
+
+---
+
+## x402 Protocol
+
+### X402Client
+
+Handles automatic negotiation of HTTP 402 "Payment Required" responses.
+
+```typescript
+import { X402Client } from '@veridex/agentic-payments';
+```
+
+The x402 flow:
+
+1. Agent makes HTTP request to a paid API
+2. Server responds with `402 Payment Required` + `PAYMENT-REQUIRED` header
+3. `X402Client` parses payment requirements (amount, recipient, network)
+4. Agent signs and submits payment
+5. Agent retries request with `PAYMENT-SIGNATURE` header
+6. Server verifies payment and returns data
+
+### PaymentParser
+
+Parses x402 payment requirement headers.
+
+```typescript
+import { PaymentParser } from '@veridex/agentic-payments';
+
+const parser = new PaymentParser();
+const requirements = parser.parse(response.headers);
+// { amount, recipient, network, token, ... }
+```
+
+---
+
+## Chain Clients
+
+The Agent SDK provides chain-specific clients for multi-chain operations.
+
+### Available Clients
+
+```typescript
+import {
+  EVMChainClient,
+  SolanaChainClient,
+  AptosChainClient,
+  SuiChainClient,
+  StarknetChainClient,
+  StacksChainClient,
+  ChainClientFactory,
+} from '@veridex/agentic-payments';
+```
+
+### StacksChainClient
+
+Stacks-specific client with native STX/sBTC pricing via Pyth.
+
+```typescript
+import { StacksChainClient } from '@veridex/agentic-payments';
+
+const client = new StacksChainClient({
+  network: 'testnet',
+});
+
+// Get STX price
+const stxPrice = await client.getNativeTokenPriceUSD();
+
+// Get vault balance
+const balance = await client.getVaultBalance(address);
+```
+
+### StacksSpendingTracker
+
+USD-aware spending tracker for Stacks with real-time Pyth pricing.
+
+```typescript
+import { StacksSpendingTracker } from '@veridex/agentic-payments';
+
+const tracker = new StacksSpendingTracker({
+  dailyLimitUSD: 100,
+  network: 'testnet',
+});
+
+// Convert STX amount to USD
+const usdValue = await tracker.convertToUSD(1000000n, 'STX');
+
+// Check if payment is within limits
+const allowed = await tracker.checkPayment(amountMicroSTX);
+```
+
+---
+
+## Oracle
+
+### PythOracle
+
+Real-time price feeds from Pyth Network's Hermes API.
+
+```typescript
+import { PythOracle, PYTH_FEED_IDS } from '@veridex/agentic-payments';
+
+const oracle = new PythOracle();
+
+// Get price by symbol (auto-resolves feed ID)
+const ethPrice = await oracle.getPrice('ETH');
+const stxPrice = await oracle.getPrice('STX');
+const btcPrice = await oracle.getPrice('BTC');
+
+// Get price by feed ID
+const price = await oracle.getPrice(PYTH_FEED_IDS.SOL);
+
+// Get native token price for a chain
+const nativePrice = await oracle.getNativeTokenPrice('stacks');
+```
+
+**Supported symbols:** `ETH`, `BTC`, `SOL`, `STX`, `APT`, `SUI`, `STRK`, `USDC`, `USDT`
+
+---
+
+## Monitoring
+
+### AuditLogger
+
+Records all payment activity for compliance and debugging.
+
+```typescript
+import { AuditLogger } from '@veridex/agentic-payments';
+
+const logger = new AuditLogger();
+
+// Get recent logs
+const logs = await logger.getLogs({ limit: 50 });
+
+// Filter by chain
+const baseLogs = await logger.getLogs({ chain: 10004 });
+```
+
+### AlertManager
+
+Monitors spending and triggers alerts.
+
+```typescript
+import { AlertManager } from '@veridex/agentic-payments';
+
+const alerts = new AlertManager();
+alerts.onAlert((alert) => {
+  if (alert.type === 'approaching_limit') {
+    console.warn('Approaching daily limit!');
+  }
+});
+```
+
+### ComplianceExporter
+
+Export audit logs in standard formats.
+
+```typescript
+import { ComplianceExporter } from '@veridex/agentic-payments';
+
+const exporter = new ComplianceExporter();
+const csv = exporter.exportToCSV(logs);
+const json = exporter.exportToJSON(logs);
+```
+
+---
+
+## React Hooks
+
+The Agent SDK provides React hooks for frontend integration.
+
+```typescript
+import { useAgentWallet, useSpendingStatus } from '@veridex/agentic-payments';
+```
+
+---
+
+## Error Handling
+
+```typescript
+import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
+
+try {
+  await agent.pay({ ... });
+} catch (error) {
+  if (error instanceof AgentPaymentError) {
+    switch (error.code) {
+      case AgentPaymentErrorCode.LIMIT_EXCEEDED:
+        console.log('Spending limit exceeded:', error.message);
+        break;
+      case AgentPaymentErrorCode.INSUFFICIENT_BALANCE:
+        console.log('Not enough tokens:', error.message);
+        console.log('Suggestion:', error.suggestion);
+        break;
+      case AgentPaymentErrorCode.SESSION_EXPIRED:
+        console.log('Session expired, creating new one...');
+        break;
+      case AgentPaymentErrorCode.NETWORK_ERROR:
+        if (error.retryable) {
+          console.log('Retryable error, will retry...');
+        }
+        break;
+    }
+  }
+}
+```
+
+### Error Codes
+
+| Code | Description | Retryable |
+|------|-------------|-----------|
+| `LIMIT_EXCEEDED` | Transaction exceeds spending limit | No |
+| `INSUFFICIENT_BALANCE` | Not enough tokens in wallet | No |
+| `SESSION_EXPIRED` | Session key has expired | No |
+| `CHAIN_NOT_SUPPORTED` | Chain ID not configured | No |
+| `TOKEN_NOT_SUPPORTED` | Token not available on chain | No |
+| `NETWORK_ERROR` | Network or RPC failure | Yes |
+| `X402_PAYMENT_FAILED` | x402 payment negotiation failed | Yes |
+| `SIGNATURE_FAILED` | Transaction signing failed | No |
+
+---
+
+## Full Example: Autonomous Data Agent
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+async function runDataAgent() {
+  // 1. Initialize agent with spending limits
+  const agent = await createAgentWallet({
+    masterCredential: {
+      credentialId: process.env.CREDENTIAL_ID!,
+      publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+      publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+      keyHash: process.env.KEY_HASH!,
+    },
+    session: {
+      dailyLimitUSD: 50,
+      perTransactionLimitUSD: 5,
+      expiryHours: 8,
+      allowedChains: [10004],
+    },
+  });
+
+  // 2. Set up spending alerts
+  agent.onSpendingAlert((alert) => {
+    console.warn(`[ALERT] ${alert.type}: ${alert.message}`);
+  });
+
+  // 3. Fetch paid data (x402 handled automatically)
+  const priceData = await agent.fetch('https://data-provider.example.com/api/v1/prices');
+  const prices = await priceData.json();
+  console.log('Fetched price data:', prices);
+
+  // 4. Make a direct payment
+  const receipt = await agent.pay({
+    chain: 10004,
+    token: 'USDC',
+    amount: '1000000',
+    recipient: '0x...',
+  });
+  console.log('Payment confirmed:', receipt.txHash);
+
+  // 5. Check session status
+  const status = agent.getSessionStatus();
+  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits.dailyLimitUSD}`);
+
+  // 6. Export audit log
+  const auditLog = await agent.exportAuditLog('json');
+  console.log('Audit:', auditLog);
+
+  // 7. Clean up
+  await agent.revokeSession();
+}
+
+runDataAgent().catch(console.error);
+```

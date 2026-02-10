@@ -18,8 +18,8 @@ Veridex uses Wormhole for cross-chain messaging. When you transfer cross-chain:
 ## Basic Cross-Chain Transfer
 
 ```typescript
-import { createSDK, getChainConfig } from '@veridex/sdk';
-import { parseUnits } from 'ethers';
+import { createSDK } from '@veridex/sdk';
+import { ethers } from 'ethers';
 
 const sdk = createSDK('base', {
   network: 'testnet',
@@ -28,19 +28,38 @@ const sdk = createSDK('base', {
 
 await sdk.passkey.login();
 
-// Get Optimism's Wormhole chain ID
-const optimismConfig = getChainConfig('optimism', 'testnet');
-
-// Transfer USDC from Base → Optimism
-const result = await sdk.bridge({
-  targetChain: optimismConfig.wormholeChainId, // 10005 for Optimism Sepolia
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base
-  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: parseUnits('100', 6), // 100 USDC
+// Step 1: Estimate bridge fees
+const fees = await sdk.getBridgeFees({
+  sourceChain: 10004,       // Base Sepolia
+  destinationChain: 10005,  // Optimism Sepolia
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  recipient: sdk.getVaultAddress(),
+  amount: 10000000n,
 });
 
-console.log('Bridge initiated:', result.txHash);
-console.log('Estimated confirmation:', result.estimatedTimeSeconds, 'seconds');
+console.log('Bridge fees:', fees.formattedTotal, fees.currency);
+console.log('Source gas:', fees.sourceGas);
+console.log('Message fee:', fees.messageFee);
+console.log('Relayer fee:', fees.relayerFee);
+
+// Step 2: Prepare the bridge
+const prepared = await sdk.prepareBridge({
+  sourceChain: 10004,
+  destinationChain: 10005,
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  recipient: sdk.getVaultAddress(),
+  amount: 10000000n,
+});
+
+// Step 3: Execute with progress tracking
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+
+const result = await sdk.executeBridge(prepared, signer, (progress) => {
+  console.log(`Step ${progress.step}/${progress.totalSteps}: ${progress.message}`);
+});
+
+console.log('Bridge completed:', result.transactionHash);
 ```
 
 ## Chain Configuration
@@ -53,7 +72,7 @@ import { getChainConfig, getSupportedChains } from '@veridex/sdk';
 // Get all supported chains
 const chains = getSupportedChains('testnet');
 console.log(chains);
-// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet']
+// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet', 'stacks']
 
 // Get specific chain config
 const optimism = getChainConfig('optimism', 'testnet');
@@ -78,213 +97,238 @@ console.log(optimism);
 | Aptos | 22 | 22 |
 | Sui | 21 | 21 |
 | Starknet | 50001 | 50002 |
+| Stacks | 50003 | 2147483648 |
 
 ## EVM to EVM Transfer
 
 ```typescript
-// Base → Arbitrum
-const arbitrumConfig = getChainConfig('arbitrum', 'testnet');
-
-const result = await sdk.bridge({
-  targetChain: arbitrumConfig.wormholeChainId,
-  token: 'native', // ETH
-  recipient: '0x...', // Same vault address works!
-  amount: parseEther('0.01'),
-});
+// Base → Optimism
+const result = await sdk.bridgeWithTracking(
+  {
+    sourceChain: 10004,
+    destinationChain: 10005, // Optimism Sepolia
+    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    recipient: sdk.getVaultAddress(), // Same address!
+    amount: 10000000n,
+  },
+  signer,
+  (p) => console.log(p.message)
+);
 ```
 
 ## EVM to Solana Transfer
 
 ```typescript
-import { PublicKey } from '@solana/web3.js';
-
-const solanaRecipient = new PublicKey('your-solana-pubkey');
-
-const result = await sdk.bridge({
-  targetChain: 1, // Solana Wormhole chain ID
-  token: USDC_BASE,
-  recipient: solanaRecipient.toBase58(),
-  amount: parseUnits('50', 6),
-});
+// Base → Solana
+const result = await sdk.bridgeWithTracking(
+  {
+    sourceChain: 10004,
+    destinationChain: 1, // Solana
+    token: USDC,
+    recipient: 'DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy', // Solana address
+    amount: 50000000n, // 50 USDC
+  },
+  signer,
+  (p) => console.log(p.message)
+);
 ```
 
 ## EVM to Aptos Transfer
 
 ```typescript
-const aptosRecipient = '0x1a89da9e9f8f0bc90d8d492890bd55fb261c6277d2a95dfcac70c268d0c23dcc';
-
-const result = await sdk.bridge({
-  targetChain: 22, // Aptos Wormhole chain ID
-  token: USDC_BASE,
-  recipient: aptosRecipient,
-  amount: parseUnits('25', 6),
-});
+// Base → Aptos
+const result = await sdk.bridgeWithTracking(
+  {
+    sourceChain: 10004,
+    destinationChain: 22, // Aptos
+    token: USDC,
+    recipient: '0x1a89da9e9f8f0bc90d8d492890bd55fb261c6277d2a95dfcac70c268d0c23dcc',
+    amount: 25000000n, // 25 USDC
+  },
+  signer,
+  (p) => console.log(p.message)
+);
 ```
 
 ## Transfer Speed
 
-Veridex automatically chooses the optimal path:
+Veridex supports two verification paths:
 
-| Value | Path | Speed |
-|-------|------|-------|
-| < $100 | Query (CCQ) | ~5-7 seconds |
-| ≥ $100 | VAA | ~60 seconds |
+| Path | Speed | Use Case |
+|------|-------|----------|
+| **Query (CCQ)** | ~5-7 seconds | Balance checks, low-value transfers |
+| **VAA** | ~60 seconds | High-value transfers, critical actions |
 
-You can force a specific path:
-
-```typescript
-// Force VAA path for extra security
-const result = await sdk.bridge({
-  targetChain: optimismConfig.wormholeChainId,
-  token: USDC,
-  recipient: '0x...',
-  amount: parseUnits('50', 6),
-  path: 'vaa', // Force VAA path
-});
-
-// Force Query path for speed
-const result = await sdk.bridge({
-  targetChain: optimismConfig.wormholeChainId,
-  token: USDC,
-  recipient: '0x...',
-  amount: parseUnits('10', 6),
-  path: 'query', // Force Query path
-});
-```
+The relayer automatically selects the optimal path based on transaction value.
 
 ## Track Cross-Chain Status
 
+The `executeBridge` and `bridgeWithTracking` methods provide real-time progress via callbacks:
+
 ```typescript
-const result = await sdk.bridge({
-  targetChain: optimismConfig.wormholeChainId,
-  token: USDC,
-  recipient: '0x...',
-  amount: parseUnits('100', 6),
+const result = await sdk.executeBridge(prepared, signer, (progress) => {
+  switch (progress.step) {
+    case 1: console.log('Signing transaction...'); break;
+    case 2: console.log('Dispatching to source chain...'); break;
+    case 3: console.log('Waiting for confirmations...'); break;
+    case 4: console.log('Fetching Wormhole VAA...'); break;
+    case 5: console.log('Relaying to destination chain...'); break;
+    case 6: console.log('Bridge completed!'); break;
+  }
 });
 
-// Poll for status
-const checkStatus = async () => {
-  const status = await sdk.getBridgeStatus(result.txHash);
-  
-  console.log('Status:', status.state);
-  // 'pending' | 'attested' | 'completed' | 'failed'
-  
-  if (status.state === 'completed') {
-    console.log('Destination tx:', status.destinationTxHash);
-  }
-};
-
-// Check every 10 seconds
-const interval = setInterval(async () => {
-  const status = await sdk.getBridgeStatus(result.txHash);
-  if (status.state === 'completed' || status.state === 'failed') {
-    clearInterval(interval);
-    console.log('Final status:', status);
-  }
-}, 10000);
+console.log('Source tx:', result.transactionHash);
+console.log('Sequence:', result.sequence);
 ```
 
 ## React Example
 
 ```tsx
 import { useState } from 'react';
-import { createSDK, getChainConfig, getSupportedChains } from '@veridex/sdk';
-import { parseUnits } from 'ethers';
+import { createSDK, getSupportedChains } from '@veridex/sdk';
+import { ethers } from 'ethers';
 
-const sdk = createSDK('base', { 
+const sdk = createSDK('base', {
   network: 'testnet',
   relayerUrl: 'https://relayer.veridex.network',
 });
 
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
 export function BridgeForm() {
-  const [targetChain, setTargetChain] = useState('optimism');
+  const [targetChain, setTargetChain] = useState('10005');
   const [amount, setAmount] = useState('');
+  const [progress, setProgress] = useState<string | null>(null);
+  const [fees, setFees] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
 
-  const chains = getSupportedChains('testnet').filter(c => c !== 'base');
+  const estimateFees = async () => {
+    const feeEstimate = await sdk.getBridgeFees({
+      sourceChain: 10004,
+      destinationChain: parseInt(targetChain),
+      token: USDC,
+      recipient: sdk.getVaultAddress(),
+      amount: ethers.parseUnits(amount || '0', 6),
+    });
+    setFees(`Estimated fees: ${feeEstimate.formattedTotal} ${feeEstimate.currency}`);
+  };
 
-  const handleBridge = async () => {
+  const handleBridge = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    setStatus('Initiating bridge...');
+    setProgress('Preparing bridge...');
 
     try {
-      const config = getChainConfig(targetChain, 'testnet');
-      const vault = sdk.getVaultAddress();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
 
-      const result = await sdk.bridge({
-        targetChain: config.wormholeChainId,
-        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        recipient: vault, // Send to same vault on target chain
-        amount: parseUnits(amount, 6),
-      });
+      const result = await sdk.bridgeWithTracking(
+        {
+          sourceChain: 10004,
+          destinationChain: parseInt(targetChain),
+          token: USDC,
+          recipient: sdk.getVaultAddress(),
+          amount: ethers.parseUnits(amount, 6),
+        },
+        signer,
+        (p) => setProgress(`Step ${p.step}/${p.totalSteps}: ${p.message}`)
+      );
 
-      setStatus(`Bridge initiated! Waiting for confirmation...`);
-
-      // Poll for completion
-      const poll = setInterval(async () => {
-        const bridgeStatus = await sdk.getBridgeStatus(result.txHash);
-        if (bridgeStatus.state === 'completed') {
-          clearInterval(poll);
-          setStatus(`Completed! Tx: ${bridgeStatus.destinationTxHash}`);
-          setLoading(false);
-        }
-      }, 10000);
-
-    } catch (err) {
-      setStatus(`Error: ${err.message}`);
+      setProgress(`Bridge completed! Tx: ${result.transactionHash}`);
+    } catch (error) {
+      setProgress(`Error: ${error instanceof Error ? error.message : 'Bridge failed'}`);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <select
-        value={targetChain}
-        onChange={(e) => setTargetChain(e.target.value)}
-        className="block w-full rounded-md border p-2"
-      >
-        {chains.map(chain => (
-          <option key={chain} value={chain}>
-            {chain.charAt(0).toUpperCase() + chain.slice(1)}
-          </option>
-        ))}
-      </select>
+    <form onSubmit={handleBridge} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium">Destination Chain</label>
+        <select
+          value={targetChain}
+          onChange={(e) => setTargetChain(e.target.value)}
+          className="mt-1 block w-full rounded-md border p-2"
+        >
+          <option value="10005">Optimism Sepolia</option>
+          <option value="10003">Arbitrum Sepolia</option>
+          <option value="1">Solana</option>
+          <option value="22">Aptos</option>
+          <option value="50003">Stacks Testnet</option>
+        </select>
+      </div>
 
-      <input
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        placeholder="Amount (USDC)"
-        className="block w-full rounded-md border p-2"
-      />
+      <div>
+        <label className="block text-sm font-medium">Amount (USDC)</label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => { setAmount(e.target.value); setFees(null); }}
+          onBlur={estimateFees}
+          placeholder="10.00"
+          step="0.01"
+          className="mt-1 block w-full rounded-md border p-2"
+          required
+        />
+      </div>
+
+      {fees && <p className="text-sm text-gray-500">{fees}</p>}
 
       <button
-        onClick={handleBridge}
+        type="submit"
         disabled={loading}
         className="w-full bg-purple-600 text-white py-2 rounded-lg"
       >
-        {loading ? 'Bridging...' : `Bridge to ${targetChain}`}
+        {loading ? 'Bridging...' : 'Bridge USDC'}
       </button>
 
-      {status && <p className="text-sm">{status}</p>}
-    </div>
+      {progress && <p className="text-sm text-gray-600">{progress}</p>}
+    </form>
   );
 }
+```
+
+## Agent SDK: Cross-Chain Router
+
+The Agent SDK provides a `CrossChainRouter` for multi-chain agent operations:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: { /* ... */ },
+  session: {
+    dailyLimitUSD: 100,
+    expiryHours: 24,
+    allowedChains: [10004, 10005, 50003], // Base, Optimism, Stacks
+  },
+});
+
+// Agent can pay on any allowed chain
+await agent.pay({ chain: 10004, token: 'USDC', amount: '1000000', recipient: '0x...' });
+await agent.pay({ chain: 10005, token: 'USDC', amount: '2000000', recipient: '0x...' });
+
+// Multi-chain balance check
+const portfolio = await agent.getMultiChainBalance();
+console.log('Total USD:', portfolio.totalUsdValue);
 ```
 
 ## Fee Estimation
 
 ```typescript
-const fees = await sdk.estimateBridgeFee({
-  targetChain: optimismConfig.wormholeChainId,
+const fees = await sdk.getBridgeFees({
+  sourceChain: 10004,
+  destinationChain: 10005,
   token: USDC,
-  amount: parseUnits('100', 6),
+  recipient: sdk.getVaultAddress(),
+  amount: 10000000n,
 });
 
-console.log('Wormhole fee:', fees.wormholeFee);
+console.log('Bridge fees:', fees.formattedTotal, fees.currency);
+console.log('Source gas:', fees.sourceGas);
+console.log('Message fee:', fees.messageFee);
 console.log('Relayer fee:', fees.relayerFee);
-console.log('Total fee:', fees.totalFee);
 console.log('Estimated time:', fees.estimatedTimeSeconds);
 ```
 
@@ -292,21 +336,16 @@ console.log('Estimated time:', fees.estimatedTimeSeconds);
 
 ```typescript
 try {
-  await sdk.bridge({
-    targetChain: optimismConfig.wormholeChainId,
-    token: USDC,
-    recipient: '0x...',
-    amount: parseUnits('100', 6),
-  });
-} catch (error) {
-  if (error.code === 'UNSUPPORTED_CHAIN') {
-    console.log('Target chain not supported');
-  } else if (error.code === 'INSUFFICIENT_BALANCE') {
-    console.log('Not enough tokens for bridge');
-  } else if (error.code === 'VAA_NOT_FOUND') {
-    console.log('Wormhole attestation pending, retry later');
+  const result = await sdk.bridgeWithTracking(params, signer, onProgress);
+} catch (error: any) {
+  if (error.message?.includes('insufficient')) {
+    console.log('Not enough tokens to bridge');
+  } else if (error.message?.includes('unsupported')) {
+    console.log('Chain not supported');
+  } else if (error.message?.includes('VAA')) {
+    console.log('Wormhole attestation failed, try again');
   } else {
-    console.error('Bridge failed:', error);
+    console.error('Bridge error:', error);
   }
 }
 ```

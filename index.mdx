@@ -1,13 +1,20 @@
 ---
 title: Veridex Protocol Documentation
-description: Cross-chain passkey authentication for the multi-chain web
+description: Cross-chain passkey authentication and autonomous agent payments for the multi-chain web
 ---
 
 # Veridex Protocol
 
 **One passkey. Any chain. Fully self-custodial.**
 
-Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching.
+Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching. It also provides an **Agent SDK** for autonomous AI agent payments via the x402 HTTP payment protocol.
+
+## Two Packages, One Protocol
+
+| Package | Purpose | Install |
+|---------|---------|---------|
+| **`@veridex/sdk`** | Core SDK — passkey wallets, vaults, sessions, cross-chain transfers | `npm install @veridex/sdk` |
+| **`@veridex/agentic-payments`** | Agent SDK — autonomous AI agent payments, x402, spending limits, MCP tools | `npm install @veridex/agentic-payments` |
 
 ## Why Veridex?
 
@@ -17,6 +24,7 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
 | **Custody** | Self-custody | Custodial | **Fully self-custodial** |
 | **Cross-chain** | Manual bridging | Limited | **Native multi-chain** |
 | **Recovery** | Seed phrase | Via provider | **On-chain social recovery** |
+| **AI Agents** | Not supported | Custodial keys | **Session keys + spending limits** |
 
 ## Quick Links
 
@@ -25,13 +33,13 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
     Integrate Veridex in 5 minutes
   </Card>
   <Card title="SDK Reference" href="/api-reference/sdk">
-    Complete TypeScript SDK documentation
+    Core SDK API documentation
+  </Card>
+  <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
+    Agent SDK for autonomous payments
   </Card>
   <Card title="Guides" href="/guides/create-wallet">
     Step-by-step integration guides
-  </Card>
-  <Card title="Examples" href="https://github.com/Veridex-Protocol/demo/tree/main/examples">
-    Production-ready code examples
   </Card>
 </Cards>
 
@@ -46,51 +54,96 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
 | Aptos | Spoke | ✅ Live |
 | Sui | Spoke | ✅ Live |
 | Starknet | Spoke | ✅ Live |
+| Stacks | Spoke | ✅ Live |
 
 ## How It Works
 
-```
-User authenticates with FaceID/TouchID
-        ↓
-Hub (Base) verifies P-256 signature
-        ↓
-Wormhole broadcasts authorization
-        ↓
-Spoke (any chain) executes action
+```mermaid
+flowchart TD
+    A["User authenticates with FaceID/TouchID"] --> B["Hub (Base) verifies P-256 signature"]
+    B --> C["Wormhole broadcasts authorization"]
+    C --> D["Spoke (any chain) executes action"]
 ```
 
 Users get the **same deterministic vault address** across all EVM chains, derived from their passkey.
 
-## Get Started
-
-```bash
-npm install @veridex/sdk
-```
+## Core SDK — Quick Example
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-// Initialize SDK
-const sdk = createSDK('base');
-
-// Register a passkey
-await sdk.passkey.register('user@example.com', 'My Wallet');
-
-// Get your vault address (same on all EVM chains!)
-const vault = sdk.getVaultAddress();
-
-// Transfer tokens (gasless!)
-await sdk.transferViaRelayer({
-  token: '0x...USDC',
-  recipient: '0x...',
-  amount: 1000000n,
+// Initialize with testnet (default)
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
 });
+
+// Register a passkey (prompts biometric)
+const credential = await sdk.passkey.register('alice', 'My Wallet');
+
+// Get your deterministic vault address (same on all EVM chains)
+const vaultAddress = sdk.getVaultAddress();
+console.log('Vault:', vaultAddress);
+
+// Check spending limits
+const limits = await sdk.getSpendingLimits();
+console.log('Daily remaining:', limits.dailyRemaining);
+
+// Prepare and execute a transfer
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,  // Base Sepolia
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: 1000000n,    // 1 USDC
+});
+
+// Get human-readable summary before signing
+const summary = await sdk.getTransactionSummary(prepared);
+console.log(summary.title, summary.description);
+```
+
+## Agent SDK — Quick Example
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+// Create an autonomous agent wallet
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: 'passkey-credential-id',
+    publicKeyX: 0n,
+    publicKeyY: 0n,
+    keyHash: '0x...',
+  },
+  session: {
+    dailyLimitUSD: 50,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+    allowedChains: [10004], // Base Sepolia
+  },
+});
+
+// Autonomous x402 payment — agent handles 402 responses automatically
+const response = await agent.fetch('https://paid-api.example.com/data');
+const data = await response.json();
+
+// Direct payment
+const receipt = await agent.pay({
+  chain: 10004,
+  token: 'USDC',
+  amount: '1000000', // 1 USDC
+  recipient: '0x...',
+});
+
+// Monitor spending
+const status = agent.getSessionStatus();
+console.log('Spent:', status.totalSpentUSD, 'Remaining:', status.remainingDailyLimitUSD);
 ```
 
 ## Resources
 
 - [GitHub Repository](https://github.com/Veridex-Protocol/)
 - [Demo Video](https://youtu.be/CgSvFqrVGAw)
-- [Discord Community]()
+- [Discord Community](https://discord.gg/veridex)
 - [Telegram Community](https://t.me/+1b16cbymIYI4OTVk)
-- [Twitter @VeridexProtocol]()
+- [Twitter @VeridexLabs](https://x.com/VeridexLabs)

@@ -182,9 +182,75 @@ class VeridexErrorBoundary extends Component<Props, State> {
 
 ---
 
+## Agent SDK Errors
+
+The Agent SDK (`@veridex/agentic-payments`) has its own error class and codes:
+
+```typescript
+import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
+```
+
+| Code | Description | Retryable |
+|------|-------------|-----------|
+| `LIMIT_EXCEEDED` | Transaction exceeds daily or per-tx spending limit | No |
+| `INSUFFICIENT_BALANCE` | Not enough tokens in session wallet | No |
+| `SESSION_EXPIRED` | Session key has expired | No |
+| `CHAIN_NOT_SUPPORTED` | Chain ID not in `allowedChains` | No |
+| `TOKEN_NOT_SUPPORTED` | Token not available on target chain | No |
+| `NETWORK_ERROR` | Network or RPC failure | Yes |
+| `X402_PAYMENT_FAILED` | x402 payment negotiation failed | Yes |
+| `SIGNATURE_FAILED` | Transaction signing failed | No |
+
+### Handling Agent SDK Errors
+
+```typescript
+try {
+  await agent.pay({ chain: 10004, token: 'USDC', amount: '100000000', recipient: '0x...' });
+} catch (error) {
+  if (error instanceof AgentPaymentError) {
+    console.log('Code:', error.code);
+    console.log('Message:', error.message);
+    console.log('Retryable:', error.retryable);
+    console.log('Suggestion:', error.suggestion);
+
+    switch (error.code) {
+      case AgentPaymentErrorCode.LIMIT_EXCEEDED:
+        console.log('Over budget — wait for daily reset');
+        break;
+      case AgentPaymentErrorCode.INSUFFICIENT_BALANCE:
+        console.log('Need more tokens:', error.suggestion);
+        break;
+      case AgentPaymentErrorCode.SESSION_EXPIRED:
+        console.log('Re-initialize agent wallet');
+        break;
+      case AgentPaymentErrorCode.NETWORK_ERROR:
+        if (error.retryable) {
+          console.log('Retrying...');
+        }
+        break;
+    }
+  }
+}
+```
+
+---
+
+## Stacks-Specific Errors
+
+| Code | Description | Cause |
+|------|-------------|-------|
+| `STACKS_SPONSORSHIP_LIMIT` | Sponsorship rate limit exceeded | Too many sponsored txs per hour |
+| `STACKS_POST_CONDITION_FAIL` | Post-condition validation failed | Transaction would transfer more than allowed |
+| `STACKS_NONCE_ERROR` | Nonce mismatch on Stacks | Concurrent transaction submission |
+| `STACKS_CONTRACT_ERROR` | Clarity contract execution error | Invalid arguments or state |
+
+---
+
 ## Error Response Format
 
 All errors follow this format:
+
+### Core SDK
 
 ```typescript
 interface VeridexError extends Error {
@@ -198,7 +264,18 @@ interface VeridexError extends Error {
 }
 ```
 
-**Example:**
+### Agent SDK
+
+```typescript
+interface AgentPaymentError extends Error {
+  code: AgentPaymentErrorCode;  // Typed error code enum
+  message: string;              // Human-readable message
+  retryable: boolean;           // Whether the operation can be retried
+  suggestion?: string;          // Suggested action for the user/agent
+}
+```
+
+**Example (Core SDK):**
 
 ```json
 {
@@ -211,5 +288,16 @@ interface VeridexError extends Error {
     "available": "500000000000000000",
     "resetsAt": 1704153600
   }
+}
+```
+
+**Example (Agent SDK):**
+
+```json
+{
+  "code": "LIMIT_EXCEEDED",
+  "message": "Transaction of $150.00 exceeds daily limit of $100.00",
+  "retryable": false,
+  "suggestion": "Reduce amount to $75.00 or wait for daily reset at 2026-02-15T00:00:00Z"
 }
 ```

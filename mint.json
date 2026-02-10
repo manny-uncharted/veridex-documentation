@@ -29,6 +29,10 @@
         {
             "name": "API Reference",
             "url": "api-reference"
+        },
+        {
+            "name": "Agent SDK",
+            "url": "api-reference/agent-sdk"
         }
     ],
     "anchors": [
@@ -50,7 +54,8 @@
                 "index",
                 "getting-started/quick-start",
                 "getting-started/installation",
-                "getting-started/concepts"
+                "getting-started/concepts",
+                "getting-started/faq"
             ]
         },
         {
@@ -62,7 +67,8 @@
                 "guides/gasless-transactions",
                 "guides/session-keys",
                 "guides/spending-limits",
-                "guides/cross-chain"
+                "guides/cross-chain",
+                "guides/agent-payments"
             ]
         },
         {
@@ -73,32 +79,35 @@
                 "chains/solana",
                 "chains/aptos",
                 "chains/sui",
-                "chains/starknet"
+                "chains/starknet",
+                "chains/stacks"
             ]
         },
         {
             "group": "Integrations",
             "pages": [
-                "integrations/overview",
                 "integrations/nextjs",
                 "integrations/react",
-                "integrations/wagmi"
+                "integrations/sera",
+                "integrations/defi",
+                "integrations/payment-gateway"
             ]
         },
         {
             "group": "Security",
             "pages": [
-                "security/overview",
-                "security/passkeys",
-                "security/audits"
+                "security/audits",
+                "security/best-practices",
+                "security/recovery"
             ]
         },
         {
             "group": "Resources",
             "pages": [
-                "resources/faq",
                 "resources/glossary",
-                "resources/changelog"
+                "resources/changelog",
+                "resources/troubleshooting",
+                "resources/migration"
             ]
         }
     ],

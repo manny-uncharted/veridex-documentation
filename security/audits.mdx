@@ -136,56 +136,28 @@ We commit to:
 
 ### Passkey Security
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    User Device                               │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │              Secure Enclave / TPM                       │ │
-│  │  ┌─────────────────────────────────────────────────────┐│ │
-│  │  │           Private Key (never exposed)              ││ │
-│  │  │           - Generated on device                    ││ │
-│  │  │           - Cannot be extracted                    ││ │
-│  │  │           - Biometric protected                    ││ │
-│  │  └─────────────────────────────────────────────────────┘│ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                                                              │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                  Browser / App                          │ │
-│  │  - WebAuthn API                                        │ │
-│  │  - Public key only                                     │ │
-│  │  - Signature requests go to secure enclave             │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+  columns 1
+  block:Device["User Device"]
+    columns 1
+    block:Enclave["Secure Enclave / TPM"]
+      PK["Private Key (never exposed)\nGenerated on device · Cannot be extracted · Biometric protected"]
+    end
+    block:Browser["Browser / App"]
+      BA["WebAuthn API · Public key only\nSignature requests go to secure enclave"]
+    end
+  end
 ```
 
 ### Transaction Flow
 
-```
-User Action
-    │
-    ▼
-┌─────────────────┐
-│  Biometric      │  ← User verification required
-│  Verification   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Secure Enclave │  ← Signs in hardware
-│  Signing        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Relayer        │  ← Submits to blockchain
-│  Submission     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  On-Chain       │  ← P-256 verification
-│  Verification   │
-└─────────────────┘
+```mermaid
+flowchart TD
+    A["User Action"] --> B["Biometric Verification\n(user verification required)"]
+    B --> C["Secure Enclave Signing\n(signs in hardware)"]
+    C --> D["Relayer Submission\n(submits to blockchain)"]
+    D --> E["On-Chain Verification\n(P-256 signature check)"]
 ```
 
 ## Compliance

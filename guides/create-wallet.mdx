@@ -34,8 +34,10 @@ const credential = await sdk.passkey.register(
   'My Veridex Wallet'  // Display name
 );
 
-console.log('Credential ID:', credential.id);
-console.log('Public Key:', credential.publicKey);
+console.log('Credential ID:', credential.credentialId);
+console.log('Key Hash:', credential.keyHash);
+console.log('Public Key X:', credential.publicKeyX);
+console.log('Public Key Y:', credential.publicKeyY);
 ```
 
 <Callout type="info">
@@ -246,16 +248,61 @@ try {
 }
 ```
 
+## Agent Wallet Creation
+
+For AI agents that need autonomous payment capabilities:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+// Use the credential from passkey registration
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: credential.credentialId,
+    publicKeyX: credential.publicKeyX,
+    publicKeyY: credential.publicKeyY,
+    keyHash: credential.keyHash,
+  },
+  session: {
+    dailyLimitUSD: 50,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+    allowedChains: [10004], // Base Sepolia
+  },
+});
+
+console.log('Agent session:', agent.getSessionStatus());
+console.log('Agent wallet:', agent.getSessionStatus().address);
+```
+
+## Stacks Wallet
+
+Create a wallet on Stacks with native passkey support:
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const stacksSdk = createSDK('stacks', { network: 'testnet' });
+
+// Passkey verified natively via Clarity's secp256r1-verify
+const credential = await stacksSdk.passkey.register('alice', 'My Stacks Wallet');
+const vault = stacksSdk.getVaultAddress();
+console.log('Stacks vault:', vault);
+```
+
 ## Next Steps
 
 <Cards>
   <Card title="Send Tokens" href="/guides/send-tokens">
     Transfer tokens from your wallet
   </Card>
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    Build autonomous AI agent payments
+  </Card>
   <Card title="Session Keys" href="/guides/session-keys">
     Enable smooth UX without repeated prompts
   </Card>
-  <Card title="Cross-Chain" href="/guides/cross-chain">
-    Send tokens between different chains
+  <Card title="Stacks" href="/chains/stacks">
+    Native passkey support on Stacks
   </Card>
 </Cards>

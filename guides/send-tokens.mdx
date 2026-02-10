@@ -15,11 +15,11 @@ Transfer tokens from your Veridex vault to any address.
 
 ## Basic Transfer
 
-### Same-Chain Transfer
+### Prepare and Execute
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
-import { parseEther, parseUnits } from 'ethers';
+import { ethers } from 'ethers';
 
 const sdk = createSDK('base', {
   network: 'testnet',
@@ -29,97 +29,118 @@ const sdk = createSDK('base', {
 // Login first
 await sdk.passkey.login();
 
-// Transfer native token (ETH)
-const result = await sdk.transferViaRelayer({
-  token: 'native', // or use token address for ERC20
+// Step 1: Prepare the transfer (shows gas cost before signing)
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,  // Base Sepolia Wormhole chain ID
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: parseEther('0.01'), // 0.01 ETH
+  amount: ethers.parseUnits('10', 6), // 10 USDC
 });
 
-console.log('Transaction hash:', result.txHash);
+console.log('Gas cost:', prepared.formattedCost);
+console.log('Expires:', new Date(prepared.expiresAt));
+
+// Step 2: Get human-readable summary
+const summary = await sdk.getTransactionSummary(prepared);
+console.log(summary.title);       // "Transfer"
+console.log(summary.description); // "Send 10.0 USDC to 0x742d...5A234"
+
+// Step 3: Execute with a signer
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const result = await sdk.transfer(prepared.params, signer);
+
+console.log('Transaction hash:', result.transactionHash);
+console.log('Sequence:', result.sequence);
 ```
 
-### ERC20 Transfer
+### Native Token Transfer
 
 ```typescript
-const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
-
-const result = await sdk.transferViaRelayer({
-  token: USDC,
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,
+  token: 'native',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: parseUnits('10', 6), // 10 USDC (6 decimals)
+  amount: ethers.parseEther('0.01'), // 0.01 ETH
 });
 
-console.log('USDC transfer:', result.txHash);
+const result = await sdk.transfer(prepared.params, signer);
+console.log('ETH transfer:', result.transactionHash);
 ```
 
-## Gasless Transfers
+## Agent SDK Payments
 
-With Veridex, users **never need gas tokens**. The relayer pays gas fees.
+For AI agents, the Agent SDK provides a simpler payment interface:
 
 ```typescript
-// User has USDC but no ETH - this still works!
-const result = await sdk.transferViaRelayer({
-  token: USDC,
-  recipient: '0x...',
-  amount: parseUnits('100', 6),
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: { /* passkey credential */ },
+  session: { dailyLimitUSD: 50, perTransactionLimitUSD: 10, expiryHours: 24 },
 });
 
-// Relayer paid the gas, user only sent USDC
+// Direct payment — session key handles signing
+const receipt = await agent.pay({
+  chain: 10004,          // Base Sepolia
+  token: 'USDC',
+  amount: '10000000',    // 10 USDC (6 decimals)
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+});
+
+console.log('Tx:', receipt.txHash);
+console.log('Status:', receipt.status);
 ```
 
-## Transfer with Session Key
-
-For better UX, use session keys to avoid repeated biometric prompts:
+## Check Spending Limits Before Transfer
 
 ```typescript
-// Create a session (one biometric prompt)
-const session = await sdk.sessions.create({
-  duration: 3600, // 1 hour
-  maxValue: parseEther('0.1'), // Max 0.1 ETH worth
-});
+import { ethers } from 'ethers';
 
-// Multiple transfers without prompts
-await sdk.transfer({ token: USDC, recipient: addr1, amount: amount1 });
-await sdk.transfer({ token: USDC, recipient: addr2, amount: amount2 });
-await sdk.transfer({ token: USDC, recipient: addr3, amount: amount3 });
-// All auto-signed with session key!
+// Check if a transfer amount is within limits
+const check = await sdk.checkSpendingLimit(ethers.parseUnits('100', 6));
+
+if (check.allowed) {
+  console.log('Transfer allowed!');
+} else {
+  console.log('Blocked:', check.message);
+  console.log('Suggestions:', check.suggestions);
+}
+
+// Get formatted limits for UI
+const formatted = await sdk.getFormattedSpendingLimits();
+console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
 ```
 
 ## Check Balance Before Transfer
 
 ```typescript
-// Get vault balances
-const balances = await sdk.getBalances();
+// Get vault balances for a specific chain
+const vaultAddress = sdk.getVaultAddress();
+const portfolio = await sdk.balance.getPortfolioBalance(10004, vaultAddress);
 
-const usdcBalance = balances['base-sepolia']?.USDC;
-console.log('USDC Balance:', usdcBalance);
-
-// Check if sufficient
-const transferAmount = parseUnits('100', 6);
-if (BigInt(usdcBalance) >= transferAmount) {
-  await sdk.transferViaRelayer({
-    token: USDC,
-    recipient: '0x...',
-    amount: transferAmount,
-  });
+for (const token of portfolio.tokens) {
+  console.log(`${token.symbol}: ${token.formattedBalance}`);
 }
+console.log('Total USD:', portfolio.totalUsdValue);
 ```
 
-## Transaction Status
+## Transaction Tracking
 
-Track transaction status:
+Track transaction status after execution:
 
 ```typescript
-const result = await sdk.transferViaRelayer({
-  token: USDC,
-  recipient: '0x...',
-  amount: parseUnits('10', 6),
+const result = await sdk.transfer(prepared.params, signer);
+
+// Track the transaction
+sdk.transactions.track(result.transactionHash, 10004, (state) => {
+  console.log('Status:', state.status);
+  console.log('Confirmations:', state.confirmations);
 });
 
-console.log('Status:', result.status);
-console.log('Tx Hash:', result.txHash);
+console.log('Tx Hash:', result.transactionHash);
 console.log('Block:', result.blockNumber);
+console.log('Sequence:', result.sequence);
 ```
 
 ## React Example
@@ -127,7 +148,7 @@ console.log('Block:', result.blockNumber);
 ```tsx
 import { useState } from 'react';
 import { createSDK } from '@veridex/sdk';
-import { parseUnits } from 'ethers';
+import { ethers } from 'ethers';
 
 const sdk = createSDK('base', { 
   network: 'testnet',
@@ -141,6 +162,7 @@ export function SendForm() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSend = async (e: React.FormEvent) => {
@@ -150,13 +172,24 @@ export function SendForm() {
     setTxHash(null);
 
     try {
-      const result = await sdk.transferViaRelayer({
+      // Prepare transfer
+      const prepared = await sdk.prepareTransfer({
+        targetChain: 10004,
         token: USDC,
         recipient,
-        amount: parseUnits(amount, 6),
+        amount: ethers.parseUnits(amount, 6),
       });
 
-      setTxHash(result.txHash);
+      // Show summary
+      const txSummary = await sdk.getTransactionSummary(prepared);
+      setSummary(`${txSummary.description} (Gas: ${prepared.formattedCost})`);
+
+      // Execute
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const result = await sdk.transfer(prepared.params, signer);
+
+      setTxHash(result.transactionHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Transfer failed');
     } finally {
@@ -199,6 +232,8 @@ export function SendForm() {
         {loading ? 'Sending...' : 'Send USDC'}
       </button>
 
+      {summary && <p className="text-gray-600 text-sm">{summary}</p>}
+
       {txHash && (
         <p className="text-green-600">
           Success!{' '}
@@ -239,20 +274,30 @@ export function SendForm() {
 
 ```typescript
 try {
-  await sdk.transferViaRelayer({
-    token: USDC,
-    recipient: '0x...',
-    amount: parseUnits('100', 6),
-  });
-} catch (error) {
-  if (error.code === 'INSUFFICIENT_BALANCE') {
-    console.log('Not enough tokens');
-  } else if (error.code === 'INVALID_RECIPIENT') {
-    console.log('Invalid recipient address');
-  } else if (error.code === 'RELAYER_ERROR') {
-    console.log('Relayer unavailable, try again');
+  const prepared = await sdk.prepareTransfer({ /* ... */ });
+  const result = await sdk.transfer(prepared.params, signer);
+} catch (error: any) {
+  if (error.message?.includes('No credential set')) {
+    console.log('Please register or login first');
+  } else if (error.message?.includes('expired')) {
+    console.log('Prepared transfer expired, please prepare again');
   } else {
     console.error('Transfer failed:', error);
+  }
+}
+
+// For Agent SDK payments
+import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
+
+try {
+  await agent.pay({ chain: 10004, token: 'USDC', amount: '1000000', recipient: '0x...' });
+} catch (error) {
+  if (error instanceof AgentPaymentError) {
+    if (error.code === AgentPaymentErrorCode.INSUFFICIENT_BALANCE) {
+      console.log('Not enough tokens:', error.suggestion);
+    } else if (error.code === AgentPaymentErrorCode.LIMIT_EXCEEDED) {
+      console.log('Spending limit exceeded');
+    }
   }
 }
 ```

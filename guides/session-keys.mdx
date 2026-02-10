@@ -26,11 +26,24 @@ Transfer 2 → Auto-signed ✓
 Transfer 3 → Auto-signed ✓
 ```
 
-## Create a Session
+## Core SDK: Session Key Management
+
+The core SDK provides low-level session key utilities:
 
 ```typescript
-import { createSDK } from '@veridex/sdk';
-import { parseEther } from 'ethers';
+import {
+  createSDK,
+  SessionManager,
+  generateSecp256k1KeyPair,
+  computeSessionKeyHash,
+  signWithSessionKey,
+  hashAction,
+  deriveEncryptionKey,
+  encrypt,
+  decrypt,
+  MAX_SESSION_DURATION,
+  DEFAULT_SESSION_DURATION,
+} from '@veridex/sdk';
 
 const sdk = createSDK('base', {
   network: 'testnet',
@@ -40,181 +53,196 @@ const sdk = createSDK('base', {
 // Login first
 await sdk.passkey.login();
 
-// Create a session with limits
-const session = await sdk.sessions.create({
-  duration: 3600, // 1 hour (in seconds)
-  maxValue: parseEther('0.1'), // Max 0.1 ETH worth of transfers
-});
+// Generate a session key pair (secp256k1)
+const keyPair = generateSecp256k1KeyPair();
+console.log('Session public key:', keyPair.publicKey);
 
-console.log('Session created:', session.id);
-console.log('Expires at:', new Date(session.expiresAt));
+// Compute session key hash for on-chain registration
+const sessionHash = computeSessionKeyHash(keyPair.publicKey);
+console.log('Session hash:', sessionHash);
+
+// Sign an action with the session key
+const actionHash = hashAction('transfer', { /* params */ });
+const signature = signWithSessionKey(keyPair.privateKey, actionHash);
 ```
 
-## Session Constraints
+## Encrypted Session Storage
 
-You can limit sessions in multiple ways:
-
-### Time Limit
+Session keys can be encrypted and stored securely:
 
 ```typescript
-const session = await sdk.sessions.create({
-  duration: 3600, // 1 hour
+import {
+  generateSecp256k1KeyPair,
+  deriveEncryptionKey,
+  encrypt,
+  decrypt,
+  createSessionStorage,
+  IndexedDBSessionStorage,
+  LocalStorageSessionStorage,
+} from '@veridex/sdk';
+
+// Generate key pair
+const keyPair = generateSecp256k1KeyPair();
+
+// Derive encryption key from master credential
+const encryptionKey = deriveEncryptionKey('master-key-hash');
+
+// Encrypt the session private key
+const encrypted = encrypt(keyPair.privateKey, encryptionKey);
+
+// Store encrypted session
+const storage = createSessionStorage(); // Auto-selects best storage
+// Or explicitly:
+const indexedDB = new IndexedDBSessionStorage();
+const localStorage = new LocalStorageSessionStorage();
+
+// Later: decrypt to use
+const decrypted = decrypt(encrypted, encryptionKey);
+```
+
+## Agent SDK: SessionKeyManager
+
+The Agent SDK provides a higher-level `SessionKeyManager` with USD-denominated spending limits:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: 'abc123',
+    publicKeyX: BigInt('0x...'),
+    publicKeyY: BigInt('0x...'),
+    keyHash: '0x...',
+  },
+  session: {
+    dailyLimitUSD: 50,           // $50/day
+    perTransactionLimitUSD: 10,  // $10 max per tx
+    expiryHours: 24,             // 24-hour session
+    allowedChains: [10004],      // Base Sepolia only
+  },
 });
 ```
 
-### Value Limit
+### Session Constraints (Agent SDK)
+
+| Constraint | Description |
+|------------|-------------|
+| `dailyLimitUSD` | Maximum USD spend per 24-hour period |
+| `perTransactionLimitUSD` | Maximum USD per single transaction |
+| `expiryHours` | Session duration in hours |
+| `allowedChains` | Whitelist of Wormhole chain IDs |
+
+## Use Session for Payments (Agent SDK)
+
+Once an agent is initialized, payments use the session key automatically:
 
 ```typescript
-const session = await sdk.sessions.create({
-  duration: 3600,
-  maxValue: parseEther('0.5'), // Max $500 worth (USD equivalent)
-});
-```
+// Agent session is active — no biometric needed for payments
+await agent.pay({ chain: 10004, token: 'USDC', amount: '1000000', recipient: addr1 });
+await agent.pay({ chain: 10004, token: 'USDC', amount: '2000000', recipient: addr2 });
+await agent.pay({ chain: 10004, token: 'USDC', amount: '3000000', recipient: addr3 });
+// All auto-signed with session key! ✓
 
-### Token Whitelist
-
-```typescript
-const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-const WETH = '0x4200000000000000000000000000000000000006';
-
-const session = await sdk.sessions.create({
-  duration: 3600,
-  allowedTokens: [USDC, WETH], // Only these tokens can be transferred
-});
-```
-
-### Recipient Whitelist
-
-```typescript
-const session = await sdk.sessions.create({
-  duration: 3600,
-  allowedRecipients: [
-    '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234', // Specific address
-    '0xA1B2C3D4E5F6789012345678901234567890ABCD', // Another address
-  ],
-});
-```
-
-### Combined Constraints
-
-```typescript
-const session = await sdk.sessions.create({
-  duration: 1800, // 30 minutes
-  maxValue: parseEther('0.05'), // Max 0.05 ETH worth
-  allowedTokens: [USDC], // USDC only
-  allowedRecipients: [merchantAddress], // Only to merchant
-});
-```
-
-## Use Session for Transfers
-
-Once a session is created, transfers use it automatically:
-
-```typescript
-// Session is active
-const session = await sdk.sessions.create({ duration: 3600 });
-
-// These transfers don't prompt for biometric
-await sdk.transfer({ token: USDC, recipient: addr1, amount: amount1 });
-await sdk.transfer({ token: USDC, recipient: addr2, amount: amount2 });
-await sdk.transfer({ token: USDC, recipient: addr3, amount: amount3 });
-// All auto-signed! ✓
+// x402 payments also use the session key
+const response = await agent.fetch('https://paid-api.example.com/data');
 ```
 
 ## Check Session Status
 
 ```typescript
-// Get active session
-const activeSession = sdk.sessions.getActive();
+// Agent SDK: check session status
+const status = agent.getSessionStatus();
 
-if (activeSession) {
-  console.log('Session ID:', activeSession.id);
-  console.log('Expires:', new Date(activeSession.expiresAt));
-  console.log('Remaining value:', activeSession.remainingValue);
-  console.log('Used value:', activeSession.usedValue);
-} else {
-  console.log('No active session');
-}
+console.log('Valid:', status.isValid);
+console.log('Wallet:', status.address);
+console.log('Expires:', new Date(status.expiry));
+console.log('Daily limit:', `$${status.limits.dailyLimitUSD}`);
+console.log('Spent today:', `$${status.totalSpentUSD.toFixed(2)}`);
+console.log('Remaining:', `$${status.remainingDailyLimitUSD.toFixed(2)}`);
 ```
 
 ## Revoke Session
 
 ```typescript
-// Revoke the active session
-await sdk.sessions.revoke();
-
-console.log('Session revoked');
-
-// Now transfers require biometric again
+// Agent SDK: revoke session
+await agent.revokeSession();
+console.log('Session revoked — agent can no longer make payments');
 ```
 
 ## Session Persistence
 
-Sessions are stored in memory by default and persist across page reloads via localStorage:
+The core SDK provides multiple storage backends for session keys:
 
 ```typescript
-// Session survives page reload
-const session = await sdk.sessions.create({ duration: 3600 });
+import { createSessionStorage, IndexedDBSessionStorage } from '@veridex/sdk';
 
-// After page reload...
-const restored = sdk.sessions.getActive();
-console.log('Session restored:', restored?.id);
+// Auto-select best storage (IndexedDB > localStorage)
+const storage = createSessionStorage();
+
+// Or use IndexedDB explicitly for better security
+const secureStorage = new IndexedDBSessionStorage();
 ```
 
-## React Example
+The Agent SDK's `SessionKeyManager` handles persistence automatically, including encrypted storage of session private keys.
+
+## React Example (Agent SDK)
 
 ```tsx
 import { useState, useEffect } from 'react';
-import { createSDK } from '@veridex/sdk';
-import { parseEther, parseUnits } from 'ethers';
+import { createAgentWallet, AgentWallet } from '@veridex/agentic-payments';
 
-const sdk = createSDK('base', { 
-  network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network',
-});
-
-export function SessionManager() {
-  const [session, setSession] = useState<any>(null);
+export function AgentSessionPanel() {
+  const [agent, setAgent] = useState<AgentWallet | null>(null);
+  const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Check for existing session on mount
-  useEffect(() => {
-    const active = sdk.sessions.getActive();
-    if (active) {
-      setSession(active);
-    }
-  }, []);
-
-  const createSession = async () => {
+  const initAgent = async () => {
     setLoading(true);
     try {
-      const newSession = await sdk.sessions.create({
-        duration: 3600,
-        maxValue: parseEther('0.1'),
+      const newAgent = await createAgentWallet({
+        masterCredential: {
+          credentialId: 'stored-credential-id',
+          publicKeyX: BigInt('0x...'),
+          publicKeyY: BigInt('0x...'),
+          keyHash: '0x...',
+        },
+        session: {
+          dailyLimitUSD: 50,
+          perTransactionLimitUSD: 10,
+          expiryHours: 8,
+          allowedChains: [10004],
+        },
       });
-      setSession(newSession);
+      setAgent(newAgent);
+      setStatus(newAgent.getSessionStatus());
     } catch (error) {
-      console.error('Failed to create session:', error);
+      console.error('Failed to create agent:', error);
     }
     setLoading(false);
   };
 
   const revokeSession = async () => {
-    await sdk.sessions.revoke();
-    setSession(null);
+    if (agent) {
+      await agent.revokeSession();
+      setAgent(null);
+      setStatus(null);
+    }
   };
 
-  if (session) {
-    const expiresIn = Math.floor((session.expiresAt - Date.now()) / 1000 / 60);
-    
+  if (status) {
+    const expiresIn = Math.floor((status.expiry - Date.now()) / 1000 / 60);
+
     return (
       <div className="p-4 bg-green-50 rounded-lg">
-        <h3 className="font-bold text-green-800">Session Active</h3>
+        <h3 className="font-bold text-green-800">Agent Session Active</h3>
         <p className="text-sm text-green-600">
           Expires in {expiresIn} minutes
         </p>
         <p className="text-sm text-green-600">
-          Remaining: {session.remainingValue} wei
+          Budget: ${status.totalSpentUSD.toFixed(2)} / ${status.limits.dailyLimitUSD}
+        </p>
+        <p className="text-sm text-green-600">
+          Wallet: {status.address.slice(0, 8)}...{status.address.slice(-6)}
         </p>
         <button
           onClick={revokeSession}
@@ -228,50 +256,55 @@ export function SessionManager() {
 
   return (
     <div className="p-4 bg-gray-50 rounded-lg">
-      <h3 className="font-bold">No Active Session</h3>
+      <h3 className="font-bold">No Active Agent Session</h3>
       <p className="text-sm text-gray-600">
-        Create a session for smoother transactions
+        Initialize an agent with spending limits
       </p>
       <button
-        onClick={createSession}
+        onClick={initAgent}
         disabled={loading}
         className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
       >
-        {loading ? 'Creating...' : 'Create 1-Hour Session'}
+        {loading ? 'Initializing...' : 'Create Agent Session'}
       </button>
     </div>
   );
 }
 ```
 
-## Batch Transactions
+## Batch Payments (Agent SDK)
 
-Sessions are perfect for batch operations:
+Agent sessions are perfect for batch operations:
 
 ```typescript
-const session = await sdk.sessions.create({
-  duration: 300, // 5 minutes
-  maxValue: parseEther('1'), // 1 ETH worth
+const agent = await createAgentWallet({
+  masterCredential: { /* ... */ },
+  session: { dailyLimitUSD: 100, perTransactionLimitUSD: 25, expiryHours: 1 },
 });
 
-// Batch multiple transfers
+// Batch multiple payments — all auto-signed
 const recipients = [
-  { address: '0x...', amount: parseUnits('10', 6) },
-  { address: '0x...', amount: parseUnits('20', 6) },
-  { address: '0x...', amount: parseUnits('30', 6) },
+  { address: '0xaaa...', amount: '10000000' }, // 10 USDC
+  { address: '0xbbb...', amount: '20000000' }, // 20 USDC
+  { address: '0xccc...', amount: '30000000' }, // 30 USDC
 ];
 
 for (const { address, amount } of recipients) {
-  await sdk.transfer({
-    token: USDC,
-    recipient: address,
+  const receipt = await agent.pay({
+    chain: 10004,
+    token: 'USDC',
     amount,
+    recipient: address,
   });
+  console.log(`Paid ${address}: ${receipt.txHash}`);
 }
-// All executed with single initial biometric! ✓
+
+// Check remaining budget
+const status = agent.getSessionStatus();
+console.log(`Spent: $${status.totalSpentUSD.toFixed(2)} / $${status.limits.dailyLimitUSD}`);
 
 // Revoke when done
-await sdk.sessions.revoke();
+await agent.revokeSession();
 ```
 
 ## Security Considerations
@@ -291,18 +324,23 @@ Best practices:
 ## Error Handling
 
 ```typescript
+import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
+
 try {
-  const session = await sdk.sessions.create({
-    duration: 3600,
-    maxValue: parseEther('0.1'),
-  });
+  await agent.pay({ chain: 10004, token: 'USDC', amount: '100000000', recipient: '0x...' });
 } catch (error) {
-  if (error.code === 'SESSION_EXISTS') {
-    console.log('Session already active, revoke first');
-  } else if (error.code === 'USER_CANCELLED') {
-    console.log('User cancelled biometric prompt');
-  } else {
-    console.error('Failed to create session:', error);
+  if (error instanceof AgentPaymentError) {
+    switch (error.code) {
+      case AgentPaymentErrorCode.LIMIT_EXCEEDED:
+        console.log('Spending limit exceeded:', error.message);
+        break;
+      case AgentPaymentErrorCode.SESSION_EXPIRED:
+        console.log('Session expired, re-initialize agent');
+        break;
+      case AgentPaymentErrorCode.INSUFFICIENT_BALANCE:
+        console.log('Not enough tokens:', error.suggestion);
+        break;
+    }
   }
 }
 ```
@@ -310,10 +348,13 @@ try {
 ## Next Steps
 
 <Cards>
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    Build autonomous AI agent payments
+  </Card>
   <Card title="Spending Limits" href="/guides/spending-limits">
     Configure spending limits for safety
   </Card>
-  <Card title="Payment Gateway" href="/integrations/payment-gateway">
-    Use sessions for merchant payments
+  <Card title="Stacks" href="/chains/stacks">
+    Session keys on Stacks with native secp256k1
   </Card>
 </Cards>

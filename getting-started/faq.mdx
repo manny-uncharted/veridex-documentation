@@ -27,7 +27,7 @@ Veridex is a cross-chain passkey authentication protocol. It lets users control 
 ### What chains are supported?
 
 - **EVM**: Base (hub), Optimism, Arbitrum, Polygon, Ethereum
-- **Non-EVM**: Solana, Aptos, Sui, Starknet
+- **Non-EVM**: Solana, Aptos, Sui, Starknet, Stacks
 
 ### Is it production ready?
 
@@ -121,9 +121,45 @@ import { createSDK } from '@veridex/sdk';
 
 const sdk = createSDK('base', { network: 'testnet' });
 await sdk.passkey.register('user@example.com', 'My App');
+const vault = sdk.getVaultAddress();
 ```
 
 See the [Quick Start Guide](/getting-started/quick-start).
+
+### What is the Agent SDK?
+
+The Agent SDK (`@veridex/agentic-payments`) is a separate package for building autonomous AI agents that can make payments. It provides:
+
+- **x402 HTTP payment protocol** — agents automatically pay for API access
+- **Session keys with spending limits** — agents operate within USD-denominated budgets
+- **Multi-chain support** — EVM, Solana, Stacks, and more
+- **Audit logging** — full compliance trail of all payments
+- **MCP tools** — integrate with Claude, Cursor, and other AI assistants
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: { /* passkey credential */ },
+  session: { dailyLimitUSD: 50, expiryHours: 24 },
+});
+
+// Agent handles 402 Payment Required automatically
+const response = await agent.fetch('https://paid-api.example.com/data');
+```
+
+See the [Agent Payments Guide](/guides/agent-payments).
+
+### How does x402 work?
+
+The x402 protocol is an HTTP-native payment standard:
+
+1. Agent sends a request to a paid API
+2. Server responds with `402 Payment Required` + payment details in headers
+3. Agent SDK automatically parses requirements, signs payment, and retries
+4. Server verifies payment on-chain and returns the data
+
+This enables AI agents to autonomously pay for data, compute, and services.
 
 ### Is there a React component library?
 
@@ -168,11 +204,13 @@ Check:
 
 ### Session key expired
 
-Sessions have a time limit. Create a new session:
+Sessions have a time limit. For the core SDK, use `SessionManager` to create a new session. For the Agent SDK, the `AgentWallet` handles session lifecycle automatically — just re-initialize:
 
 ```typescript
-const newSession = await sdk.sessions.create({
-  duration: 3600, // 1 hour
+// Agent SDK — sessions are managed automatically
+const agent = await createAgentWallet({
+  masterCredential: { /* ... */ },
+  session: { dailyLimitUSD: 50, expiryHours: 24 },
 });
 ```
 

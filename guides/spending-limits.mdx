@@ -14,11 +14,21 @@ Spending limits protect against:
 - Stolen devices (before recovery)
 - Accidental large transfers
 
-## Configure Spending Limits
+## Three-Layer Spending Safety
+
+Veridex enforces spending limits at three levels:
+
+| Layer | Enforcement | Description |
+|-------|------------|-------------|
+| **SDK** | Off-chain | `SpendingLimitsManager` / `SpendingTracker` checks before signing |
+| **Contract** | On-chain | Smart contract enforces daily/per-tx limits |
+| **Post-Conditions** | Protocol (Stacks) | Stacks native guarantee on max transfer amounts |
+
+## Core SDK: Check Spending Limits
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
-import { parseEther, parseUnits } from 'ethers';
+import { ethers } from 'ethers';
 
 const sdk = createSDK('base', {
   network: 'testnet',
@@ -27,114 +37,111 @@ const sdk = createSDK('base', {
 
 await sdk.passkey.login();
 
-// Set spending limits
-await sdk.spendingLimits.configure({
-  daily: parseEther('1'), // 1 ETH per day
-  perTransaction: parseEther('0.1'), // 0.1 ETH max per tx
-  tokens: {
-    [USDC]: {
-      daily: parseUnits('1000', 6), // 1000 USDC per day
-      perTransaction: parseUnits('100', 6), // 100 USDC per tx
-    },
-  },
-});
-```
-
-## Limit Types
-
-### Daily Limit
-
-```typescript
-await sdk.spendingLimits.configure({
-  daily: parseEther('1'), // Resets every 24 hours
-});
-```
-
-### Per-Transaction Limit
-
-```typescript
-await sdk.spendingLimits.configure({
-  perTransaction: parseEther('0.1'), // Max per single transfer
-});
-```
-
-### Token-Specific Limits
-
-```typescript
-const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-
-await sdk.spendingLimits.configure({
-  tokens: {
-    [USDC]: {
-      daily: parseUnits('500', 6),
-      perTransaction: parseUnits('100', 6),
-    },
-  },
-});
-```
-
-### Combined Limits
-
-```typescript
-await sdk.spendingLimits.configure({
-  // Global limits (in ETH equivalent)
-  daily: parseEther('2'),
-  perTransaction: parseEther('0.5'),
-  
-  // Token-specific overrides
-  tokens: {
-    [USDC]: {
-      daily: parseUnits('1000', 6),
-      perTransaction: parseUnits('250', 6),
-    },
-    [WETH]: {
-      daily: parseEther('0.5'),
-      perTransaction: parseEther('0.1'),
-    },
-  },
-});
-```
-
-## Check Current Limits
-
-```typescript
-const limits = await sdk.spendingLimits.get();
-
-console.log('Daily limit:', limits.daily);
-console.log('Per-tx limit:', limits.perTransaction);
-console.log('Used today:', limits.usedToday);
-console.log('Remaining:', limits.remaining);
+// Get current on-chain spending limits
+const limits = await sdk.getSpendingLimits();
+console.log('Daily limit:', limits.dailyLimit);
+console.log('Daily used:', limits.dailyUsed);
+console.log('Daily remaining:', limits.dailyRemaining);
+console.log('Per-tx limit:', limits.perTransactionLimit);
 console.log('Resets at:', new Date(limits.resetsAt));
 ```
 
 ## Check Before Transfer
 
 ```typescript
-const amount = parseUnits('500', 6);
+// Check if a specific amount is within limits
+const check = await sdk.checkSpendingLimit(ethers.parseUnits('500', 6));
 
-const canTransfer = await sdk.spendingLimits.check({
-  token: USDC,
-  amount,
-});
-
-if (canTransfer.allowed) {
-  await sdk.transferViaRelayer({
-    token: USDC,
-    recipient: '0x...',
-    amount,
-  });
+if (check.allowed) {
+  console.log('Transfer allowed!');
+  // Proceed with prepareTransfer + transfer
 } else {
-  console.log('Limit exceeded:', canTransfer.reason);
-  console.log('Available:', canTransfer.available);
-  console.log('Resets at:', new Date(canTransfer.resetsAt));
+  console.log('Blocked:', check.message);
+  console.log('Suggestions:', check.suggestions);
 }
 ```
 
-## Remove Limits
+## Formatted Limits for UI
 
 ```typescript
-// Remove all limits (requires passkey auth)
-await sdk.spendingLimits.remove();
+const formatted = await sdk.getFormattedSpendingLimits();
+
+console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
+console.log(`Resets in: ${formatted.timeUntilReset}`);
+console.log(`Daily: ${formatted.dailyUsed} / ${formatted.dailyLimit}`);
+```
+
+## Update Spending Limits
+
+```typescript
+// Prepare a transaction to update the daily limit
+const prepared = await sdk.prepareSetDailyLimit(ethers.parseEther('5.0'));
+
+// Execute (requires passkey signature)
+const result = await sdk.transfer(prepared.params, signer);
+console.log('Limit updated:', result.transactionHash);
+```
+
+## Emergency Pause
+
+```typescript
+// Prepare an emergency pause transaction
+const prepared = await sdk.preparePauseVault();
+const result = await sdk.transfer(prepared.params, signer);
+console.log('Vault paused:', result.transactionHash);
+```
+
+## Agent SDK: USD-Denominated Limits
+
+The Agent SDK provides USD-aware spending limits via `SpendingTracker`:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: { /* ... */ },
+  session: {
+    dailyLimitUSD: 100,          // $100/day
+    perTransactionLimitUSD: 25,  // $25 max per tx
+    expiryHours: 24,
+  },
+});
+
+// Check session spending status
+const status = agent.getSessionStatus();
+console.log('Daily limit:', `$${status.limits.dailyLimitUSD}`);
+console.log('Spent today:', `$${status.totalSpentUSD.toFixed(2)}`);
+console.log('Remaining:', `$${status.remainingDailyLimitUSD.toFixed(2)}`);
+
+// Set up spending alerts
+agent.onSpendingAlert((alert) => {
+  if (alert.type === 'approaching_limit') {
+    console.warn('Approaching daily limit!');
+  } else if (alert.type === 'limit_exceeded') {
+    console.error('Transaction blocked by limit');
+  }
+});
+```
+
+### Stacks: StacksSpendingTracker
+
+For Stacks, the Agent SDK provides a specialized tracker with Pyth pricing:
+
+```typescript
+import { StacksSpendingTracker } from '@veridex/agentic-payments';
+
+const tracker = new StacksSpendingTracker({
+  dailyLimitUSD: 100,
+  network: 'testnet',
+});
+
+// Convert microSTX to USD using real-time Pyth price
+const usdValue = await tracker.convertToUSD(1000000n, 'STX');
+console.log('1 STX =', usdValue, 'USD');
+
+// Check if a payment is within limits
+const allowed = await tracker.checkPayment(5000000n); // 5 STX
+console.log('Payment allowed:', allowed);
 ```
 
 ## React Example
@@ -142,7 +149,6 @@ await sdk.spendingLimits.remove();
 ```tsx
 import { useState, useEffect } from 'react';
 import { createSDK } from '@veridex/sdk';
-import { parseEther, formatEther } from 'ethers';
 
 const sdk = createSDK('base', { 
   network: 'testnet',
@@ -150,94 +156,36 @@ const sdk = createSDK('base', {
 });
 
 export function SpendingLimitsPanel() {
-  const [limits, setLimits] = useState<any>(null);
-  const [dailyLimit, setDailyLimit] = useState('1');
-  const [loading, setLoading] = useState(false);
+  const [formatted, setFormatted] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadLimits();
   }, []);
 
   const loadLimits = async () => {
-    const current = await sdk.spendingLimits.get();
-    setLimits(current);
-  };
-
-  const updateLimits = async () => {
-    setLoading(true);
-    try {
-      await sdk.spendingLimits.configure({
-        daily: parseEther(dailyLimit),
-      });
-      await loadLimits();
-    } catch (error) {
-      console.error('Failed to update limits:', error);
-    }
+    const data = await sdk.getFormattedSpendingLimits();
+    setFormatted(data);
     setLoading(false);
   };
+
+  if (loading) return <div>Loading limits...</div>;
+  if (!formatted) return <div>No limits configured</div>;
+
+  const percentage = formatted.dailyUsedPercentage;
 
   return (
     <div className="p-4 border rounded-lg space-y-4">
       <h3 className="font-bold">Spending Limits</h3>
 
-      {limits && (
-        <div className="bg-gray-50 p-3 rounded">
-          <p>Daily: {formatEther(limits.daily)} ETH</p>
-          <p>Used today: {formatEther(limits.usedToday)} ETH</p>
-          <p>Remaining: {formatEther(limits.remaining)} ETH</p>
-          <p className="text-sm text-gray-500">
-            Resets: {new Date(limits.resetsAt).toLocaleString()}
-          </p>
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        <input
-          type="number"
-          value={dailyLimit}
-          onChange={(e) => setDailyLimit(e.target.value)}
-          placeholder="Daily limit (ETH)"
-          className="flex-1 rounded border p-2"
-        />
-        <button
-          onClick={updateLimits}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          {loading ? 'Saving...' : 'Set Limit'}
-        </button>
+      <div className="bg-gray-50 p-3 rounded">
+        <p>Daily: {formatted.dailyUsed} / {formatted.dailyLimit}</p>
+        <p>Per-tx max: {formatted.perTransactionLimit}</p>
+        <p className="text-sm text-gray-500">
+          Resets in: {formatted.timeUntilReset}
+        </p>
       </div>
-    </div>
-  );
-}
-```
 
-## Usage Progress Widget
-
-```tsx
-export function SpendingProgress() {
-  const [limits, setLimits] = useState<any>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      const current = await sdk.spendingLimits.get();
-      setLimits(current);
-    };
-    load();
-  }, []);
-
-  if (!limits) return <div>Loading...</div>;
-
-  const used = Number(limits.usedToday);
-  const total = Number(limits.daily);
-  const percentage = total > 0 ? (used / total) * 100 : 0;
-
-  return (
-    <div className="p-4 border rounded-lg">
-      <div className="flex justify-between mb-2">
-        <span>Daily Spending</span>
-        <span>{percentage.toFixed(1)}%</span>
-      </div>
       <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all ${
@@ -247,8 +195,8 @@ export function SpendingProgress() {
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
-      <p className="text-sm text-gray-500 mt-1">
-        {formatEther(limits.usedToday)} / {formatEther(limits.daily)} ETH
+      <p className="text-sm text-gray-500">
+        {percentage.toFixed(1)}% of daily limit used
       </p>
     </div>
   );
@@ -257,22 +205,31 @@ export function SpendingProgress() {
 
 ## Limit Exceeded Behavior
 
-When a transfer exceeds limits:
+Always check limits before attempting a transfer:
 
 ```typescript
+import { ethers } from 'ethers';
+
+const amount = ethers.parseUnits('10000', 6);
+const check = await sdk.checkSpendingLimit(amount);
+
+if (!check.allowed) {
+  console.log('Transfer blocked:', check.message);
+  console.log('Suggestions:', check.suggestions);
+  // Suggestions might include: "Wait for daily reset" or "Reduce amount to X"
+}
+```
+
+For Agent SDK:
+
+```typescript
+import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
+
 try {
-  await sdk.transferViaRelayer({
-    token: USDC,
-    recipient: '0x...',
-    amount: parseUnits('10000', 6), // Exceeds limit
-  });
+  await agent.pay({ chain: 10004, token: 'USDC', amount: '10000000000', recipient: '0x...' });
 } catch (error) {
-  if (error.code === 'SPENDING_LIMIT_EXCEEDED') {
-    console.log('Transfer blocked by spending limit');
-    console.log('Limit type:', error.limitType); // 'daily' | 'perTransaction'
-    console.log('Limit:', error.limit);
-    console.log('Attempted:', error.attempted);
-    console.log('Available:', error.available);
+  if (error instanceof AgentPaymentError && error.code === AgentPaymentErrorCode.LIMIT_EXCEEDED) {
+    console.log('Agent spending limit exceeded:', error.message);
   }
 }
 ```
@@ -290,13 +247,38 @@ Best practices:
 3. **Review periodically**: Adjust limits based on usage patterns
 4. **Combine with session keys**: Sessions have their own limits too
 
+## Stacks Post-Conditions
+
+On Stacks, spending limits have an additional protocol-level layer via Post-Conditions:
+
+```typescript
+import { buildStxWithdrawalPostConditions, validateStacksPostConditions } from '@veridex/sdk';
+
+// Build post-conditions that guarantee max transfer amount
+const postConditions = buildStxWithdrawalPostConditions({
+  vaultAddress: 'ST1CKNN84MDPCJRQDHDCY34GMRKQ3TASNNDJQDRTN.veridex-vault',
+  amount: 1000000n, // 1 STX max
+});
+
+// Validate before submitting
+const validation = validateStacksPostConditions(postConditions);
+if (!validation.valid) {
+  console.warn('Post-condition issues:', validation.warnings);
+}
+```
+
+Post-Conditions are enforced at the Stacks protocol level and **cannot be bypassed** by any contract or SDK code.
+
 ## Next Steps
 
 <Cards>
-  <Card title="Recovery Setup" href="/guides/recovery">
-    Configure account recovery
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    USD-denominated agent spending limits
   </Card>
   <Card title="Session Keys" href="/guides/session-keys">
-    Session-level spending limits
+    Session-level spending constraints
+  </Card>
+  <Card title="Stacks" href="/chains/stacks">
+    Three-layer spending safety on Stacks
   </Card>
 </Cards>

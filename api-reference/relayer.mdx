@@ -314,6 +314,345 @@ Create a vault on a spoke chain.
 
 ---
 
+## Stacks Endpoints
+
+The relayer provides Stacks-specific endpoints for direct relay (not Wormhole VAAs).
+
+### POST /api/v1/stacks/submit
+
+Submit a sponsored Stacks transaction.
+
+```bash
+curl -X POST https://relayer.veridex.network/api/v1/stacks/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction": "<serialized-stacks-tx-hex>",
+    "keyHash": "0x..."
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "txId": "0x7f9e5c51...",
+  "status": "pending"
+}
+```
+
+### GET /api/v1/stacks/identity/:keyHash
+
+Query identity registration status on the Stacks spoke contract.
+
+```bash
+curl https://relayer.veridex.network/api/v1/stacks/identity/0x1234...
+```
+
+### GET /api/v1/stacks/session/:sessionHash
+
+Query session key status.
+
+```bash
+curl https://relayer.veridex.network/api/v1/stacks/session/0xabcd...
+```
+
+### GET /api/v1/stacks/vault/:keyHash
+
+Query vault balance and status.
+
+```bash
+curl https://relayer.veridex.network/api/v1/stacks/vault/0x1234...
+```
+
+### GET /api/v1/stacks/tx/:txId
+
+Get Stacks transaction status.
+
+```bash
+curl https://relayer.veridex.network/api/v1/stacks/tx/0x7f9e5c51...
+```
+
+### Stacks Sponsorship Limits
+
+| Limit | Value |
+|-------|-------|
+| Per-identity rate | 50 tx/hour |
+| Per-tx fee cap | 0.5 STX |
+| Hourly budget | 50 STX |
+
+---
+
+## Cross-Domain Passkey Sharing
+
+Endpoints for third-party app registration, origin validation, and server-side session tokens. See the [Cross-Domain Passkeys Guide](/guides/cross-domain-passkeys) for full integration instructions.
+
+### POST /api/v1/apps/register
+
+Register a new third-party application for cross-domain passkey sharing.
+
+**Request Body:**
+
+```json
+{
+  "name": "My DeFi App",
+  "origin": "https://myapp.com",
+  "description": "A decentralized exchange",
+  "contactEmail": "dev@myapp.com"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Application name (min 2 characters) |
+| `origin` | string | Yes | HTTPS origin (e.g. `https://myapp.com`) |
+| `description` | string | No | Short description |
+| `contactEmail` | string | No | Developer contact email |
+
+**Response (201):**
+
+```json
+{
+  "success": true,
+  "app": {
+    "id": "app_a1b2c3d4e5f6",
+    "name": "My DeFi App",
+    "origin": "https://myapp.com",
+    "apiKey": "vdx_sk_...",
+    "trustLevel": "registered",
+    "status": "active",
+    "createdAt": 1738800000000
+  }
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid name, origin, or non-HTTPS origin |
+| 409 | Origin already registered |
+
+---
+
+### GET /api/v1/apps
+
+List registered apps. Public access returns origins only. Admin access (with `X-API-Key` header matching the metrics API key) returns full details.
+
+**Public Response:**
+
+```json
+{
+  "origins": ["https://myapp.com", "https://partner.io"],
+  "count": 2
+}
+```
+
+---
+
+### GET /api/v1/apps/:appId
+
+Get details of a registered app. Requires the app's API key or admin key via `X-API-Key` header.
+
+**Response:**
+
+```json
+{
+  "app": {
+    "id": "app_a1b2c3d4e5f6",
+    "name": "My DeFi App",
+    "origin": "https://myapp.com",
+    "trustLevel": "registered",
+    "status": "active",
+    "requestCount": 42,
+    "createdAt": 1738800000000,
+    "apiKey": "vdx_sk_..."
+  }
+}
+```
+
+---
+
+### DELETE /api/v1/apps/:appId
+
+Delete a registered app and revoke all its active sessions. Requires the app's API key or admin key via `X-API-Key` header.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "revokedSessions": 3
+}
+```
+
+---
+
+### GET /api/v1/apps/info
+
+Get public app info by origin. Used by the Auth Portal to display app details during authentication.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `origin` | string | The origin to look up (e.g. `https://myapp.com`) |
+
+**Response:**
+
+```json
+{
+  "name": "My DeFi App",
+  "origin": "https://myapp.com",
+  "description": "A decentralized exchange",
+  "trustLevel": "registered",
+  "registered": true
+}
+```
+
+---
+
+### GET /api/v1/origins/validate
+
+Check if an origin is allowed for cross-domain passkey sharing.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `origin` | string | The origin to validate |
+
+**Response:**
+
+```json
+{
+  "allowed": true,
+  "reason": "registered",
+  "origin": "https://myapp.com"
+}
+```
+
+**Reason values:** `builtin`, `development`, `registered`, `not_registered`, `invalid_origin`
+
+---
+
+### GET /api/v1/origins/well-known
+
+Generate the `.well-known/webauthn` JSON dynamically from all built-in and registered origins.
+
+**Response:**
+
+```json
+{
+  "origins": [
+    "https://veridex.network",
+    "https://auth.veridex.network",
+    "https://sera.veridex.network",
+    "https://myapp.com"
+  ]
+}
+```
+
+---
+
+### POST /api/v1/session/create
+
+Create a server-validated cross-origin session token.
+
+**Request Body:**
+
+```json
+{
+  "keyHash": "0x1234...",
+  "appOrigin": "https://myapp.com",
+  "sessionPublicKey": "0xabcd...",
+  "permissions": ["read", "transfer"],
+  "expiresInMs": 3600000,
+  "signature": { "r": "0x...", "s": "0x..." }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyHash` | string | Yes | User's passkey key hash (0x-prefixed) |
+| `appOrigin` | string | Yes | Requesting app's origin |
+| `sessionPublicKey` | string | Yes | Session key public key |
+| `permissions` | string[] | No | Granted permissions (default: `["read", "transfer"]`) |
+| `expiresInMs` | number | No | Session duration in ms (default: 3600000 = 1 hour) |
+| `signature` | object | Yes | WebAuthn signature proof |
+
+**Response (201):**
+
+```json
+{
+  "success": true,
+  "session": {
+    "id": "ses_abc123",
+    "keyHash": "0x1234...",
+    "appOrigin": "https://myapp.com",
+    "permissions": ["read", "transfer"],
+    "expiresAt": 1738903600000,
+    "createdAt": 1738900000000
+  }
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Missing or invalid fields |
+| 403 | Origin not registered |
+| 404 | Credential not found (user must register a passkey first) |
+
+---
+
+### GET /api/v1/session/:sessionId
+
+Validate a cross-origin session token.
+
+**Response (valid):**
+
+```json
+{
+  "valid": true,
+  "session": {
+    "id": "ses_abc123",
+    "keyHash": "0x1234...",
+    "appOrigin": "https://myapp.com",
+    "permissions": ["read", "transfer"],
+    "expiresAt": 1738903600000,
+    "createdAt": 1738900000000
+  }
+}
+```
+
+**Response (invalid/expired):**
+
+```json
+{
+  "valid": false,
+  "error": "Session not found or expired"
+}
+```
+
+---
+
+### DELETE /api/v1/session/:sessionId
+
+Revoke a cross-origin session token.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "revoked": true
+}
+```
+
+---
+
 ## Error Codes
 
 | Code | HTTP Status | Description |
@@ -323,10 +662,13 @@ Create a vault on a spoke chain.
 | `UNSUPPORTED_CHAIN` | 400 | Target chain not configured |
 | `INVALID_PAYLOAD` | 400 | Malformed request payload |
 | `NONCE_MISMATCH` | 400 | Transaction nonce mismatch |
+| `ORIGIN_NOT_REGISTERED` | 403 | Origin not registered for cross-domain auth |
 | `RATE_LIMITED` | 429 | Too many requests |
 | `RELAYER_ERROR` | 500 | Internal relayer error |
 | `CHAIN_UNAVAILABLE` | 503 | Target chain not responding |
 | `VAA_NOT_FOUND` | 404 | Wormhole VAA not yet available |
+| `STACKS_SPONSORSHIP_LIMIT` | 429 | Stacks sponsorship rate limit exceeded |
+| `STACKS_POST_CONDITION_FAIL` | 400 | Stacks post-condition validation failed |
 
 ---
 

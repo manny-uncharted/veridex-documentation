@@ -1,11 +1,11 @@
 ---
 title: SDK Reference
-description: Complete TypeScript SDK API documentation
+description: Complete TypeScript SDK API documentation for @veridex/sdk
 ---
 
 # SDK Reference
 
-Complete API reference for the Veridex SDK.
+Complete API reference for the Veridex Core SDK (`@veridex/sdk`).
 
 ## Installation
 
@@ -17,50 +17,73 @@ npm install @veridex/sdk ethers
 
 ### createSDK
 
-Creates a new SDK instance.
+Creates a new `VeridexSDK` instance with sensible defaults.
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK(chain, options);
+const sdk = createSDK(chain, config?);
 ```
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `chain` | `string` | Chain name (`'base'`, `'optimism'`, `'arbitrum'`, etc.) |
-| `options` | `SDKOptions` | Configuration options |
+| `chain` | `ChainName` | Chain name (see supported chains below) |
+| `config` | `SimpleSDKConfig` | Optional configuration |
 
-**Options:**
+**Supported chain names:** `'base'`, `'optimism'`, `'arbitrum'`, `'ethereum'`, `'solana'`, `'aptos'`, `'sui'`, `'starknet'`, `'stacks'`
+
+**Config:**
 
 ```typescript
-interface SDKOptions {
-  network?: 'testnet' | 'mainnet';  // Default: 'testnet'
-  relayerUrl?: string;               // Relayer API URL
-  relayerApiKey?: string;            // Wormhole Query API key
-  rpcUrl?: string;                   // Custom RPC URL
-  signer?: Signer;                   // Ethers signer (for non-gasless)
-  storage?: StorageAdapter;          // Custom storage adapter
+interface SimpleSDKConfig {
+  network?: 'testnet' | 'mainnet';     // Default: 'testnet'
+  rpcUrl?: string;                      // Custom RPC URL
+  relayerUrl?: string;                  // Relayer for gasless transactions
+  relayerApiKey?: string;               // Relayer API key
+  sponsorPrivateKey?: string;           // For gasless vault creation
+  integratorSponsorKey?: string;        // Platform-level sponsorship
+  rpcUrls?: Record<ChainName, string>;  // Multi-chain RPC URLs
 }
 ```
 
 **Example:**
 
 ```typescript
+// Simplest — testnet by default
+const sdk = createSDK('base');
+
+// With relayer for gasless transactions
 const sdk = createSDK('base', {
   network: 'testnet',
   relayerUrl: 'https://relayer.veridex.network',
 });
+
+// Stacks
+const stacksSdk = createSDK('stacks', { network: 'testnet' });
+```
+
+### Convenience Factories
+
+```typescript
+import { createHubSDK, createTestnetSDK, createMainnetSDK, createSessionSDK } from '@veridex/sdk';
+
+const hubSdk = createHubSDK();                    // Base hub chain
+const testSdk = createTestnetSDK('optimism');      // Force testnet
+const mainSdk = createMainnetSDK('base');          // Force mainnet
+const sessSdk = createSessionSDK('base');          // Session-optimized
 ```
 
 ---
 
-## Passkey Management
+## Passkey Management (`sdk.passkey`)
+
+The `passkey` property is a `PasskeyManager` instance.
 
 ### sdk.passkey.register
 
-Register a new passkey.
+Register a new passkey with biometric authentication.
 
 ```typescript
 const credential = await sdk.passkey.register(username, displayName);
@@ -73,16 +96,14 @@ const credential = await sdk.passkey.register(username, displayName);
 | `username` | `string` | Username (shown in passkey prompt) |
 | `displayName` | `string` | Display name for the credential |
 
-**Returns:** `Promise<Credential>`
+**Returns:** `Promise<PasskeyCredential>`
 
 ```typescript
-interface Credential {
-  id: string;           // Base64 credential ID
-  publicKey: {
-    x: string;          // Public key X coordinate (hex)
-    y: string;          // Public key Y coordinate (hex)
-  };
-  rawId: ArrayBuffer;   // Raw credential ID
+interface PasskeyCredential {
+  credentialId: string;
+  publicKeyX: bigint;
+  publicKeyY: bigint;
+  keyHash: string;
 }
 ```
 
@@ -96,357 +117,455 @@ Authenticate with an existing passkey.
 await sdk.passkey.login();
 ```
 
-**Returns:** `Promise<void>`
-
 ---
 
-### sdk.passkey.getStoredCredential
-
-Get the stored credential from localStorage.
+### sdk.passkey.getCredential / getStoredCredential
 
 ```typescript
-const credential = sdk.passkey.getStoredCredential();
+const credential = sdk.passkey.getCredential();
+const stored = sdk.passkey.getStoredCredential();
 ```
 
-**Returns:** `Credential | null`
+**Returns:** `PasskeyCredential | null`
 
 ---
 
-### sdk.passkey.clearCredential
+### sdk.passkey.sign
 
-Clear the stored credential.
+Sign a challenge with the passkey.
 
 ```typescript
-sdk.passkey.clearCredential();
+const signature = await sdk.passkey.sign(challenge);
 ```
+
+**Returns:** `Promise<WebAuthnSignature>`
 
 ---
 
-## Vault Management
+## Vault & Identity
 
 ### sdk.getVaultAddress
 
-Get the deterministic vault address.
+Get the deterministic vault address derived from the passkey.
 
 ```typescript
 const address = sdk.getVaultAddress();
 ```
 
-**Returns:** `string` - The vault address (same on all EVM chains)
+**Returns:** `string` — Same address on all EVM chains for the same passkey.
 
 ---
 
-### sdk.getBalances
+### sdk.getChainConfig
 
-Get balances across all supported chains.
-
-```typescript
-const balances = await sdk.getBalances();
-```
-
-**Returns:** `Promise<ChainBalances>`
+Get the current chain's configuration.
 
 ```typescript
-interface ChainBalances {
-  [chainName: string]: {
-    [symbol: string]: string; // Balance as decimal string
-  };
-}
+const config = sdk.getChainConfig();
 ```
 
-**Example:**
+---
+
+### sdk.getNonce
+
+Get the current nonce for the authenticated passkey.
 
 ```typescript
-const balances = await sdk.getBalances();
-// {
-//   'base-sepolia': { ETH: '0.1', USDC: '100.0' },
-//   'optimism-sepolia': { ETH: '0.05', USDC: '50.0' },
-// }
+const nonce = await sdk.getNonce();
 ```
+
+**Returns:** `Promise<bigint>`
 
 ---
 
 ## Transfers
 
-### sdk.transfer
+### sdk.prepareTransfer
 
-Execute a transfer (requires signer or active session).
+Prepare a transfer with gas estimation. Call this before signing to show the user costs.
 
 ```typescript
-const result = await sdk.transfer(params);
+const prepared = await sdk.prepareTransfer(params);
 ```
 
 **Parameters:**
 
 ```typescript
 interface TransferParams {
-  token: string;        // Token address or 'native'
-  recipient: string;    // Recipient address
-  amount: bigint;       // Amount in smallest unit
+  targetChain: number;   // Wormhole chain ID
+  token: string;         // Token address or 'native'
+  recipient: string;     // Recipient address
+  amount: bigint;        // Amount in smallest unit
 }
 ```
 
-**Returns:** `Promise<TransferResult>`
+**Returns:** `Promise<PreparedTransfer>`
+
+```typescript
+interface PreparedTransfer {
+  params: TransferParams;
+  actionPayload: string;
+  nonce: bigint;
+  challenge: string;
+  estimatedGas: bigint;
+  gasPrice: bigint;
+  messageFee: bigint;
+  totalCost: bigint;
+  formattedCost: string;
+  preparedAt: number;
+  expiresAt: number;      // 5 minutes TTL
+}
+```
+
+**Example:**
+
+```typescript
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: 1000000n,
+});
+
+console.log('Gas cost:', prepared.formattedCost);
+console.log('Expires:', new Date(prepared.expiresAt));
+```
 
 ---
 
-### sdk.transferViaRelayer
+### sdk.transfer
 
-Execute a gasless transfer via relayer.
+Execute a transfer (requires a signer).
 
 ```typescript
-const result = await sdk.transferViaRelayer(params);
+const result = await sdk.transfer(params, signer);
 ```
 
-**Parameters:** Same as `transfer`
-
-**Returns:** `Promise<TransferResult>`
+**Returns:** `Promise<DispatchResult>`
 
 ```typescript
-interface TransferResult {
-  success: boolean;
-  txHash: string;
-  blockNumber?: number;
-  status: 'pending' | 'confirmed' | 'failed';
+interface DispatchResult {
+  transactionHash: string;
+  sequence: bigint;
+  userKeyHash: string;
+  targetChain: number;
+  blockNumber: number;
 }
 ```
 
 ---
 
-## Cross-Chain
+### sdk.getTransactionSummary
 
-### sdk.bridge
-
-Bridge tokens to another chain.
+Get a human-readable summary of a prepared transaction.
 
 ```typescript
-const result = await sdk.bridge(params);
+const summary = await sdk.getTransactionSummary(prepared);
+```
+
+**Returns:** `Promise<TransactionSummary>`
+
+```typescript
+interface TransactionSummary {
+  title: string;           // e.g., "Transfer"
+  description: string;     // e.g., "Send 1.0 USDC to 0x742d...5A234"
+  details: ActionDetails;
+  risks: RiskWarning[];    // e.g., large_transaction, unknown_recipient
+  gasCost: string;
+  expiresIn: number;
+}
+```
+
+**Example:**
+
+```typescript
+const prepared = await sdk.prepareTransfer({ ... });
+const summary = await sdk.getTransactionSummary(prepared);
+
+console.log(summary.title);        // "Transfer"
+console.log(summary.description);  // "Send 1.0 USDC to 0x742d...5A234"
+if (summary.risks.length > 0) {
+  console.warn('Risks:', summary.risks.map(r => r.message));
+}
+```
+
+---
+
+## Cross-Chain Bridges
+
+### sdk.prepareBridge
+
+Prepare a cross-chain bridge with fee estimation.
+
+```typescript
+const prepared = await sdk.prepareBridge(params);
 ```
 
 **Parameters:**
 
 ```typescript
 interface BridgeParams {
-  targetChain: number;  // Wormhole chain ID
-  token: string;        // Token address or 'native'
-  recipient: string;    // Recipient on target chain
-  amount: bigint;       // Amount in smallest unit
-  path?: 'query' | 'vaa'; // Force specific path (optional)
-}
-```
-
-**Returns:** `Promise<BridgeResult>`
-
-```typescript
-interface BridgeResult {
-  success: boolean;
-  txHash: string;
-  estimatedTimeSeconds: number;
-  path: 'query' | 'vaa';
+  sourceChain: number;        // Source Wormhole chain ID
+  destinationChain: number;   // Destination Wormhole chain ID
+  token: string;
+  recipient: string;
+  amount: bigint;
 }
 ```
 
 ---
 
-### sdk.getBridgeStatus
+### sdk.executeBridge
 
-Check bridge transaction status.
+Execute a prepared bridge with cross-chain tracking.
 
 ```typescript
-const status = await sdk.getBridgeStatus(txHash);
+const result = await sdk.executeBridge(prepared, signer, onProgress?);
 ```
 
-**Returns:** `Promise<BridgeStatus>`
+**Progress callback:**
 
 ```typescript
-interface BridgeStatus {
-  state: 'pending' | 'attested' | 'completed' | 'failed';
-  sourceTxHash: string;
-  destinationTxHash?: string;
-  error?: string;
+sdk.executeBridge(prepared, signer, (progress) => {
+  console.log(`Step ${progress.step}/${progress.totalSteps}: ${progress.message}`);
+  // Steps: signing → dispatching → waiting_confirmations → fetching_vaa → relaying → completed
+});
+```
+
+---
+
+### sdk.bridgeViaRelayer
+
+Execute a gasless bridge using the relayer.
+
+```typescript
+const result = await sdk.bridgeViaRelayer(params, onProgress?);
+```
+
+---
+
+### sdk.bridgeWithTracking
+
+Convenience method that prepares and executes a bridge in one call.
+
+```typescript
+const result = await sdk.bridgeWithTracking(params, signer, onProgress?);
+```
+
+---
+
+### sdk.getBridgeFees
+
+Estimate bridge fees without executing.
+
+```typescript
+const fees = await sdk.getBridgeFees(params);
+```
+
+**Returns:** `Promise<CrossChainFees>`
+
+```typescript
+interface CrossChainFees {
+  sourceGas: bigint;
+  messageFee: bigint;
+  relayerFee: bigint;
+  totalCost: bigint;
+  formattedTotal: string;
+  currency: string;
 }
 ```
 
 ---
 
-## Sessions
+## Spending Limits (`sdk.spendingLimits`)
 
-### sdk.sessions.create
+### sdk.getSpendingLimits
 
-Create a new session key.
-
-```typescript
-const session = await sdk.sessions.create(params);
-```
-
-**Parameters:**
+Get current on-chain spending limits for your vault.
 
 ```typescript
-interface SessionParams {
-  duration: number;              // Duration in seconds
-  maxValue?: bigint;             // Max total value
-  allowedTokens?: string[];      // Token whitelist
-  allowedRecipients?: string[];  // Recipient whitelist
-}
-```
-
-**Returns:** `Promise<Session>`
-
-```typescript
-interface Session {
-  id: string;
-  expiresAt: number;        // Unix timestamp
-  maxValue: bigint;
-  usedValue: bigint;
-  remainingValue: bigint;
-  allowedTokens?: string[];
-  allowedRecipients?: string[];
-}
-```
-
----
-
-### sdk.sessions.getActive
-
-Get the active session.
-
-```typescript
-const session = sdk.sessions.getActive();
-```
-
-**Returns:** `Session | null`
-
----
-
-### sdk.sessions.revoke
-
-Revoke the active session.
-
-```typescript
-await sdk.sessions.revoke();
-```
-
----
-
-## Spending Limits
-
-### sdk.spendingLimits.configure
-
-Configure spending limits.
-
-```typescript
-await sdk.spendingLimits.configure(config);
-```
-
-**Parameters:**
-
-```typescript
-interface SpendingLimitConfig {
-  daily?: bigint;
-  perTransaction?: bigint;
-  tokens?: {
-    [address: string]: {
-      daily?: bigint;
-      perTransaction?: bigint;
-    };
-  };
-}
-```
-
----
-
-### sdk.spendingLimits.get
-
-Get current spending limits.
-
-```typescript
-const limits = await sdk.spendingLimits.get();
+const limits = await sdk.getSpendingLimits(chainId?);
 ```
 
 **Returns:** `Promise<SpendingLimits>`
 
 ---
 
-### sdk.spendingLimits.check
+### sdk.getFormattedSpendingLimits
 
-Check if a transfer is allowed.
-
-```typescript
-const result = await sdk.spendingLimits.check({
-  token: USDC,
-  amount: parseUnits('100', 6),
-});
-```
-
-**Returns:** `Promise<SpendingCheck>`
+Get spending limits formatted for UI display.
 
 ```typescript
-interface SpendingCheck {
-  allowed: boolean;
-  reason?: string;
-  available: bigint;
-  resetsAt: number;
-}
+const formatted = await sdk.getFormattedSpendingLimits();
+console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
+console.log(`Resets in: ${formatted.timeUntilReset}`);
 ```
 
 ---
 
-## Utilities
+### sdk.checkSpendingLimit
 
-### getChainConfig
-
-Get chain configuration.
+Check if a transaction amount is within limits.
 
 ```typescript
-import { getChainConfig } from '@veridex/sdk';
+import { ethers } from 'ethers';
 
-const config = getChainConfig('optimism', 'testnet');
+const check = await sdk.checkSpendingLimit(ethers.parseEther('1.0'));
+if (!check.allowed) {
+  console.log(check.message);
+  console.log('Suggestions:', check.suggestions);
+}
 ```
 
-**Returns:** `ChainConfig`
+**Returns:** `Promise<LimitCheckResult>`
+
+---
+
+### sdk.prepareSetDailyLimit
+
+Prepare a transaction to update the daily spending limit.
 
 ```typescript
-interface ChainConfig {
-  name: string;
-  chainId: number;
-  wormholeChainId: number;
-  rpcUrl: string;
-  contracts: {
-    factory?: string;
-    implementation?: string;
-    hub?: string;
-  };
-}
+const prepared = await sdk.prepareSetDailyLimit(ethers.parseEther('5.0'));
+// Sign and execute with sdk.transfer(...)
 ```
 
 ---
 
-### getSupportedChains
+### sdk.preparePauseVault
 
-Get list of supported chains.
+Prepare an emergency pause transaction.
 
 ```typescript
-import { getSupportedChains } from '@veridex/sdk';
+const prepared = await sdk.preparePauseVault();
+```
 
+---
+
+## Balance Management (`sdk.balance`)
+
+### sdk.balance.getPortfolioBalance
+
+Get token balances for a specific chain.
+
+```typescript
+const portfolio = await sdk.balance.getPortfolioBalance(chainId, address);
+console.log('Tokens:', portfolio.tokens);
+console.log('Total USD:', portfolio.totalUsdValue);
+```
+
+---
+
+### sdk.balance.getMultiChainBalances
+
+Get balances across multiple chains.
+
+```typescript
+const results = await sdk.balance.getMultiChainBalances(address, [10004, 10005]);
+```
+
+---
+
+## Transaction Tracking (`sdk.transactions`)
+
+### sdk.transactions.track
+
+Track a transaction's status.
+
+```typescript
+sdk.transactions.track(txHash, chainId, callback?, sequence?);
+```
+
+---
+
+## Gas Sponsorship (`sdk.sponsor`)
+
+### sdk.sponsor
+
+Gasless vault creation for new users.
+
+```typescript
+const result = await sdk.sponsor.createVault(chainId, credential);
+```
+
+---
+
+## Chain Clients
+
+The SDK provides chain-specific clients:
+
+```typescript
+import {
+  EVMClient,
+  SolanaClient,
+  AptosClient,
+  SuiClient,
+  StarknetClient,
+  StacksClient,
+} from '@veridex/sdk';
+```
+
+---
+
+## Session Key Utilities
+
+```typescript
+import {
+  SessionManager,
+  generateSecp256k1KeyPair,
+  computeSessionKeyHash,
+  signWithSessionKey,
+  hashAction,
+  verifySessionSignature,
+  deriveEncryptionKey,
+  encrypt,
+  decrypt,
+  createSessionStorage,
+} from '@veridex/sdk';
+```
+
+---
+
+## Chain Presets & Utilities
+
+```typescript
+import {
+  getChainConfig,
+  getSupportedChains,
+  getHubChains,
+  isChainSupported,
+  getDefaultHub,
+  CHAIN_PRESETS,
+  CHAIN_NAMES,
+} from '@veridex/sdk';
+
+// Get all supported chains
 const chains = getSupportedChains('testnet');
-// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet']
+// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet', 'stacks']
+
+// Get chain config
+const config = getChainConfig('stacks', 'testnet');
+console.log('Wormhole ID:', config.wormholeChainId); // 50003
 ```
 
 ---
 
-## Error Codes
+## Token Constants
 
-| Code | Description |
-|------|-------------|
-| `PASSKEY_NOT_SUPPORTED` | WebAuthn not available |
-| `USER_CANCELLED` | User cancelled biometric prompt |
-| `CREDENTIAL_NOT_FOUND` | No stored credential |
-| `INSUFFICIENT_BALANCE` | Not enough tokens |
-| `SPENDING_LIMIT_EXCEEDED` | Transfer exceeds limit |
-| `SESSION_EXPIRED` | Session key expired |
-| `RELAYER_UNAVAILABLE` | Relayer not responding |
-| `UNSUPPORTED_CHAIN` | Chain not configured |
-| `INVALID_SIGNATURE` | Signature verification failed |
+```typescript
+import {
+  NATIVE_TOKEN_ADDRESS,
+  BASE_SEPOLIA_TOKENS,
+  TOKEN_REGISTRY,
+  getTokenList,
+  getTokenBySymbol,
+  getTokenByAddress,
+  isNativeToken,
+} from '@veridex/sdk';
+
+const usdc = getTokenBySymbol(10004, 'USDC');
+console.log('USDC address:', usdc?.address);
+```
 
 ---
 
@@ -456,15 +575,38 @@ Full TypeScript types are available:
 
 ```typescript
 import type {
-  SDKOptions,
-  Credential,
-  TransferParams,
-  TransferResult,
-  BridgeParams,
-  BridgeResult,
-  Session,
-  SessionParams,
-  SpendingLimitConfig,
-  ChainConfig,
+  // Config
+  VeridexConfig, SimpleSDKConfig, ChainConfig, ChainName, NetworkType,
+
+  // Passkey
+  PasskeyCredential, WebAuthnSignature,
+
+  // Cross-Origin Authentication
+  CrossOriginAuth, CrossOriginAuthConfig, CrossOriginSession,
+  ServerSessionToken, AuthPortalMessage,
+  createCrossOriginAuth, sendAuthResponse, sendAuthError,
+  DEFAULT_AUTH_PORTAL_URL, DEFAULT_RELAYER_URL, AUTH_MESSAGE_TYPES,
+
+  // Actions
+  TransferParams, ExecuteParams, BridgeParams,
+  DispatchResult, PreparedTransfer, PreparedBridge,
+
+  // Results
+  TransferResult, BridgeResult, CrossChainFees,
+
+  // Spending Limits
+  SpendingLimits, FormattedSpendingLimits, LimitCheckResult,
+
+  // Sessions
+  SessionConfig, SessionSignature, KeyPair,
+
+  // Balances
+  TokenBalance, PortfolioBalance,
+
+  // Transaction Summaries
+  TransactionSummary, RiskWarning,
+
+  // Vault & Identity
+  VaultInfo, UnifiedIdentity,
 } from '@veridex/sdk';
 ```

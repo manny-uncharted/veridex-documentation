@@ -5,7 +5,7 @@ description: Integrate Veridex passkey wallets in 5 minutes
 
 # Quick Start
 
-Build a passkey wallet and send your first gasless transaction in under 5 minutes.
+Build a passkey wallet and send your first transaction in under 5 minutes.
 
 ## 1. Initialize the SDK
 
@@ -15,7 +15,7 @@ import { createSDK } from '@veridex/sdk';
 // Initialize with testnet (default)
 const sdk = createSDK('base', {
   network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network', // Or your own relayer
+  relayerUrl: 'https://relayer.veridex.network',
 });
 ```
 
@@ -28,7 +28,8 @@ const credential = await sdk.passkey.register(
   'My Veridex Wallet'  // Display name
 );
 
-console.log('Credential ID:', credential.id);
+console.log('Credential ID:', credential.credentialId);
+console.log('Key Hash:', credential.keyHash);
 console.log('Vault Address:', sdk.getVaultAddress());
 ```
 
@@ -45,40 +46,70 @@ For testnet, use these faucets:
 | Base Sepolia | [base.org/faucet](https://www.base.org/faucet) |
 | Optimism Sepolia | [app.optimism.io/faucet](https://app.optimism.io/faucet) |
 | Arbitrum Sepolia | [faucet.quicknode.com/arbitrum](https://faucet.quicknode.com/arbitrum) |
+| Stacks Testnet | [explorer.hiro.so/sandbox/faucet](https://explorer.hiro.so/sandbox/faucet?chain=testnet) |
 
-Or use the test app's built-in faucet at [demo.veridex.network](https://demo.veridex.network).
-
-## 4. Send a Gasless Transfer
+## 4. Prepare and Execute a Transfer
 
 ```typescript
-// Transfer USDC (gasless - relayer pays gas)
-const result = await sdk.transferViaRelayer({
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+// Prepare a transfer (shows gas cost before signing)
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,  // Base Sepolia Wormhole chain ID
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
   amount: 1000000n, // 1 USDC (6 decimals)
 });
 
-console.log('Transaction hash:', result.txHash);
+// Get human-readable summary
+const summary = await sdk.getTransactionSummary(prepared);
+console.log(summary.title);       // "Transfer"
+console.log(summary.description); // "Send 1.0 USDC to 0x742d...5A234"
+console.log('Gas cost:', prepared.formattedCost);
+
+// Execute with a signer
+const result = await sdk.transfer(prepared.params, signer);
+console.log('Transaction hash:', result.transactionHash);
 ```
 
-## 5. Check Balances
+## 5. Check Spending Limits
 
 ```typescript
-// Get balances across all chains
-const balances = await sdk.getBalances();
+import { ethers } from 'ethers';
 
-console.log('Balances:', balances);
-// {
-//   'base-sepolia': { ETH: '0.1', USDC: '100.0' },
-//   'optimism-sepolia': { ETH: '0.05', USDC: '50.0' },
-//   ...
-// }
+// Check current limits
+const limits = await sdk.getSpendingLimits();
+console.log('Daily remaining:', limits.dailyRemaining);
+
+// Check if a specific amount is allowed
+const check = await sdk.checkSpendingLimit(ethers.parseEther('1.0'));
+if (check.allowed) {
+  console.log('Transfer allowed!');
+} else {
+  console.log('Blocked:', check.message);
+}
+
+// Get formatted limits for UI
+const formatted = await sdk.getFormattedSpendingLimits();
+console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
+```
+
+## 6. Check Balances
+
+```typescript
+// Get portfolio balance for a specific chain
+const vaultAddress = sdk.getVaultAddress();
+const portfolio = await sdk.balance.getPortfolioBalance(10004, vaultAddress);
+
+for (const token of portfolio.tokens) {
+  console.log(`${token.symbol}: ${token.formattedBalance}`);
+}
+console.log('Total USD:', portfolio.totalUsdValue);
 ```
 
 ## Complete Example
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
+import { ethers } from 'ethers';
 
 async function main() {
   // 1. Initialize
@@ -89,9 +120,9 @@ async function main() {
 
   // 2. Check if user has existing passkey
   const existingCredential = sdk.passkey.getStoredCredential();
-  
+
   if (!existingCredential) {
-    // 3. Register new passkey
+    // 3. Register new passkey (prompts biometric)
     console.log('Registering passkey...');
     await sdk.passkey.register('user@example.com', 'My Wallet');
   } else {
@@ -104,22 +135,73 @@ async function main() {
   const vault = sdk.getVaultAddress();
   console.log('Vault:', vault);
 
-  // 6. Get balances
-  const balances = await sdk.getBalances();
-  console.log('Balances:', balances);
+  // 6. Check spending limits
+  const limits = await sdk.getSpendingLimits();
+  console.log('Daily limit remaining:', limits.dailyRemaining);
 
-  // 7. Transfer (if balance exists)
-  if (balances['base-sepolia']?.USDC > 0) {
-    const tx = await sdk.transferViaRelayer({
-      token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-      recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-      amount: 100000n, // 0.1 USDC
-    });
-    console.log('Transfer complete:', tx.txHash);
+  // 7. Prepare a transfer
+  const prepared = await sdk.prepareTransfer({
+    targetChain: 10004,
+    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+    amount: 100000n, // 0.1 USDC
+  });
+
+  // 8. Show summary to user
+  const summary = await sdk.getTransactionSummary(prepared);
+  console.log(`${summary.title}: ${summary.description}`);
+  console.log('Gas cost:', prepared.formattedCost);
+
+  if (summary.risks.length > 0) {
+    console.warn('Risks:', summary.risks.map(r => r.message));
   }
 }
 
 main().catch(console.error);
+```
+
+## Agent SDK Quick Start
+
+For AI agents that need to make autonomous payments:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+async function agentQuickStart() {
+  // 1. Create agent with spending limits
+  const agent = await createAgentWallet({
+    masterCredential: {
+      credentialId: process.env.CREDENTIAL_ID!,
+      publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+      publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+      keyHash: process.env.KEY_HASH!,
+    },
+    session: {
+      dailyLimitUSD: 50,
+      perTransactionLimitUSD: 10,
+      expiryHours: 24,
+    },
+  });
+
+  // 2. Fetch paid data (x402 handled automatically)
+  const response = await agent.fetch('https://paid-api.example.com/data');
+  const data = await response.json();
+
+  // 3. Direct payment
+  const receipt = await agent.pay({
+    chain: 10004,
+    token: 'USDC',
+    amount: '1000000',
+    recipient: '0x...',
+  });
+
+  // 4. Check spending
+  const status = agent.getSessionStatus();
+  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits.dailyLimitUSD}`);
+
+  // 5. Clean up
+  await agent.revokeSession();
+}
 ```
 
 ## React Integration
@@ -172,10 +254,13 @@ export function WalletButton() {
   <Card title="Session Keys" href="/guides/session-keys">
     Enable smooth UX without repeated biometric prompts
   </Card>
-  <Card title="Cross-Chain Transfers" href="/guides/cross-chain">
-    Send tokens between different blockchains
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    Build autonomous AI agent payments
   </Card>
   <Card title="Spending Limits" href="/guides/spending-limits">
     Configure spending limits for safety
+  </Card>
+  <Card title="Stacks Integration" href="/chains/stacks">
+    Use Veridex on Stacks with native passkey support
   </Card>
 </Cards>
