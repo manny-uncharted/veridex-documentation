@@ -68,7 +68,8 @@
                 "guides/session-keys",
                 "guides/spending-limits",
                 "guides/cross-chain",
-                "guides/agent-payments"
+                "guides/agent-payments",
+                "guides/agent-identity"
             ]
         },
         {

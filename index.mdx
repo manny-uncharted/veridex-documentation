@@ -1,20 +1,20 @@
 ---
 title: Veridex Protocol Documentation
-description: Cross-chain passkey authentication and autonomous agent payments for the multi-chain web
+description: Cross-chain passkey authentication, autonomous agent payments, and on-chain identity for the multi-chain web
 ---
 
 # Veridex Protocol
 
 **One passkey. Any chain. Fully self-custodial.**
 
-Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching. It also provides an **Agent SDK** for autonomous AI agent payments via the x402 HTTP payment protocol.
+Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching. It also provides an **Agent SDK** for autonomous AI agent payments, on-chain identity (ERC-8004), and reputation-gated commerce.
 
 ## Two Packages, One Protocol
 
 | Package | Purpose | Install |
 |---------|---------|---------|
-| **`@veridex/sdk`** | Core SDK — passkey wallets, vaults, sessions, cross-chain transfers | `npm install @veridex/sdk` |
-| **`@veridex/agentic-payments`** | Agent SDK — autonomous AI agent payments, x402, spending limits, MCP tools | `npm install @veridex/agentic-payments` |
+| **`@veridex/sdk`** | Core SDK — passkey wallets, vaults, sessions, cross-chain transfers, ERC-8004 utilities | `npm install @veridex/sdk` |
+| **`@veridex/agentic-payments`** | Agent SDK — autonomous payments, on-chain identity, reputation, trust gates, discovery, MCP tools | `npm install @veridex/agentic-payments` |
 
 ## Why Veridex?
 
@@ -25,6 +25,7 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
 | **Cross-chain** | Manual bridging | Limited | **Native multi-chain** |
 | **Recovery** | Seed phrase | Via provider | **On-chain social recovery** |
 | **AI Agents** | Not supported | Custodial keys | **Session keys + spending limits** |
+| **Agent Identity** | None | None | **ERC-8004 on-chain identity + reputation** |
 
 ## Quick Links
 
@@ -38,8 +39,8 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
   <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
     Agent SDK for autonomous payments
   </Card>
-  <Card title="Guides" href="/guides/create-wallet">
-    Step-by-step integration guides
+  <Card title="Agent Identity" href="/guides/agent-identity">
+    ERC-8004 identity, reputation, and discovery
   </Card>
 </Cards>
 
@@ -55,6 +56,7 @@ Veridex is a cross-chain passkey authentication protocol that lets users control
 | Sui | Spoke | ✅ Live |
 | Starknet | Spoke | ✅ Live |
 | Stacks | Spoke | ✅ Live |
+| Monad | Spoke (EVM) | ✅ Live |
 
 ## How It Works
 
@@ -107,7 +109,7 @@ console.log(summary.title, summary.description);
 ```typescript
 import { createAgentWallet } from '@veridex/agentic-payments';
 
-// Create an autonomous agent wallet
+// Create an autonomous agent wallet with on-chain identity
 const agent = await createAgentWallet({
   masterCredential: {
     credentialId: 'passkey-credential-id',
@@ -121,23 +123,30 @@ const agent = await createAgentWallet({
     expiryHours: 24,
     allowedChains: [10004], // Base Sepolia
   },
+  erc8004: {
+    enabled: true,
+    testnet: true,
+    minReputationScore: 30, // only pay merchants with 30+ reputation
+  },
 });
 
-// Autonomous x402 payment — agent handles 402 responses automatically
+// Register on-chain identity (ERC-721 NFT)
+const { agentId } = await agent.register({
+  name: 'My Data Agent',
+  description: 'Autonomous data analyst',
+  services: [{ name: 'analysis', endpoint: 'https://my-agent.com/api' }],
+});
+
+// Fetch with auto-payment + reputation check + auto-feedback
 const response = await agent.fetch('https://paid-api.example.com/data');
 const data = await response.json();
 
-// Direct payment
-const receipt = await agent.pay({
-  chain: 10004,
-  token: 'USDC',
-  amount: '1000000', // 1 USDC
-  recipient: '0x...',
-});
+// Discover other agents by capability
+const agents = await agent.discover({ category: 'sentiment' });
 
-// Monitor spending
-const status = agent.getSessionStatus();
-console.log('Spent:', status.totalSpentUSD, 'Remaining:', status.remainingDailyLimitUSD);
+// Check a merchant's reputation before subscribing
+const trust = await agent.checkMerchantTrust('https://data-provider.com');
+console.log(`Reputation: ${trust.score}/100`);
 ```
 
 ## Resources

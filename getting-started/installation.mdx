@@ -84,12 +84,17 @@ For building autonomous AI agents that can make payments:
 | Session key management | ✅ `SessionManager` | ✅ `SessionKeyManager` (enhanced) |
 | Spending limits | ✅ `SpendingLimitsManager` | ✅ `SpendingTracker` (USD-aware) |
 | Cross-chain transfers | ✅ | ✅ `CrossChainRouter` |
-| x402 HTTP payments | — | ✅ `X402Client` |
+| ERC-8004 low-level utilities | ✅ `erc8004/` module | ✅ (via re-export) |
+| ERC-8004 identity clients | — | ✅ `IdentityClient`, `ReputationClient` |
+| Registration file management | — | ✅ `RegistrationFileManager` |
+| Trust gates & reputation | — | ✅ `TrustGate`, `ReputationPipeline` |
+| Agent discovery | — | ✅ `AgentDiscovery` |
+| Protocol detection (x402/UCP/ACP/AP2) | — | ✅ `ProtocolDetector` |
 | AI agent orchestration | — | ✅ `AgentWallet` |
 | MCP tools (Claude/Cursor) | — | ✅ `MCPServer` |
 | UCP credentials | — | ✅ `UCPCredentialProvider` |
 | Audit logging & compliance | — | ✅ `AuditLogger`, `ComplianceExporter` |
-| Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks | All + `StacksChainClient`, `StacksSpendingTracker` |
+| Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks, Monad | All + `MonadChainClient`, `StacksChainClient` |
 | Pyth price oracle | — | ✅ `PythOracle` |
 
 ## TypeScript Configuration

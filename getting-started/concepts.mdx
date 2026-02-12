@@ -235,21 +235,32 @@ flowchart TD
 
 ## Agent SDK Concepts
 
-The Agent SDK (`@veridex/agentic-payments`) extends the core SDK for autonomous AI agent operations.
+The Agent SDK (`@veridex/agentic-payments`) extends the core SDK for autonomous AI agent operations, including payments, on-chain identity, reputation, and multi-protocol support.
 
 ### AgentWallet
 
-The central orchestration class that manages session keys, x402 payments, spending limits, and audit logging.
+The central orchestration class that manages session keys, payments, on-chain identity (ERC-8004), reputation, trust gates, agent discovery, and audit logging.
 
 ```typescript
 import { createAgentWallet } from '@veridex/agentic-payments';
 
-const agent = await createAgentWallet(config);
+const agent = await createAgentWallet({
+  masterCredential: { /* passkey credential */ },
+  session: { dailyLimitUSD: 50, perTransactionLimitUSD: 10, expiryHours: 24 },
+  erc8004: { enabled: true, testnet: true, minReputationScore: 30 },
+});
 ```
 
-### x402 HTTP Payment Protocol
+### Protocol Abstraction Layer
 
-The x402 protocol enables AI agents to pay for API access automatically:
+The SDK supports multiple payment protocols with automatic detection. When `agent.fetch()` encounters a paywall, it auto-detects the protocol and handles payment:
+
+| Protocol | Creator | Priority | Use Case |
+|----------|---------|----------|----------|
+| **UCP** | Google/Shopify | 100 | Commerce/search integration |
+| **ACP** | OpenAI/Stripe | 90 | ChatGPT ecosystem payments |
+| **AP2** | Google | 80 | A2A mandate delegation |
+| **x402** | Coinbase/Cloudflare | 70 | HTTP micropayments (402 Payment Required) |
 
 ```mermaid
 sequenceDiagram
@@ -257,12 +268,107 @@ sequenceDiagram
     participant Server
 
     Agent->>Server: HTTP request
-    Server-->>Agent: 402 Payment Required<br/>(amount, recipient, network)
-    Agent->>Agent: Parse requirements, check spending limits
+    Server-->>Agent: 402 Payment Required
+    Agent->>Agent: ProtocolDetector identifies protocol
+    Agent->>Agent: Check merchant reputation (TrustGate)
+    Agent->>Agent: Check spending limits
     Agent->>Agent: Sign payment with session key
-    Agent->>Server: Retry with PAYMENT-SIGNATURE header
-    Server-->>Agent: Verify payment, return data
+    Agent->>Server: Retry with payment proof
+    Server-->>Agent: Returns data
+    Agent->>Agent: Auto-submit reputation feedback
 ```
+
+### ERC-8004 On-Chain Identity
+
+The [ERC-8004](https://www.8004.org/learn) standard provides on-chain identity for AI agents via three singleton registries deployed on every EVM chain:
+
+| Registry | Purpose | Canonical Mainnet Address |
+|----------|---------|--------------------------|
+| **Identity** | Agent registration (ERC-721 NFT), metadata URI, wallet linkage | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
+| **Reputation** | Feedback submission, revocation, scoring, summaries | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
+| **Validation** | Third-party attestations (spec in progress) | TBD |
+
+When an agent registers, it receives an **ERC-721 NFT** that represents its on-chain identity. The NFT's `tokenURI` points to a registration file containing the agent's name, description, services, and capabilities.
+
+```typescript
+// Register an agent on-chain
+const { agentId, agentURI } = await agent.register({
+  name: 'Sentiment Analyzer',
+  description: 'NLP-powered sentiment analysis',
+  services: [{ name: 'analyze', endpoint: 'https://my-agent.com/analyze' }],
+});
+```
+
+### Reputation & Trust Gates
+
+After every payment, the SDK can automatically submit reputation feedback to the ERC-8004 Reputation Registry. Before paying a merchant, the SDK can check their reputation score:
+
+```typescript
+// Check merchant reputation before paying
+const trust = await agent.checkMerchantTrust('https://data-provider.com');
+// trust.score: 0-100, trust.trusted: boolean
+
+// Get detailed reputation
+const summary = await agent.getReputation(agentId);
+// summary.feedbackCount, summary.normalizedScore, summary.tags
+```
+
+The **TrustGate** enforces minimum reputation thresholds:
+- If `minReputationScore` is set, `agent.fetch()` will reject merchants below that score
+- `trustedReviewers` can filter which feedback counts toward the score
+
+### Agent Discovery
+
+Agents can discover other agents on-chain by capability, chain, or reputation:
+
+```typescript
+// Find sentiment analysis agents
+const agents = await agent.discover({ category: 'sentiment' });
+
+// Resolve an agent from a URL, UAI, or address
+const resolved = await agent.resolveAgent('https://my-agent.com');
+```
+
+The **AgentDiscovery** client supports resolution from:
+- **UAI** (Universal Agent Identifier) — CAIP-2 extended format
+- **Endpoint URL** — via `/.well-known/agent-registration.json`
+- **Chain address** — reverse lookup on Identity Registry
+- **Search** — by name, category, or tags
+
+### Registration File Management
+
+The **RegistrationFileManager** builds, validates, and publishes ERC-8004 registration files:
+
+```typescript
+import { RegistrationFileManager } from '@veridex/agentic-payments';
+
+// Build a registration file
+const file = RegistrationFileManager.buildRegistrationFile({
+  name: 'My Agent',
+  description: 'Does cool things',
+  services: [{ name: 'api', endpoint: 'https://my-agent.com/api' }],
+});
+
+// Validate against ERC-8004 schema
+const { valid, errors } = RegistrationFileManager.validate(file);
+
+// Publish to IPFS or encode as data URI
+const dataURI = RegistrationFileManager.buildDataURI(file);
+```
+
+### Modular Identity Clients
+
+The identity module is composed of independent, chain-agnostic clients:
+
+| Client | Purpose |
+|--------|---------|
+| **IdentityClient** | ERC-8004 Identity Registry — register, query, update agents |
+| **ReputationClient** | ERC-8004 Reputation Registry — feedback, scoring, summaries |
+| **RegistrationFileManager** | Build, validate, publish registration files (IPFS/data URI) |
+| **TrustGate** | Pre-payment reputation checks |
+| **AgentDiscovery** | Resolve agents from UAI, URL, address, or search |
+| **ServiceDirectoryClient** | Veridex-specific on-chain marketplace (not ERC-8004) |
+| **ERC8004Client** | Backward-compatible facade composing all of the above |
 
 ### Spending Limits (Three Layers)
 
@@ -285,7 +391,7 @@ const agent = await createAgentWallet({
 });
 
 const tools = agent.getMCPTools();
-// Tools: check_balance, send_payment, get_session_status, etc.
+// Tools: check_balance, send_payment, get_session_status, discover_agents, get_reputation, etc.
 ```
 
 ### Pyth Oracle
@@ -306,13 +412,13 @@ const stxPrice = await oracle.getPrice('STX');
   <Card title="Create Wallet" href="/guides/create-wallet">
     Step-by-step wallet creation guide
   </Card>
+  <Card title="Agent Identity" href="/guides/agent-identity">
+    ERC-8004 identity, reputation, and discovery
+  </Card>
   <Card title="Agent Payments" href="/guides/agent-payments">
     Build autonomous AI agent payments
   </Card>
   <Card title="SDK Reference" href="/api-reference/sdk">
     Explore the SDK API
-  </Card>
-  <Card title="Stacks Integration" href="/chains/stacks">
-    Native passkey support on Stacks
   </Card>
 </Cards>

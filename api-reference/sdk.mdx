@@ -569,6 +569,82 @@ console.log('USDC address:', usdc?.address);
 
 ---
 
+## ERC-8004 Utilities (`erc8004/`)
+
+The core SDK provides low-level ERC-8004 contract utilities for direct registry interaction.
+
+```typescript
+import {
+  // Addresses
+  getERC8004Addresses,
+  isERC8004Chain,
+  ERC8004_CHAINS,
+
+  // ABIs
+  IDENTITY_REGISTRY_ABI,
+  IDENTITY_REGISTRY_READ_ABI,
+  REPUTATION_REGISTRY_ABI,
+  REPUTATION_REGISTRY_READ_ABI,
+  VALIDATION_REGISTRY_ABI,
+
+  // Types
+  type ERC8004AgentRegistration,
+  type ERC8004MetadataEntry,
+  type ERC8004FeedbackEntry,
+  type ERC8004FeedbackSummary,
+  type ERC8004ValidationStatus,
+  type UniversalAgentIdentifier,
+} from '@veridex/sdk';
+```
+
+### getERC8004Addresses
+
+Get canonical ERC-8004 registry addresses for a network.
+
+```typescript
+const addresses = getERC8004Addresses('mainnet');
+// {
+//   identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+//   reputationRegistry: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+// }
+
+const testnetAddresses = getERC8004Addresses('testnet');
+// {
+//   identityRegistry: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+//   reputationRegistry: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+// }
+```
+
+### isERC8004Chain
+
+Check if a chain has ERC-8004 singleton registries deployed.
+
+```typescript
+const supported = isERC8004Chain('base');      // true
+const supported2 = isERC8004Chain('monad');    // true
+const supported3 = isERC8004Chain('solana');   // false (non-EVM)
+```
+
+### ERC8004_CHAINS
+
+List of all chains with ERC-8004 singletons:
+
+```typescript
+console.log(ERC8004_CHAINS);
+// ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism', 'linea', 'megaeth', 'monad', ...]
+```
+
+### Canonical Addresses
+
+The same singleton addresses work on **every EVM chain** (deployed via CREATE2):
+
+| Registry | Mainnet | Testnet |
+|----------|---------|---------|
+| **Identity** | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+| **Reputation** | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+
+---
+
 ## Types
 
 Full TypeScript types are available:
@@ -608,5 +684,10 @@ import type {
 
   // Vault & Identity
   VaultInfo, UnifiedIdentity,
+
+  // ERC-8004
+  ERC8004AgentRegistration, ERC8004MetadataEntry,
+  ERC8004FeedbackEntry, ERC8004FeedbackSummary,
+  ERC8004ValidationStatus, UniversalAgentIdentifier,
 } from '@veridex/sdk';
 ```

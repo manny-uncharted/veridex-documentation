@@ -1,6 +1,6 @@
 ---
 title: Agent Payments
-description: Build autonomous AI agents that can make payments via x402
+description: Build autonomous AI agents that can make payments with identity and reputation
 ---
 
 # Agent Payments
@@ -11,11 +11,15 @@ This guide walks through building an autonomous AI agent that can make payments 
 
 The Agent SDK enables AI agents to:
 
-- **Pay for APIs automatically** via the x402 HTTP payment protocol
+- **Pay for APIs automatically** via multiple protocols (x402, UCP, ACP, AP2) with auto-detection
+- **Register on-chain identity** via ERC-8004 (ERC-721 NFT)
+- **Check merchant reputation** before paying (trust gates)
+- **Submit reputation feedback** automatically after payments
+- **Discover other agents** by capability, chain, or reputation
 - **Manage spending limits** with daily and per-transaction caps
 - **Use session keys** so the master passkey isn't needed for every payment
 - **Monitor spending** with real-time alerts and audit logs
-- **Operate across chains** including EVM, Solana, Stacks, and more
+- **Operate across chains** including EVM, Solana, Stacks, Monad, and more
 
 ## Prerequisites
 
@@ -45,6 +49,11 @@ const agent = await createAgentWallet({
     expiryHours: 24,             // Session lasts 24 hours
     allowedChains: [10004],      // Base Sepolia only
   },
+  erc8004: {
+    enabled: true,               // Enable on-chain identity
+    testnet: true,               // Use testnet registries
+    minReputationScore: 30,      // Only pay merchants with 30+ reputation
+  },
   relayerUrl: 'https://relayer.veridex.network',
 });
 
@@ -53,7 +62,7 @@ console.log('Session:', agent.getSessionStatus());
 ```
 
 <Callout type="info">
-  The `createAgentWallet` function automatically creates a session key derived from your master credential. The session key has limited permissions defined by the `session` config.
+  The `createAgentWallet` function automatically creates a session key derived from your master credential. The session key has limited permissions defined by the `session` config. When `erc8004` is enabled, the agent also initializes identity and reputation clients for on-chain operations.
 </Callout>
 
 ## 2. Automatic x402 Payments
@@ -293,11 +302,11 @@ try {
 ## Next Steps
 
 <Cards>
+  <Card title="Agent Identity" href="/guides/agent-identity">
+    ERC-8004 identity, reputation, and discovery
+  </Card>
   <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
     Complete API documentation
-  </Card>
-  <Card title="Stacks Integration" href="/chains/stacks">
-    Use agents on Stacks with x402
   </Card>
   <Card title="Spending Limits" href="/guides/spending-limits">
     Configure spending safety

@@ -1,0 +1,436 @@
+---
+title: Agent Identity & Reputation
+description: Register on-chain identity, build reputation, discover agents, and enforce trust gates with ERC-8004
+---
+
+# Agent Identity & Reputation
+
+This guide walks through using the ERC-8004 on-chain identity and reputation system in the Veridex Agent SDK. By the end, your agent will have an on-chain identity (ERC-721 NFT), can accumulate reputation, discover other agents, and enforce trust gates before payments.
+
+## Overview
+
+The [ERC-8004](https://www.8004.org/learn) standard provides three singleton registries deployed on every EVM chain:
+
+| Registry | Purpose |
+|----------|---------|
+| **Identity** | Agent registration as ERC-721 NFT, metadata URI, wallet linkage |
+| **Reputation** | Feedback submission, revocation, scoring, summaries |
+| **Validation** | Third-party attestations (spec in progress) |
+
+The SDK provides modular clients for each registry, plus higher-level abstractions for trust gating and agent discovery.
+
+## Prerequisites
+
+```bash
+npm install @veridex/agentic-payments
+```
+
+You'll need:
+- A funded wallet on an ERC-8004 supported chain (Base, Ethereum, Monad, etc.)
+- For IPFS publishing: a Pinata or web3.storage API key (optional — data URIs work without external deps)
+
+## 1. Register an Agent Identity
+
+### Via AgentWallet (Recommended)
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: process.env.CREDENTIAL_ID!,
+    publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+    publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+    keyHash: process.env.KEY_HASH!,
+  },
+  session: {
+    dailyLimitUSD: 50,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+  },
+  erc8004: {
+    enabled: true,
+    testnet: true,
+  },
+});
+
+// Register on-chain — mints an ERC-721 NFT
+const { agentId, agentURI } = await agent.register({
+  name: 'Market Data Analyst',
+  description: 'Autonomous agent that analyzes crypto market data',
+  services: [
+    { name: 'analyze', endpoint: 'https://my-agent.com/api/analyze' },
+    { name: 'report', endpoint: 'https://my-agent.com/api/report' },
+  ],
+  x402Support: true,
+});
+
+console.log(`Registered as agent #${agentId}`);
+console.log(`Agent URI: ${agentURI}`);
+```
+
+### Via IdentityClient (Standalone)
+
+```typescript
+import { IdentityClient } from '@veridex/agentic-payments';
+import { ethers } from 'ethers';
+
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+const signer = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+const identity = new IdentityClient(provider, signer, { testnet: false });
+
+const { agentId, agentURI } = await identity.registerWithFile({
+  name: 'Price Oracle',
+  description: 'Real-time crypto prices via Pyth + CoinGecko',
+  services: [{ name: 'price', endpoint: 'https://oracle.example.com/price' }],
+});
+```
+
+<Callout type="info">
+  Registration mints an ERC-721 NFT on the Identity Registry. The NFT's `tokenURI` points to a registration file containing the agent's metadata and service endpoints. The same canonical registry address works on every EVM chain.
+</Callout>
+
+## 2. Build & Publish Registration Files
+
+The **RegistrationFileManager** handles the creation, validation, and publishing of ERC-8004 registration files.
+
+### Build a Registration File
+
+```typescript
+import { RegistrationFileManager } from '@veridex/agentic-payments';
+
+const file = RegistrationFileManager.buildRegistrationFile({
+  name: 'My Agent',
+  description: 'Does cool things',
+  services: [
+    { name: 'api', endpoint: 'https://my-agent.com/api' },
+    { name: 'webhook', endpoint: 'https://my-agent.com/webhook' },
+  ],
+});
+```
+
+### Validate Against Schema
+
+```typescript
+const { valid, errors } = RegistrationFileManager.validate(file);
+
+if (!valid) {
+  console.error('Validation errors:', errors);
+} else {
+  console.log('Registration file is valid');
+}
+```
+
+### Publish Options
+
+**Data URI** (no external dependencies):
+
+```typescript
+const dataURI = RegistrationFileManager.buildDataURI(file);
+// data:application/json;base64,eyJuYW1lIjoiTXkgQWdlbnQiLC...
+```
+
+**IPFS** (requires Pinata or web3.storage):
+
+```typescript
+const manager = new RegistrationFileManager({
+  ipfs: {
+    gateway: 'https://api.pinata.cloud',
+    apiKey: process.env.PINATA_API_KEY!,
+    provider: 'pinata',
+  },
+});
+
+const ipfsURI = await manager.publishToIPFS(file);
+// ipfs://QmXyz...
+```
+
+### Manage Services
+
+```typescript
+// Add a service
+const updated = RegistrationFileManager.addService(file, {
+  name: 'new-endpoint',
+  endpoint: 'https://my-agent.com/new',
+});
+
+// Remove a service
+const trimmed = RegistrationFileManager.removeService(updated, 'new-endpoint');
+```
+
+### Well-Known File
+
+For zero-lookup agent resolution, serve a well-known file:
+
+```typescript
+const wellKnown = RegistrationFileManager.buildWellKnownFile(
+  Number(agentId),
+  `eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432:${agentId}`,
+  ipfsURI,
+);
+
+// Serve at: https://my-agent.com/.well-known/agent-registration.json
+```
+
+Other agents can then resolve your agent just from your URL — no on-chain lookup needed.
+
+## 3. Query & Submit Reputation
+
+### Get Reputation Score
+
+```typescript
+// Via AgentWallet
+const score = await agent.getReputationScore(targetAgentId);
+console.log(`Agent reputation: ${score}/100`);
+
+// Detailed summary
+const summary = await agent.getReputation(targetAgentId);
+console.log(`${summary.feedbackCount} reviews`);
+console.log(`Score: ${summary.normalizedScore}/100`);
+console.log(`Tags: ${summary.tags.join(', ')}`);
+```
+
+### Submit Feedback
+
+```typescript
+await agent.submitFeedback(targetAgentId, {
+  score: 85,
+  tags: ['fast', 'accurate', 'reliable'],
+  comment: 'Excellent data quality and low latency',
+});
+```
+
+### Trusted Reviewers
+
+Filter reputation to only count feedback from specific addresses:
+
+```typescript
+const score = await agent.getReputationScore(targetAgentId, [
+  '0xTrustedReviewer1...',
+  '0xTrustedReviewer2...',
+]);
+```
+
+### Via ReputationClient (Standalone)
+
+```typescript
+import { ReputationClient } from '@veridex/agentic-payments';
+
+const reputation = new ReputationClient(provider, signer, { testnet: false });
+
+await reputation.submitFeedback(agentId, { score: 90, tags: ['fast'] });
+const summary = await reputation.getSummary(agentId, []);
+const score = await reputation.getReputationScore(agentId);
+
+// Revoke previous feedback
+await reputation.revokeFeedback(agentId);
+```
+
+## 4. Trust-Gated Payments
+
+The **TrustGate** enforces minimum reputation before the agent pays a merchant. This is configured via the `erc8004.minReputationScore` option.
+
+### Configure Trust Gate
+
+```typescript
+const agent = await createAgentWallet({
+  masterCredential: { /* ... */ },
+  session: { dailyLimitUSD: 100, perTransactionLimitUSD: 10, expiryHours: 24 },
+  erc8004: {
+    enabled: true,
+    testnet: false,
+    minReputationScore: 30,       // Reject merchants below 30/100
+    trustedReviewers: [           // Only count these reviewers
+      '0xDeFiLlama...',
+      '0xMessari...',
+    ],
+  },
+});
+```
+
+### How It Works
+
+When `agent.fetch()` encounters a paywall:
+
+1. SDK detects the payment protocol (x402, UCP, ACP, AP2)
+2. **TrustGate** resolves the merchant's agent identity from the endpoint URL
+3. Queries the merchant's reputation score (filtered by trusted reviewers)
+4. If score < `minReputationScore` → **rejects the payment** and throws an error
+5. If score >= threshold → proceeds with payment
+6. After successful payment → **auto-submits reputation feedback**
+
+### Manual Trust Check
+
+```typescript
+const trust = await agent.checkMerchantTrust('https://data-provider.com');
+
+if (trust.trusted) {
+  console.log(`Trusted — score: ${trust.score}/100`);
+} else {
+  console.log(`Untrusted — reason: ${trust.reason}`);
+}
+```
+
+## 5. Discover Agents
+
+### By Category
+
+```typescript
+const sentimentAgents = await agent.discover({
+  category: 'sentiment',
+  minReputation: 30,
+  limit: 10,
+});
+
+for (const a of sentimentAgents) {
+  const score = await agent.getReputationScore(a.agentId);
+  console.log(`Agent #${a.agentId}: ${a.name} — reputation: ${score}/100`);
+}
+```
+
+### Resolve from URL
+
+```typescript
+const resolved = await agent.resolveAgent('https://oracle.example.com');
+
+if (resolved) {
+  console.log(`Found agent #${resolved.agentId}: ${resolved.name}`);
+  console.log(`Reputation: ${resolved.reputationScore}/100`);
+  console.log(`Resolved from: ${resolved.resolvedFrom}`); // 'url'
+}
+```
+
+### Resolve from UAI
+
+The Universal Agent Identifier (UAI) extends CAIP-2 format:
+
+```
+eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432:42
+│       │    │                                          │
+│       │    │                                          └── Agent ID
+│       │    └── Identity Registry address
+│       └── Chain ID (Base mainnet)
+└── Namespace (EVM)
+```
+
+```typescript
+const resolved = await agent.resolveAgent(
+  'eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432:42'
+);
+```
+
+### Via AgentDiscovery (Standalone)
+
+```typescript
+import { AgentDiscovery } from '@veridex/agentic-payments';
+
+const discovery = new AgentDiscovery(identityClient, reputationClient);
+
+// Resolve from any input type
+const fromUrl = await discovery.resolve('https://my-agent.com');
+const fromUai = await discovery.resolve('eip155:8453:0x8004A169...:42');
+const fromAddr = await discovery.resolve('0x742d35Cc...');
+```
+
+## 6. Complete Example: Coordinator Agent
+
+A coordinator agent that discovers specialist agents, checks their reputation, hires them, and submits feedback:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+async function coordinatorAgent() {
+  const agent = await createAgentWallet({
+    masterCredential: {
+      credentialId: process.env.CREDENTIAL_ID!,
+      publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+      publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+      keyHash: process.env.KEY_HASH!,
+    },
+    session: {
+      dailyLimitUSD: 200,
+      perTransactionLimitUSD: 5,
+      expiryHours: 8,
+    },
+    erc8004: {
+      enabled: true,
+      testnet: true,
+      minReputationScore: 20,
+    },
+  });
+
+  // 1. Register this coordinator
+  const { agentId } = await agent.register({
+    name: 'Research Coordinator',
+    description: 'Orchestrates multi-agent research tasks',
+    services: [{ name: 'coordinate', endpoint: 'https://coordinator.example.com/api' }],
+  });
+  console.log(`Registered as agent #${agentId}`);
+
+  // 2. Discover sentiment analysis agents
+  const sentimentAgents = await agent.discover({ category: 'sentiment' });
+  console.log(`Found ${sentimentAgents.length} sentiment agents`);
+
+  // 3. Pick the highest-reputation agent
+  let bestAgent = null;
+  let bestScore = 0;
+  for (const a of sentimentAgents) {
+    const score = await agent.getReputationScore(a.agentId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestAgent = a;
+    }
+  }
+
+  if (!bestAgent) {
+    console.log('No suitable agents found');
+    return;
+  }
+
+  console.log(`Hiring agent #${bestAgent.agentId} (score: ${bestScore}/100)`);
+
+  // 4. Call the agent's API (trust-gated fetch handles reputation + payment)
+  const response = await agent.fetch(bestAgent.services?.[0]?.endpoint + '/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'Bitcoin just hit $100K!' }),
+  });
+
+  const result = await response.json();
+  console.log('Sentiment result:', result);
+
+  // 5. Feedback is auto-submitted after payment
+  // Or submit manually with custom tags:
+  await agent.submitFeedback(bestAgent.agentId, {
+    score: 90,
+    tags: ['fast', 'accurate'],
+  });
+}
+
+coordinatorAgent().catch(console.error);
+```
+
+## Canonical Registry Addresses
+
+The same singleton addresses work on **every EVM chain** (deployed via CREATE2):
+
+| Registry | Mainnet | Testnet |
+|----------|---------|---------|
+| **Identity** | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+| **Reputation** | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+
+Supported chains: Base, Ethereum, Polygon, Arbitrum, Optimism, Linea, MegaETH, Monad (+ all testnets).
+
+## Next Steps
+
+<Cards>
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    Payments, spending limits, and monitoring
+  </Card>
+  <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
+    Complete API documentation
+  </Card>
+  <Card title="ERC-8004 Specification" href="https://www.8004.org/learn">
+    Official ERC-8004 standard
+  </Card>
+</Cards>
