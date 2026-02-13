@@ -1,0 +1,14 @@
+{
+  "index": {
+    "title": "Home",
+    "type": "page",
+    "display": "hidden"
+  },
+  "getting-started": "Get Started",
+  "guides": "Guides",
+  "chains": "Chains",
+  "integrations": "Integrations",
+  "security": "Security",
+  "resources": "Resources",
+  "api-reference": "API Reference"
+}

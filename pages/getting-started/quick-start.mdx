@@ -1,0 +1,272 @@
+---
+title: Quick Start
+description: Integrate Veridex passkey wallets in 5 minutes
+---
+
+import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../../components/mdx"
+
+# Quick Start
+
+Build a passkey wallet and send your first transaction in under 5 minutes.
+
+<Callout type="warning">
+  **Frontend Required:** Passkey operations (`register`, `authenticate`) use WebAuthn browser APIs and must run in a **client-side browser context** (HTTPS or localhost). They cannot run in Node.js, server components, or terminal scripts. All code examples below must execute in a browser — either in a React/Next.js client component, a plain HTML page with a `<script>` tag, or any other browser environment.
+</Callout>
+
+## 1. Initialize the SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+// Initialize with testnet (default)
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+```
+
+## 2. Register a Passkey
+
+```typescript
+// Prompt user to create a passkey with biometric
+const credential = await sdk.passkey.register(
+  'user@example.com',  // Username (displayed in passkey prompt)
+  'My Veridex Wallet'  // Display name
+);
+
+console.log('Credential ID:', credential.credentialId);
+console.log('Key Hash:', credential.keyHash);
+console.log('Vault Address:', sdk.getVaultAddress());
+```
+
+<Callout type="info">
+  The vault address is **deterministic** — the same passkey always generates the same address across all EVM chains.
+</Callout>
+
+## 3. Fund the Vault
+
+For testnet, use these faucets:
+
+| Chain | Faucet |
+|-------|--------|
+| Base Sepolia | [base.org/faucet](https://www.base.org/faucet) |
+| Optimism Sepolia | [app.optimism.io/faucet](https://app.optimism.io/faucet) |
+| Arbitrum Sepolia | [faucet.quicknode.com/arbitrum](https://faucet.quicknode.com/arbitrum) |
+| Stacks Testnet | [explorer.hiro.so/sandbox/faucet](https://explorer.hiro.so/sandbox/faucet?chain=testnet) |
+
+## 4. Prepare and Execute a Transfer
+
+```typescript
+// Prepare a transfer (shows gas cost before signing)
+const prepared = await sdk.prepareTransfer({
+  targetChain: 10004,  // Base Sepolia Wormhole chain ID
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: 1000000n, // 1 USDC (6 decimals)
+});
+
+// Get human-readable summary
+const summary = await sdk.getTransactionSummary(prepared);
+console.log(summary.title);       // "Transfer"
+console.log(summary.description); // "Send 1.0 USDC to 0x742d...5A234"
+console.log('Gas cost:', prepared.formattedCost);
+
+// Execute with a signer (signs with passkey, then dispatches)
+const result = await sdk.executeTransfer(prepared, signer);
+console.log('Transaction hash:', result.transactionHash);
+```
+
+## 5. Check Spending Limits
+
+```typescript
+import { ethers } from 'ethers';
+
+// Check current limits
+const limits = await sdk.getSpendingLimits();
+console.log('Daily remaining:', limits.dailyRemaining);
+
+// Check if a specific amount is allowed
+const check = await sdk.checkSpendingLimit(ethers.parseEther('1.0'));
+if (check.allowed) {
+  console.log('Transfer allowed!');
+} else {
+  console.log('Blocked:', check.message);
+}
+
+// Get formatted limits for UI
+const formatted = await sdk.getFormattedSpendingLimits();
+console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
+```
+
+## 6. Check Balances
+
+```typescript
+// Get all token balances on the current chain
+const portfolio = await sdk.getVaultBalances();
+
+for (const entry of portfolio.tokens) {
+  console.log(`${entry.token.symbol}: ${entry.formatted}`);
+}
+console.log('Total USD:', portfolio.totalUsdValue);
+```
+
+## Complete Example
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+import { ethers } from 'ethers';
+
+async function main() {
+  // 1. Initialize
+  const sdk = createSDK('base', {
+    network: 'testnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  // 2. Check if user has existing passkeys
+  const storedCredentials = sdk.passkey.getAllStoredCredentials();
+
+  if (storedCredentials.length === 0) {
+    // 3. Register new passkey (prompts biometric)
+    console.log('Registering passkey...');
+    await sdk.passkey.register('user@example.com', 'My Wallet');
+  } else {
+    // 4. Authenticate with existing passkey (shows passkey picker)
+    console.log('Logging in...');
+    await sdk.passkey.authenticate();
+  }
+
+  // 5. Get vault info
+  const vault = sdk.getVaultAddress();
+  console.log('Vault:', vault);
+
+  // 6. Check spending limits
+  const limits = await sdk.getSpendingLimits();
+  console.log('Daily limit remaining:', limits.dailyRemaining);
+
+  // 7. Prepare a transfer
+  const prepared = await sdk.prepareTransfer({
+    targetChain: 10004,
+    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+    amount: 100000n, // 0.1 USDC
+  });
+
+  // 8. Show summary to user
+  const summary = await sdk.getTransactionSummary(prepared);
+  console.log(`${summary.title}: ${summary.description}`);
+  console.log('Gas cost:', prepared.formattedCost);
+
+  if (summary.risks.length > 0) {
+    console.warn('Risks:', summary.risks.map(r => r.message));
+  }
+}
+
+main().catch(console.error);
+```
+
+## Agent SDK Quick Start
+
+For AI agents that need to make autonomous payments:
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+async function agentQuickStart() {
+  // 1. Create agent with spending limits
+  const agent = await createAgentWallet({
+    masterCredential: {
+      credentialId: process.env.CREDENTIAL_ID!,
+      publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+      publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+      keyHash: process.env.KEY_HASH!,
+    },
+    session: {
+      dailyLimitUSD: 50,
+      perTransactionLimitUSD: 10,
+      expiryHours: 24,
+      allowedChains: [10004], // Base Sepolia
+    },
+  });
+
+  // 2. Fetch paid data (x402 handled automatically)
+  const response = await agent.fetch('https://paid-api.example.com/data');
+  const data = await response.json();
+
+  // 3. Direct payment
+  const receipt = await agent.pay({
+    chain: 10004,
+    token: 'USDC',
+    amount: '1000000',
+    recipient: '0x...',
+  });
+
+  // 4. Check spending
+  const status = agent.getSessionStatus();
+  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits!.dailyLimitUSD}`);
+
+  // 5. Clean up
+  await agent.revokeSession();
+}
+```
+
+## React Integration
+
+```tsx
+import { useState } from 'react';
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+export function WalletButton() {
+  const [vault, setVault] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const stored = sdk.passkey.getAllStoredCredentials();
+      if (stored.length > 0) {
+        await sdk.passkey.authenticate();
+      } else {
+        await sdk.passkey.register('user@example.com', 'My Wallet');
+      }
+      setVault(sdk.getVaultAddress());
+    } catch (error) {
+      console.error('Failed to connect:', error);
+    }
+    setLoading(false);
+  };
+
+  if (vault) {
+    return (
+      <div>
+        <p>Connected: {vault.slice(0, 6)}...{vault.slice(-4)}</p>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={handleConnect} disabled={loading}>
+      {loading ? 'Connecting...' : 'Connect with Passkey'}
+    </button>
+  );
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Session Keys" href="/guides/session-keys">
+    Enable smooth UX without repeated biometric prompts
+  </Card>
+  <Card title="Agent Payments" href="/guides/agent-payments">
+    Build autonomous AI agent payments
+  </Card>
+  <Card title="Spending Limits" href="/guides/spending-limits">
+    Configure spending limits for safety
+  </Card>
+  <Card title="Stacks Integration" href="/chains/stacks">
+    Use Veridex on Stacks with native passkey support
+  </Card>
+</Cards>

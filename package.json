@@ -1,21 +1,26 @@
 {
   "name": "@veridex/documentation",
   "version": "1.0.0",
-  "description": "Veridex Protocol documentation — powered by Mintlify",
+  "description": "Veridex Protocol documentation — powered by Nextra",
   "private": true,
   "scripts": {
-    "dev": "mintlify dev",
-    "dev:port": "mintlify dev --port 3333",
-    "lint": "mintlify broken-links",
-    "build": "echo 'Mintlify builds are handled by the Mintlify platform or Docker (see Dockerfile)'",
-    "docker:build": "docker build -t veridex-docs .",
-    "docker:run": "docker run -p 3333:3333 veridex-docs"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
-  "keywords": ["veridex", "documentation", "mintlify"],
+  "keywords": ["veridex", "documentation", "nextra"],
   "author": "Veridex Protocol",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "mintlify": "^4.2.278"
+    "next": "^14.2.15",
+    "nextra": "^2.13.4",
+    "nextra-theme-docs": "^2.13.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "typescript": "^5.6.3"
   }
 }

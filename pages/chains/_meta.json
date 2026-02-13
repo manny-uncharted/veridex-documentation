@@ -1,0 +1,9 @@
+{
+  "evm": "EVM (Base, Optimism, Arbitrum)",
+  "ethereum-sepolia": "Ethereum Sepolia",
+  "solana": "Solana",
+  "aptos": "Aptos",
+  "sui": "Sui",
+  "starknet": "Starknet",
+  "stacks": "Stacks"
+}

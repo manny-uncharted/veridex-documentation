@@ -1,0 +1,144 @@
+---
+title: Ethereum Sepolia
+description: Veridex Protocol is now live on Ethereum Sepolia testnet
+---
+
+import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../../components/mdx"
+
+# Ethereum Sepolia
+
+<Note>
+**Status: Live on Testnet** 🟢
+
+Veridex Protocol is fully operational on Ethereum Sepolia testnet.
+</Note>
+
+## Overview
+
+Ethereum Sepolia is the recommended testnet for Ethereum development. Veridex's deployment on Sepolia allows developers to test the full authentication and cross-chain functionality before mainnet launch.
+
+## Network Details
+
+| Property | Value |
+|----------|-------|
+| **Network** | Ethereum Sepolia Testnet |
+| **Chain ID** | `11155111` |
+| **Currency** | SepoliaETH |
+| **Block Explorer** | [sepolia.etherscan.io](https://sepolia.etherscan.io) |
+| **RPC Endpoint** | `https://rpc.sepolia.org` |
+
+## Contract Addresses
+
+<CodeGroup>
+
+```typescript Hub Contract
+const VERIDEX_HUB_SEPOLIA = "0x..."; // To be announced
+```
+
+```typescript Spoke Contract  
+const VERIDEX_SPOKE_SEPOLIA = "0x..."; // To be announced
+```
+
+</CodeGroup>
+
+## Getting Started
+
+### 1. Get Testnet ETH
+
+You'll need SepoliaETH to pay for gas. Get free testnet tokens from:
+- [Sepolia Faucet (Alchemy)](https://sepoliafaucet.com/)
+- [Infura Sepolia Faucet](https://www.infura.io/faucet/sepolia)
+- [Google Cloud Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+
+### 2. Configure the SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+// Initialize for Ethereum Sepolia
+const sdk = createSDK('ethereum', {
+  network: 'sepolia',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Create or access your vault
+const identity = await sdk.getUnifiedIdentity();
+console.log('Vault Address:', identity.vaultAddress);
+```
+
+### 3. Register a Passkey
+
+```typescript
+// Register a new passkey for the user
+const credential = await sdk.passkey.register({
+  username: 'user@example.com',
+});
+
+console.log('Passkey registered:', credential.id);
+```
+
+### 4. Execute a Gasless Transfer
+
+```typescript
+// Send ETH from your vault (gasless via relayer)
+const result = await sdk.transferViaRelayer({
+  to: '0xRecipientAddress...',
+  amount: '0.01',
+  token: 'ETH',
+});
+
+console.log('Transaction:', result.txHash);
+```
+
+## Wormhole Integration
+
+Sepolia is connected to the Wormhole testnet network, enabling cross-chain messaging to:
+- Base Sepolia
+- Optimism Sepolia
+- Arbitrum Sepolia
+- Polygon Amoy
+
+### Cross-Chain Transfer Example
+
+```typescript
+// Bridge tokens from Sepolia to Base Sepolia
+const bridge = await sdk.bridge({
+  sourceChain: 'ethereum-sepolia',
+  destinationChain: 'base-sepolia',
+  amount: '0.005',
+  token: 'ETH',
+});
+
+// Monitor bridge progress
+bridge.on('status', (status) => {
+  console.log('Bridge status:', status);
+});
+```
+
+## Features Available on Sepolia
+
+| Feature | Status |
+|---------|--------|
+| Passkey Registration | ✅ Live |
+| Passkey Authentication | ✅ Live |
+| Gasless Transfers | ✅ Live |
+| Cross-Chain Bridging | ✅ Live |
+| Session Keys | ✅ Live |
+| Spending Limits | ✅ Live |
+
+## Resources
+
+- [Sepolia Block Explorer](https://sepolia.etherscan.io)
+- [Wormhole Testnet](https://wormholescan.io/#/?network=Testnet)
+- [SDK Documentation](/api-reference/sdk)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Your First Wallet" icon="wallet" href="/guides/create-wallet">
+    Set up a Veridex vault on Sepolia
+  </Card>
+  <Card title="Gasless Transactions" icon="gas-pump" href="/guides/gasless-transactions">
+    Send transactions without paying gas
+  </Card>
+</CardGroup>

@@ -1,0 +1,11 @@
+{
+  "create-wallet": "Create Wallet",
+  "send-tokens": "Send Tokens",
+  "cross-domain-passkeys": "Cross-Domain Passkeys",
+  "gasless-transactions": "Gasless Transactions",
+  "session-keys": "Session Keys",
+  "spending-limits": "Spending Limits",
+  "cross-chain": "Cross-Chain",
+  "agent-payments": "Agent Payments",
+  "agent-identity": "Agent Identity"
+}
