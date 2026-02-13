@@ -35,7 +35,7 @@ const solanaSDK = createSDK('solana', {
 });
 
 // Login with passkey (registered on EVM hub)
-await solanaSDK.passkey.login();
+await solanaSDK.passkey.authenticate();
 
 // Get Solana address (derived from same passkey)
 const solanaAddress = solanaSDK.getVaultAddress();
@@ -49,12 +49,12 @@ Veridex derives a Solana address from the same passkey credential:
 ```typescript
 // EVM address (Base)
 const evmSDK = createSDK('base', { network: 'mainnet' });
-await evmSDK.passkey.login();
+await evmSDK.passkey.authenticate();
 console.log('EVM:', evmSDK.getVaultAddress()); // 0x...
 
 // Solana address (same passkey)
 const solanaSDK = createSDK('solana', { network: 'mainnet' });
-await solanaSDK.passkey.login();
+await solanaSDK.passkey.authenticate();
 console.log('Solana:', solanaSDK.getVaultAddress()); // Solana public key
 ```
 
@@ -72,7 +72,7 @@ async function bridgeToSolana(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await evmSDK.passkey.login();
+  await evmSDK.passkey.authenticate();
 
   const result = await evmSDK.crossChainTransfer({
     token: BASE_USDC,
@@ -95,7 +95,7 @@ async function bridgeToEVM(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await solanaSDK.passkey.login();
+  await solanaSDK.passkey.authenticate();
 
   const result = await solanaSDK.crossChainTransfer({
     token: SOLANA_USDC,
@@ -115,7 +115,7 @@ async function bridgeToEVM(amount: string) {
 ```typescript
 async function getSolanaBalances() {
   const solanaSDK = createSDK('solana', { network: 'mainnet' });
-  await solanaSDK.passkey.login();
+  await solanaSDK.passkey.authenticate();
 
   const balances = await solanaSDK.getBalances();
   
@@ -140,7 +140,7 @@ async function transferSPL(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await solanaSDK.passkey.login();
+  await solanaSDK.passkey.authenticate();
 
   const result = await solanaSDK.transferViaRelayer({
     token: tokenMint,
@@ -189,7 +189,7 @@ export function SolanaWallet() {
   const connect = async () => {
     setLoading(true);
     try {
-      await sdk.passkey.login();
+      await sdk.passkey.authenticate();
       setAddress(sdk.getVaultAddress());
       await loadBalances();
     } catch (error) {
@@ -252,7 +252,7 @@ export function CrossChainBridge() {
         relayerUrl: 'https://relayer.veridex.network',
       });
 
-      await sdk.passkey.login();
+      await sdk.passkey.authenticate();
 
       const targetChain = fromChain === 'base' ? 'solana' : 'base';
       

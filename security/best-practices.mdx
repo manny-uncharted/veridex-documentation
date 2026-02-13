@@ -24,7 +24,7 @@ await sdk.passkey.register('user@example.com', 'My Wallet');
 
 ```typescript
 // ✅ Require user verification for sensitive operations
-await sdk.passkey.login({ userVerification: 'required' });
+await sdk.passkey.authenticate({ userVerification: 'required' });
 
 // The platform will require biometric/PIN verification
 ```

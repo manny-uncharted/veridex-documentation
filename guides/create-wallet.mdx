@@ -56,30 +56,31 @@ console.log('Your vault address:', vaultAddress);
 
 ## Returning Users (Login)
 
-### Check for Existing Credential
+### Check for Existing Credentials
 
 ```typescript
-// Check if user has a stored credential
-const storedCredential = sdk.passkey.getStoredCredential();
+// Check if user has stored credentials
+const storedCredentials = sdk.passkey.getAllStoredCredentials();
 
-if (storedCredential) {
+if (storedCredentials.length > 0) {
   // User has previously registered
-  console.log('Found existing passkey');
+  console.log(`Found ${storedCredentials.length} stored passkey(s)`);
 } else {
   // First time user
   console.log('No passkey found, will need to register');
 }
 ```
 
-### Login with Existing Passkey
+### Authenticate with Existing Passkey
 
 ```typescript
-// Authenticate with stored passkey
-await sdk.passkey.login();
+// Authenticate — shows passkey picker with all available credentials
+const { credential, signature } = await sdk.passkey.authenticate();
 
 // Now the SDK is authenticated and ready to use
 const vault = sdk.getVaultAddress();
-console.log('Logged in, vault:', vault);
+console.log('Logged in as:', credential.keyHash);
+console.log('Vault:', vault);
 ```
 
 ## Complete Flow Example
@@ -93,15 +94,15 @@ async function connectWallet() {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  // Check for existing credential
-  const existingCredential = sdk.passkey.getStoredCredential();
+  // Check for existing credentials
+  const storedCredentials = sdk.passkey.getAllStoredCredentials();
 
-  if (existingCredential) {
-    // Returning user - login
+  if (storedCredentials.length > 0) {
+    // Returning user — authenticate (shows passkey picker)
     console.log('Logging in with existing passkey...');
-    await sdk.passkey.login();
+    await sdk.passkey.authenticate();
   } else {
-    // New user - register
+    // New user — register
     console.log('Creating new passkey wallet...');
     await sdk.passkey.register(
       'user@example.com',
@@ -111,11 +112,11 @@ async function connectWallet() {
 
   // Get vault info
   const vaultAddress = sdk.getVaultAddress();
-  const credential = sdk.passkey.getStoredCredential();
+  const credential = sdk.passkey.getCredential();
 
   return {
     vaultAddress,
-    credentialId: credential?.id,
+    credentialId: credential?.credentialId,
   };
 }
 
@@ -145,11 +146,11 @@ export function ConnectButton() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check for existing credential on mount
+  // Check for existing credentials on mount
   useEffect(() => {
-    const stored = sdk.passkey.getStoredCredential();
-    if (stored) {
-      // Auto-login if credential exists
+    const stored = sdk.passkey.getAllStoredCredentials();
+    if (stored.length > 0) {
+      // Auto-login if credentials exist
       handleConnect();
     }
   }, []);
@@ -159,10 +160,10 @@ export function ConnectButton() {
     setError(null);
 
     try {
-      const existing = sdk.passkey.getStoredCredential();
+      const stored = sdk.passkey.getAllStoredCredentials();
       
-      if (existing) {
-        await sdk.passkey.login();
+      if (stored.length > 0) {
+        await sdk.passkey.authenticate();
       } else {
         await sdk.passkey.register('user@example.com', 'My Wallet');
       }
@@ -176,6 +177,7 @@ export function ConnectButton() {
   };
 
   const handleDisconnect = () => {
+    // Clear the active credential from memory
     sdk.passkey.clearCredential();
     setVault(null);
   };
@@ -215,16 +217,20 @@ export function ConnectButton() {
 
 ## Credential Storage
 
-By default, credentials are stored in `localStorage`. You can customize storage:
+By default, credentials are stored in `localStorage` under the `veridex_credentials` key. The `PasskeyManager` handles persistence automatically:
 
 ```typescript
-const sdk = createSDK('base', {
-  storage: {
-    get: (key) => myCustomStorage.get(key),
-    set: (key, value) => myCustomStorage.set(key, value),
-    remove: (key) => myCustomStorage.remove(key),
-  },
-});
+// Get all stored credentials
+const all = sdk.passkey.getAllStoredCredentials();
+
+// Manually save credentials (e.g., after migration)
+sdk.passkey.saveCredentials(all);
+
+// Add a credential to storage
+sdk.passkey.addCredentialToStorage(credential);
+
+// Check if any credentials exist
+const hasCredentials = sdk.passkey.hasStoredCredentials();
 ```
 
 ## Error Handling
@@ -267,12 +273,14 @@ const agent = await createAgentWallet({
     dailyLimitUSD: 50,
     perTransactionLimitUSD: 10,
     expiryHours: 24,
-    allowedChains: [10004], // Base Sepolia
+    allowedChains: [10004], // Base Sepolia (Wormhole chain ID)
   },
 });
 
-console.log('Agent session:', agent.getSessionStatus());
-console.log('Agent wallet:', agent.getSessionStatus().address);
+const status = agent.getSessionStatus();
+console.log('Session valid:', status.isValid);
+console.log('Agent wallet:', status.address);
+console.log('Daily limit:', `$${status.limits!.dailyLimitUSD}`);
 ```
 
 ## Stacks Wallet

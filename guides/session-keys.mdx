@@ -50,8 +50,8 @@ const sdk = createSDK('base', {
   relayerUrl: 'https://relayer.veridex.network',
 });
 
-// Login first
-await sdk.passkey.login();
+// Authenticate first (shows passkey picker)
+const { credential } = await sdk.passkey.authenticate();
 
 // Generate a session key pair (secp256k1)
 const keyPair = generateSecp256k1KeyPair();
@@ -156,7 +156,7 @@ const status = agent.getSessionStatus();
 console.log('Valid:', status.isValid);
 console.log('Wallet:', status.address);
 console.log('Expires:', new Date(status.expiry));
-console.log('Daily limit:', `$${status.limits.dailyLimitUSD}`);
+console.log('Daily limit:', `$${status.limits!.dailyLimitUSD}`);
 console.log('Spent today:', `$${status.totalSpentUSD.toFixed(2)}`);
 console.log('Remaining:', `$${status.remainingDailyLimitUSD.toFixed(2)}`);
 ```
@@ -239,7 +239,7 @@ export function AgentSessionPanel() {
           Expires in {expiresIn} minutes
         </p>
         <p className="text-sm text-green-600">
-          Budget: ${status.totalSpentUSD.toFixed(2)} / ${status.limits.dailyLimitUSD}
+          Budget: ${status.totalSpentUSD.toFixed(2)} / ${status.limits!.dailyLimitUSD}
         </p>
         <p className="text-sm text-green-600">
           Wallet: {status.address.slice(0, 8)}...{status.address.slice(-6)}
@@ -279,7 +279,12 @@ Agent sessions are perfect for batch operations:
 ```typescript
 const agent = await createAgentWallet({
   masterCredential: { /* ... */ },
-  session: { dailyLimitUSD: 100, perTransactionLimitUSD: 25, expiryHours: 1 },
+  session: {
+    dailyLimitUSD: 100,
+    perTransactionLimitUSD: 25,
+    expiryHours: 1,
+    allowedChains: [10004],
+  },
 });
 
 // Batch multiple payments — all auto-signed
@@ -301,7 +306,7 @@ for (const { address, amount } of recipients) {
 
 // Check remaining budget
 const status = agent.getSessionStatus();
-console.log(`Spent: $${status.totalSpentUSD.toFixed(2)} / $${status.limits.dailyLimitUSD}`);
+console.log(`Spent: $${status.totalSpentUSD.toFixed(2)} / $${status.limits!.dailyLimitUSD}`);
 
 // Revoke when done
 await agent.revokeSession();

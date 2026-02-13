@@ -26,8 +26,8 @@ const sdk = createSDK('base', {
   relayerUrl: 'https://relayer.veridex.network',
 });
 
-// Login first
-await sdk.passkey.login();
+// Authenticate first (shows passkey picker)
+const { credential } = await sdk.passkey.authenticate();
 
 // Step 1: Prepare the transfer (shows gas cost before signing)
 const prepared = await sdk.prepareTransfer({
@@ -45,10 +45,10 @@ const summary = await sdk.getTransactionSummary(prepared);
 console.log(summary.title);       // "Transfer"
 console.log(summary.description); // "Send 10.0 USDC to 0x742d...5A234"
 
-// Step 3: Execute with a signer
+// Step 3: Execute with a signer (signs with passkey, then dispatches)
 const provider = new ethers.BrowserProvider(window.ethereum);
 const signer = await provider.getSigner();
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 
 console.log('Transaction hash:', result.transactionHash);
 console.log('Sequence:', result.sequence);
@@ -64,7 +64,7 @@ const prepared = await sdk.prepareTransfer({
   amount: ethers.parseEther('0.01'), // 0.01 ETH
 });
 
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 console.log('ETH transfer:', result.transactionHash);
 ```
 
@@ -77,7 +77,12 @@ import { createAgentWallet } from '@veridex/agentic-payments';
 
 const agent = await createAgentWallet({
   masterCredential: { /* passkey credential */ },
-  session: { dailyLimitUSD: 50, perTransactionLimitUSD: 10, expiryHours: 24 },
+  session: {
+    dailyLimitUSD: 50,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+    allowedChains: [10004], // Base Sepolia
+  },
 });
 
 // Direct payment — session key handles signing
@@ -115,12 +120,11 @@ console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
 ## Check Balance Before Transfer
 
 ```typescript
-// Get vault balances for a specific chain
-const vaultAddress = sdk.getVaultAddress();
-const portfolio = await sdk.balance.getPortfolioBalance(10004, vaultAddress);
+// Get vault balances on the current chain
+const portfolio = await sdk.getVaultBalances();
 
-for (const token of portfolio.tokens) {
-  console.log(`${token.symbol}: ${token.formattedBalance}`);
+for (const entry of portfolio.tokens) {
+  console.log(`${entry.token.symbol}: ${entry.formatted}`);
 }
 console.log('Total USD:', portfolio.totalUsdValue);
 ```
@@ -130,16 +134,14 @@ console.log('Total USD:', portfolio.totalUsdValue);
 Track transaction status after execution:
 
 ```typescript
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 
-// Track the transaction
-sdk.transactions.track(result.transactionHash, 10004, (state) => {
-  console.log('Status:', state.status);
-  console.log('Confirmations:', state.confirmations);
-});
+// Wait for confirmation
+const state = await sdk.waitForTransaction(result.transactionHash);
+console.log('Status:', state.status);
+console.log('Confirmations:', state.confirmations);
 
 console.log('Tx Hash:', result.transactionHash);
-console.log('Block:', result.blockNumber);
 console.log('Sequence:', result.sequence);
 ```
 
@@ -187,7 +189,7 @@ export function SendForm() {
       // Execute
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const result = await sdk.transfer(prepared.params, signer);
+      const result = await sdk.executeTransfer(prepared, signer);
 
       setTxHash(result.transactionHash);
     } catch (err) {
@@ -275,7 +277,7 @@ export function SendForm() {
 ```typescript
 try {
   const prepared = await sdk.prepareTransfer({ /* ... */ });
-  const result = await sdk.transfer(prepared.params, signer);
+  const result = await sdk.executeTransfer(prepared, signer);
 } catch (error: any) {
   if (error.message?.includes('No credential set')) {
     console.log('Please register or login first');

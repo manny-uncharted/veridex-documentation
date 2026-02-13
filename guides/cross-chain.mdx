@@ -26,7 +26,7 @@ const sdk = createSDK('base', {
   relayerUrl: 'https://relayer.veridex.network',
 });
 
-await sdk.passkey.login();
+const { credential } = await sdk.passkey.authenticate();
 
 // Step 1: Estimate bridge fees
 const fees = await sdk.getBridgeFees({
@@ -300,6 +300,7 @@ const agent = await createAgentWallet({
   masterCredential: { /* ... */ },
   session: {
     dailyLimitUSD: 100,
+    perTransactionLimitUSD: 25,
     expiryHours: 24,
     allowedChains: [10004, 10005, 50003], // Base, Optimism, Stacks
   },

@@ -59,10 +59,10 @@ export function VeridexProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for stored credential on mount
     const init = async () => {
-      const stored = sdk.passkey.getStoredCredential();
-      if (stored) {
+      const stored = sdk.passkey.getAllStoredCredentials();
+      if (stored.length > 0) {
         try {
-          await sdk.passkey.login();
+          await sdk.passkey.authenticate();
           setState({
             isConnected: true,
             vaultAddress: sdk.getVaultAddress(),
@@ -81,9 +81,9 @@ export function VeridexProvider({ children }: { children: ReactNode }) {
   const connect = async () => {
     setState((s) => ({ ...s, isLoading: true }));
     try {
-      const existing = sdk.passkey.getStoredCredential();
-      if (existing) {
-        await sdk.passkey.login();
+      const existing = sdk.passkey.getAllStoredCredentials();
+      if (existing.length > 0) {
+        await sdk.passkey.authenticate();
       } else {
         await sdk.passkey.register('user@example.com', 'My Wallet');
       }

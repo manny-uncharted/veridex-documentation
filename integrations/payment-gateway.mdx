@@ -27,7 +27,7 @@ const sdk = createSDK('base', {
 });
 
 // Customer authenticates
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 // Process payment
 const payment = await sdk.transferViaRelayer({
@@ -71,9 +71,9 @@ export function VeridexCheckout({ amount, orderId, onSuccess, onError }: Checkou
     try {
       // Step 1: Authenticate
       setStep('connect');
-      const stored = sdk.passkey.getStoredCredential();
-      if (stored) {
-        await sdk.passkey.login();
+      const stored = sdk.passkey.getAllStoredCredentials();
+      if (stored.length > 0) {
+        await sdk.passkey.authenticate();
       } else {
         await sdk.passkey.register('customer@example.com', 'Checkout');
       }
@@ -150,8 +150,8 @@ const session = await sdk.sessions.create({
 });
 
 // Subsequent purchases in session: No biometric prompt
-await sdk.transfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('9.99', 6) });
-await sdk.transfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('14.99', 6) });
+await sdk.executeTransfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('9.99', 6) });
+await sdk.executeTransfer({ token: USDC, recipient: MERCHANT, amount: parseUnits('14.99', 6) });
 // Both auto-signed! ✓
 ```
 

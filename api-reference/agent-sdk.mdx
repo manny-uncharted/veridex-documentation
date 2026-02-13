@@ -39,9 +39,9 @@ interface AgentWalletConfig {
   };
   session: {
     dailyLimitUSD: number;
-    perTransactionLimitUSD?: number;
+    perTransactionLimitUSD: number;
     expiryHours: number;
-    allowedChains?: number[];
+    allowedChains: number[];  // Wormhole chain IDs
   };
   erc8004?: ERC8004Config;
   relayerUrl?: string;
@@ -225,8 +225,8 @@ const balances = await agent.getBalance(chain?);
 
 ```typescript
 const balances = await agent.getBalance(10004);
-for (const token of balances) {
-  console.log(`${token.symbol}: ${token.formattedBalance}`);
+for (const entry of balances) {
+  console.log(`${entry.token.symbol}: ${entry.formatted}`);
 }
 ```
 
@@ -1010,7 +1010,7 @@ async function runDataAgent() {
 
   // 5. Check session status
   const status = agent.getSessionStatus();
-  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits.dailyLimitUSD}`);
+  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits!.dailyLimitUSD}`);
 
   // 6. Export audit log
   const auditLog = await agent.exportAuditLog('json');

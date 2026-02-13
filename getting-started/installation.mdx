@@ -13,9 +13,18 @@ Veridex provides two packages depending on your use case:
 ## Prerequisites
 
 - Node.js 18+ or Bun
+- A **browser frontend** for passkey operations (see note below)
 - A WebAuthn-compatible browser (Chrome, Safari, Firefox, Edge)
 - TypeScript 5.0+ (recommended)
 - `ethers` v6 (peer dependency for the core SDK)
+
+<Callout type="warning">
+  **Frontend Required for Passkeys:** The core SDK uses WebAuthn browser APIs for passkey registration and authentication. These operations (`sdk.passkey.register()`, `sdk.passkey.authenticate()`) must run in a **client-side browser context** (HTTPS or localhost) — they cannot run in Node.js, server components, or CLI scripts. You need a frontend (React, Next.js, plain HTML, etc.) to create and authenticate passkeys. Server-side code can handle balance queries, transaction verification, and relayer calls, but the initial passkey creation must happen in the browser.
+</Callout>
+
+<Callout type="info">
+  **Agent SDK Exception:** The Agent SDK (`@veridex/agentic-payments`) runs server-side in Node.js, but it requires a `masterCredential` that was originally created via a browser frontend. The typical flow is: human creates passkey in browser → configures spending limits → agent backend receives credentials and operates autonomously within those limits.
+</Callout>
 
 ## Install the Core SDK
 

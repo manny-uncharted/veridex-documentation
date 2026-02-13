@@ -47,6 +47,7 @@ const agent = await createAgentWallet({
     dailyLimitUSD: 50,
     perTransactionLimitUSD: 10,
     expiryHours: 24,
+    allowedChains: [10004], // Base Sepolia
   },
   erc8004: {
     enabled: true,
@@ -235,7 +236,12 @@ The **TrustGate** enforces minimum reputation before the agent pays a merchant. 
 ```typescript
 const agent = await createAgentWallet({
   masterCredential: { /* ... */ },
-  session: { dailyLimitUSD: 100, perTransactionLimitUSD: 10, expiryHours: 24 },
+  session: {
+    dailyLimitUSD: 100,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+    allowedChains: [10004],
+  },
   erc8004: {
     enabled: true,
     testnet: false,
@@ -351,6 +357,7 @@ async function coordinatorAgent() {
       dailyLimitUSD: 200,
       perTransactionLimitUSD: 5,
       expiryHours: 8,
+      allowedChains: [10004],
     },
     erc8004: {
       enabled: true,

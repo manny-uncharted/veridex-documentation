@@ -54,7 +54,7 @@ Spoke chains derive the same vault address:
 
 ```typescript
 // Login on spoke chain (Optimism)
-await opSDK.passkey.login();
+await opSDK.passkey.authenticate();
 
 // Same vault address as hub!
 console.log(opSDK.getVaultAddress()); // 0x...same address
@@ -131,7 +131,7 @@ async function bridgeUSDC(
   amount: string
 ) {
   const sdk = createSDK(fromChain, { network: 'mainnet' });
-  await sdk.passkey.login();
+  await sdk.passkey.authenticate();
 
   const result = await sdk.crossChainTransfer({
     token: USDC_ADDRESSES[fromChain],
@@ -154,7 +154,7 @@ async function bridgeUSDCStandard(
   amount: string
 ) {
   const sdk = createSDK(fromChain, { network: 'mainnet' });
-  await sdk.passkey.login();
+  await sdk.passkey.authenticate();
 
   const result = await sdk.crossChainTransfer({
     token: USDC_ADDRESSES[fromChain],
@@ -190,7 +190,7 @@ await sdk.passkey.register('user@example.com', 'Wallet');
 
 ```typescript
 const sdk = createSDK('optimism', { network: 'mainnet' });
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 // Works identically to Base
 await sdk.transferViaRelayer({
@@ -208,7 +208,7 @@ await sdk.transferViaRelayer({
 
 ```typescript
 const sdk = createSDK('arbitrum', { network: 'mainnet' });
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 await sdk.transferViaRelayer({
   token: ARB_USDC,

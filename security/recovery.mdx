@@ -25,7 +25,7 @@ Modern platforms sync passkeys across devices automatically:
 
 ```typescript
 // If user has a new device but same account
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 // The synced passkey works automatically!
 ```
 
@@ -133,7 +133,7 @@ export function RecoverySetup() {
     setLoading(true);
     try {
       await sdk.passkey.registerBackup({
-        existingCredential: sdk.passkey.getStoredCredential()!,
+        existingCredential: sdk.passkey.getCredential()!,
       });
       alert('Backup passkey registered!');
     } catch (error) {

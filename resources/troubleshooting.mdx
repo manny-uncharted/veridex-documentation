@@ -20,11 +20,11 @@ Solutions for common issues when integrating Veridex.
 
 ```typescript
 // ✅ Triggered by user interaction
-<button onClick={() => sdk.passkey.login()}>Login</button>
+<button onClick={() => sdk.passkey.authenticate()}>Login</button>
 
 // ❌ May fail - not user triggered
 useEffect(() => {
-  sdk.passkey.login(); // May be blocked
+  sdk.passkey.authenticate(); // May be blocked
 }, []);
 ```
 
@@ -35,9 +35,9 @@ useEffect(() => {
 **Solution:** Check for existing credential first:
 
 ```typescript
-const existing = sdk.passkey.getStoredCredential();
-if (existing) {
-  await sdk.passkey.login();
+const existing = sdk.passkey.getAllStoredCredentials();
+if (existing.length > 0) {
+  await sdk.passkey.authenticate();
 } else {
   await sdk.passkey.register(email, name);
 }
@@ -145,11 +145,11 @@ await sdk.transferViaRelayer({ token, recipient, amount });
 ```typescript
 // ✅ Correct
 const sdk = createSDK('base', { network: 'testnet' });
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 // ❌ Incorrect
 let sdk;
-sdk.passkey.login(); // sdk is undefined!
+sdk.passkey.authenticate(); // sdk is undefined!
 ```
 
 ### "Network mismatch" or wrong chain
@@ -309,11 +309,11 @@ const sdk = createSDK('base', {
 });
 
 // All SDK operations will now log details
-await sdk.passkey.login();
-// [Veridex] Starting login...
+await sdk.passkey.authenticate();
+// [Veridex] Starting authentication...
 // [Veridex] WebAuthn credential retrieved
 // [Veridex] Signature generated
-// [Veridex] Login complete
+// [Veridex] Authentication complete
 ```
 
 ## Getting Help

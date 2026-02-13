@@ -42,8 +42,8 @@ await sdk.getStoredCredential();
 
 // ✅ New
 await sdk.passkey.register(email, name);
-await sdk.passkey.login();
-sdk.passkey.getStoredCredential();
+await sdk.passkey.authenticate();
+sdk.passkey.getAllStoredCredentials();
 ```
 
 #### Session Keys
@@ -78,12 +78,9 @@ await sdk.transferViaRelayer({
   amount: 1000000n,
 });
 
-// Or for self-paid gas:
-await sdk.transfer({
-  token: '0x...',
-  recipient: '0x...',
-  amount: 1000000n,
-});
+// Or prepare + execute with own signer:
+const prepared = await sdk.prepareTransfer({ token: '0x...', recipient: '0x...', amount: 1000000n });
+await sdk.executeTransfer(prepared, signer);
 ```
 
 #### Cross-Chain
@@ -210,7 +207,7 @@ try {
 |-----|-----|
 | `new Veridex(config)` | `createSDK(chain, config)` |
 | `sdk.register()` | `sdk.passkey.register()` |
-| `sdk.login()` | `sdk.passkey.login()` |
+| `sdk.login()` | `sdk.passkey.authenticate()` |
 | `sdk.createSession()` | `sdk.sessions.create()` |
 | `sdk.transfer({ gasless: true })` | `sdk.transferViaRelayer()` |
 | `sdk.bridge()` | `sdk.crossChainTransfer()` |

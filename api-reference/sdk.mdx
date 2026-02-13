@@ -32,7 +32,7 @@ const sdk = createSDK(chain, config?);
 | `chain` | `ChainName` | Chain name (see supported chains below) |
 | `config` | `SimpleSDKConfig` | Optional configuration |
 
-**Supported chain names:** `'base'`, `'optimism'`, `'arbitrum'`, `'ethereum'`, `'solana'`, `'aptos'`, `'sui'`, `'starknet'`, `'stacks'`
+**Supported chain names:** `'base'`, `'optimism'`, `'arbitrum'`, `'ethereum'`, `'polygon'`, `'monad'`, `'solana'`, `'aptos'`, `'sui'`, `'starknet'`, `'stacks'`
 
 **Config:**
 
@@ -109,24 +109,49 @@ interface PasskeyCredential {
 
 ---
 
-### sdk.passkey.login
+### sdk.passkey.authenticate
 
-Authenticate with an existing passkey.
+Authenticate with an existing passkey (shows passkey picker).
 
 ```typescript
-await sdk.passkey.login();
+const { credential, signature } = await sdk.passkey.authenticate();
+```
+
+**Returns:** `Promise<{ credential: PasskeyCredential; signature: WebAuthnSignature }>`
+
+---
+
+### sdk.passkey.getCredential
+
+Get the currently active credential (set by `register` or `authenticate`).
+
+```typescript
+const credential = sdk.passkey.getCredential();
+```
+
+**Returns:** `PasskeyCredential | null`
+
+---
+
+### sdk.passkey.setCredential
+
+Manually set the active credential.
+
+```typescript
+sdk.passkey.setCredential(credential);
 ```
 
 ---
 
-### sdk.passkey.getCredential / getStoredCredential
+### sdk.passkey.getAllStoredCredentials
+
+Get all passkey credentials saved in local storage.
 
 ```typescript
-const credential = sdk.passkey.getCredential();
-const stored = sdk.passkey.getStoredCredential();
+const credentials = sdk.passkey.getAllStoredCredentials();
 ```
 
-**Returns:** `PasskeyCredential | null`
+**Returns:** `PasskeyCredential[]`
 
 ---
 
@@ -233,12 +258,12 @@ console.log('Expires:', new Date(prepared.expiresAt));
 
 ---
 
-### sdk.transfer
+### sdk.executeTransfer
 
-Execute a transfer (requires a signer).
+Execute a prepared transfer (requires a signer to pay gas).
 
 ```typescript
-const result = await sdk.transfer(params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 ```
 
 **Returns:** `Promise<DispatchResult>`
@@ -427,7 +452,7 @@ Prepare a transaction to update the daily spending limit.
 
 ```typescript
 const prepared = await sdk.prepareSetDailyLimit(ethers.parseEther('5.0'));
-// Sign and execute with sdk.transfer(...)
+// Sign and execute with sdk.executeTransfer(prepared, signer)
 ```
 
 ---
@@ -442,26 +467,64 @@ const prepared = await sdk.preparePauseVault();
 
 ---
 
-## Balance Management (`sdk.balance`)
+## Balance Management
 
-### sdk.balance.getPortfolioBalance
+### sdk.getVaultNativeBalance
 
-Get token balances for a specific chain.
+Get the native token balance of the vault.
 
 ```typescript
-const portfolio = await sdk.balance.getPortfolioBalance(chainId, address);
-console.log('Tokens:', portfolio.tokens);
+const native = await sdk.getVaultNativeBalance();
+console.log(`${native.token.symbol}: ${native.formatted}`);
+```
+
+---
+
+### sdk.getVaultBalances
+
+Get all token balances on the current chain.
+
+```typescript
+const portfolio = await sdk.getVaultBalances();
+for (const entry of portfolio.tokens) {
+  console.log(`${entry.token.symbol}: ${entry.formatted}`);
+}
 console.log('Total USD:', portfolio.totalUsdValue);
 ```
 
 ---
 
-### sdk.balance.getMultiChainBalances
+### sdk.getVaultTokenBalance
+
+Get balance of a specific token.
+
+```typescript
+const balance = await sdk.getVaultTokenBalance(tokenAddress);
+console.log(`${balance.token.symbol}: ${balance.formatted}`);
+```
+
+---
+
+### sdk.getMultiChainBalances
 
 Get balances across multiple chains.
 
 ```typescript
-const results = await sdk.balance.getMultiChainBalances(address, [10004, 10005]);
+const results = await sdk.getMultiChainBalances([10004, 10005, 10003]);
+for (const chain of results) {
+  console.log(`${chain.chainName}: ${chain.tokens.length} tokens`);
+}
+```
+
+---
+
+### sdk.balance (Low-Level)
+
+Direct access to the `BalanceManager` for advanced queries:
+
+```typescript
+const portfolio = await sdk.balance.getPortfolioBalance(chainId, address);
+const multi = await sdk.balance.getMultiChainBalances(address, [10004, 10005]);
 ```
 
 ---

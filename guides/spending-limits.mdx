@@ -35,7 +35,7 @@ const sdk = createSDK('base', {
   relayerUrl: 'https://relayer.veridex.network',
 });
 
-await sdk.passkey.login();
+const { credential } = await sdk.passkey.authenticate();
 
 // Get current on-chain spending limits
 const limits = await sdk.getSpendingLimits();
@@ -78,7 +78,7 @@ console.log(`Daily: ${formatted.dailyUsed} / ${formatted.dailyLimit}`);
 const prepared = await sdk.prepareSetDailyLimit(ethers.parseEther('5.0'));
 
 // Execute (requires passkey signature)
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 console.log('Limit updated:', result.transactionHash);
 ```
 
@@ -87,7 +87,7 @@ console.log('Limit updated:', result.transactionHash);
 ```typescript
 // Prepare an emergency pause transaction
 const prepared = await sdk.preparePauseVault();
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 console.log('Vault paused:', result.transactionHash);
 ```
 
@@ -104,12 +104,13 @@ const agent = await createAgentWallet({
     dailyLimitUSD: 100,          // $100/day
     perTransactionLimitUSD: 25,  // $25 max per tx
     expiryHours: 24,
+    allowedChains: [10004],      // Base Sepolia
   },
 });
 
 // Check session spending status
 const status = agent.getSessionStatus();
-console.log('Daily limit:', `$${status.limits.dailyLimitUSD}`);
+console.log('Daily limit:', `$${status.limits!.dailyLimitUSD}`);
 console.log('Spent today:', `$${status.totalSpentUSD.toFixed(2)}`);
 console.log('Remaining:', `$${status.remainingDailyLimitUSD.toFixed(2)}`);
 

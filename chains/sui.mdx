@@ -35,7 +35,7 @@ const suiSDK = createSDK('sui', {
 });
 
 // Login with passkey
-await suiSDK.passkey.login();
+await suiSDK.passkey.authenticate();
 
 // Get Sui address
 const suiAddress = suiSDK.getVaultAddress();
@@ -55,7 +55,7 @@ async function bridgeToSui(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await evmSDK.passkey.login();
+  await evmSDK.passkey.authenticate();
 
   const result = await evmSDK.crossChainTransfer({
     token: BASE_USDC,
@@ -77,7 +77,7 @@ async function bridgeToEVM(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await suiSDK.passkey.login();
+  await suiSDK.passkey.authenticate();
 
   const result = await suiSDK.crossChainTransfer({
     token: SUI_USDC,
@@ -97,7 +97,7 @@ async function bridgeToEVM(amount: string) {
 ```typescript
 async function getSuiBalances() {
   const suiSDK = createSDK('sui', { network: 'mainnet' });
-  await suiSDK.passkey.login();
+  await suiSDK.passkey.authenticate();
 
   const balances = await suiSDK.getBalances();
   
@@ -117,7 +117,7 @@ async function transferSUI(recipient: string, amount: bigint) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await suiSDK.passkey.login();
+  await suiSDK.passkey.authenticate();
 
   const result = await suiSDK.transferViaRelayer({
     token: '0x2::sui::SUI',
@@ -166,7 +166,7 @@ export function SuiWallet() {
   const connect = async () => {
     setLoading(true);
     try {
-      await sdk.passkey.login();
+      await sdk.passkey.authenticate();
       setAddress(sdk.getVaultAddress());
       await loadBalances();
     } catch (error) {
@@ -225,7 +225,7 @@ async function transferObject(objectId: string, recipient: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await suiSDK.passkey.login();
+  await suiSDK.passkey.authenticate();
 
   const result = await suiSDK.executeViaRelayer({
     target: '0x2::transfer::transfer',

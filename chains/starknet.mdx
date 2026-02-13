@@ -35,7 +35,7 @@ const starknetSDK = createSDK('starknet', {
 });
 
 // Login with passkey
-await starknetSDK.passkey.login();
+await starknetSDK.passkey.authenticate();
 
 // Get Starknet address
 const starknetAddress = starknetSDK.getVaultAddress();
@@ -64,7 +64,7 @@ async function bridgeToStarknet(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await evmSDK.passkey.login();
+  await evmSDK.passkey.authenticate();
 
   const result = await evmSDK.crossChainTransfer({
     token: BASE_USDC,
@@ -86,7 +86,7 @@ async function bridgeToEVM(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await starknetSDK.passkey.login();
+  await starknetSDK.passkey.authenticate();
 
   const result = await starknetSDK.crossChainTransfer({
     token: STARKNET_USDC,
@@ -106,7 +106,7 @@ async function bridgeToEVM(amount: string) {
 ```typescript
 async function getStarknetBalances() {
   const starknetSDK = createSDK('starknet', { network: 'mainnet' });
-  await starknetSDK.passkey.login();
+  await starknetSDK.passkey.authenticate();
 
   const balances = await starknetSDK.getBalances();
   
@@ -131,7 +131,7 @@ async function transferToken(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await starknetSDK.passkey.login();
+  await starknetSDK.passkey.authenticate();
 
   const result = await starknetSDK.transferViaRelayer({
     token: tokenAddress,
@@ -180,7 +180,7 @@ export function StarknetWallet() {
   const connect = async () => {
     setLoading(true);
     try {
-      await sdk.passkey.login();
+      await sdk.passkey.authenticate();
       setAddress(sdk.getVaultAddress());
       await loadBalances();
     } catch (error) {
@@ -271,7 +271,7 @@ async function multiCall(calls: Array<{to: string, selector: string, calldata: s
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await starknetSDK.passkey.login();
+  await starknetSDK.passkey.authenticate();
 
   const result = await starknetSDK.executeViaRelayer({
     calls: calls.map(call => ({

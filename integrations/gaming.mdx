@@ -26,7 +26,7 @@ const sdk = createSDK('base', {
 });
 
 // Player login - one-time biometric
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 // Create game session (1 hour, no prompts during gameplay)
 const session = await sdk.sessions.create({

@@ -36,7 +36,7 @@ const aptosSDK = createSDK('aptos', {
 });
 
 // Login with passkey
-await aptosSDK.passkey.login();
+await aptosSDK.passkey.authenticate();
 
 // Get Aptos address
 const aptosAddress = aptosSDK.getVaultAddress();
@@ -65,7 +65,7 @@ async function bridgeToAptos(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await evmSDK.passkey.login();
+  await evmSDK.passkey.authenticate();
 
   const result = await evmSDK.crossChainTransfer({
     token: BASE_USDC,
@@ -87,7 +87,7 @@ async function bridgeToEVM(amount: string) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const result = await aptosSDK.crossChainTransfer({
     token: APTOS_USDC,
@@ -107,7 +107,7 @@ async function bridgeToEVM(amount: string) {
 ```typescript
 async function getAptosBalances() {
   const aptosSDK = createSDK('aptos', { network: 'mainnet' });
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const balances = await aptosSDK.getBalances();
   
@@ -127,7 +127,7 @@ async function transferAPT(recipient: string, amount: bigint) {
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   // Native APT transfer
   const result = await aptosSDK.transferViaRelayer({
@@ -153,7 +153,7 @@ async function transferCoin(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const result = await aptosSDK.transferViaRelayer({
     token: coinType, // e.g., '0x1::usdc::USDC'
@@ -182,7 +182,7 @@ async function callMoveFunction(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const result = await aptosSDK.executeViaRelayer({
     target: `${moduleAddress}::${moduleName}::${functionName}`,
@@ -240,7 +240,7 @@ export function AptosWallet() {
   const connect = async () => {
     setLoading(true);
     try {
-      await sdk.passkey.login();
+      await sdk.passkey.authenticate();
       setAddress(sdk.getVaultAddress());
       await loadBalances();
     } catch (error) {
@@ -303,7 +303,7 @@ async function mintNFT(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const result = await aptosSDK.executeViaRelayer({
     target: '0x4::token::mint',
@@ -330,7 +330,7 @@ async function transferNFT(
     relayerUrl: 'https://relayer.veridex.network',
   });
 
-  await aptosSDK.passkey.login();
+  await aptosSDK.passkey.authenticate();
 
   const result = await aptosSDK.executeViaRelayer({
     target: '0x3::token::transfer',

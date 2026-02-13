@@ -31,7 +31,7 @@ const sdk = createSDK('base', {
   relayerUrl: 'https://relayer.veridex.network', // Veridex relayer
 });
 
-await sdk.passkey.login();
+const { credential } = await sdk.passkey.authenticate();
 
 // Gasless cross-chain bridge via relayer
 const result = await sdk.bridgeViaRelayer(
@@ -140,7 +140,7 @@ const prepared = await sdk.prepareTransfer({
   amount: ethers.parseUnits('100', 6),
 });
 
-const result = await sdk.transfer(prepared.params, signer);
+const result = await sdk.executeTransfer(prepared, signer);
 ```
 
 ## Stacks: Native Sponsored Transactions
@@ -174,7 +174,12 @@ import { createAgentWallet } from '@veridex/agentic-payments';
 
 const agent = await createAgentWallet({
   masterCredential: { /* ... */ },
-  session: { dailyLimitUSD: 50, expiryHours: 24 },
+  session: {
+    dailyLimitUSD: 50,
+    perTransactionLimitUSD: 10,
+    expiryHours: 24,
+    allowedChains: [10004],
+  },
   relayerUrl: 'https://relayer.veridex.network',
 });
 

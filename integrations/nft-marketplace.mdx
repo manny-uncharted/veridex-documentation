@@ -28,7 +28,7 @@ const sdk = createSDK('base', {
 });
 
 // Authenticate
-await sdk.passkey.login();
+await sdk.passkey.authenticate();
 
 // Mint NFT via relayer (gasless)
 const tx = await sdk.executeViaRelayer({
