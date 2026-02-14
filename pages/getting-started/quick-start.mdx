@@ -165,6 +165,56 @@ async function main() {
 main().catch(console.error);
 ```
 
+## Multi-Chain Initialization (Advanced)
+
+For apps that need multi-chain support, use the `VeridexSDK` class directly with an `EVMClient`:
+
+```typescript
+import { VeridexSDK } from '@veridex/sdk';
+import { EVMClient } from '@veridex/sdk/chains/evm';
+
+// Create the EVM chain client (hub chain)
+const evmClient = new EVMClient({
+  chainId: 84532,
+  wormholeChainId: 10004,
+  rpcUrl: 'https://sepolia.base.org',
+  hubContractAddress: '0x66D87dE68327f48A099c5B9bE97020Feab9a7c82',
+  wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
+  name: 'Base Sepolia',
+  explorerUrl: 'https://sepolia.basescan.org',
+  vaultFactory: '0xCFaEb5652aa2Ee60b2229dC8895B4159749C7e53',
+  vaultImplementation: '0x0d13367C16c6f0B24eD275CC67C7D9f42878285c',
+});
+
+const sdk = new VeridexSDK({
+  chain: evmClient,
+  persistWallet: true,
+  testnet: true,
+  relayerUrl: '/api/relayer',
+  relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
+});
+```
+
+<Callout type="info">
+  The `createSDK` shorthand is great for getting started. For production apps with multi-chain vaults, use `VeridexSDK` + `EVMClient` directly — see the [React Integration](/integrations/react) guide.
+</Callout>
+
+## Gasless Transfer (via Relayer)
+
+Send tokens without the user needing gas:
+
+```typescript
+// Transfer via relayer — user pays no gas
+const result = await sdk.transferViaRelayer({
+  targetChain: 10004,
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: 1000000n, // 1 USDC
+});
+
+console.log('Transaction hash:', result.transactionHash);
+```
+
 ## Agent SDK Quick Start
 
 For AI agents that need to make autonomous payments:
@@ -173,7 +223,7 @@ For AI agents that need to make autonomous payments:
 import { createAgentWallet } from '@veridex/agentic-payments';
 
 async function agentQuickStart() {
-  // 1. Create agent with spending limits
+  // 1. Create agent with spending limits and MCP tools
   const agent = await createAgentWallet({
     masterCredential: {
       credentialId: process.env.CREDENTIAL_ID!,
@@ -187,13 +237,19 @@ async function agentQuickStart() {
       expiryHours: 24,
       allowedChains: [10004], // Base Sepolia
     },
+    mcp: { enabled: true }, // Enable MCP tools for AI model integration
+    relayerUrl: 'https://relay.veridex.network',
   });
 
-  // 2. Fetch paid data (x402 handled automatically)
+  // 2. Get MCP tools (for Gemini, Claude, GPT function calling)
+  const tools = agent.getMCPTools();
+  console.log('Available tools:', tools.map(t => t.name));
+
+  // 3. Fetch paid data (x402 handled automatically)
   const response = await agent.fetch('https://paid-api.example.com/data');
   const data = await response.json();
 
-  // 3. Direct payment
+  // 4. Direct payment
   const receipt = await agent.pay({
     chain: 10004,
     token: 'USDC',
@@ -201,18 +257,44 @@ async function agentQuickStart() {
     recipient: '0x...',
   });
 
-  // 4. Check spending
+  // 5. Check spending
   const status = agent.getSessionStatus();
   console.log(`Spent: $${status.totalSpentUSD} / $${status.limits!.dailyLimitUSD}`);
 
-  // 5. Clean up
+  // 6. Clean up
   await agent.revokeSession();
 }
 ```
 
+## Next.js SSR-Safe Pattern
+
+In Next.js, use dynamic imports to avoid SSR issues:
+
+```typescript
+// lib/veridex-client.ts
+let sdkInstance: any = null;
+
+export async function getVeridexSDK() {
+  if (!sdkInstance) {
+    const { createSDK } = await import('@veridex/sdk');
+    sdkInstance = createSDK('base', {
+      network: 'testnet',
+      relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+    });
+  }
+  return sdkInstance;
+}
+```
+
+<Callout type="warning">
+  The `await import('@veridex/sdk')` ensures the SDK is only loaded in the browser, never during server-side rendering. See the [Next.js Integration](/integrations/nextjs) guide for the full pattern.
+</Callout>
+
 ## React Integration
 
 ```tsx
+'use client';
+
 import { useState } from 'react';
 import { createSDK } from '@veridex/sdk';
 
@@ -225,11 +307,13 @@ export function WalletButton() {
   const handleConnect = async () => {
     setLoading(true);
     try {
-      const stored = sdk.passkey.getAllStoredCredentials();
-      if (stored.length > 0) {
+      // Check for existing passkey
+      const hasStored = sdk.passkey.hasStoredCredential();
+      if (hasStored) {
         await sdk.passkey.authenticate();
       } else {
         await sdk.passkey.register('user@example.com', 'My Wallet');
+        sdk.passkey.saveToLocalStorage();
       }
       setVault(sdk.getVaultAddress());
     } catch (error) {
@@ -257,16 +341,16 @@ export function WalletButton() {
 ## Next Steps
 
 <Cards>
-  <Card title="Session Keys" href="/guides/session-keys">
-    Enable smooth UX without repeated biometric prompts
+  <Card title="React Integration" href="/integrations/react">
+    Full multi-chain context provider with VeridexSDK
+  </Card>
+  <Card title="Next.js Integration" href="/integrations/nextjs">
+    SSR-safe patterns with dynamic imports
   </Card>
   <Card title="Agent Payments" href="/guides/agent-payments">
-    Build autonomous AI agent payments
+    Build autonomous AI agent payments with MCP tools
   </Card>
   <Card title="Spending Limits" href="/guides/spending-limits">
     Configure spending limits for safety
-  </Card>
-  <Card title="Stacks Integration" href="/chains/stacks">
-    Use Veridex on Stacks with native passkey support
   </Card>
 </Cards>

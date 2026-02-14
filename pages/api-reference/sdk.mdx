@@ -64,6 +64,77 @@ const sdk = createSDK('base', {
 const stacksSdk = createSDK('stacks', { network: 'testnet' });
 ```
 
+### VeridexSDK (Direct Constructor)
+
+For full control over chain configuration, use the `VeridexSDK` class directly with an `EVMClient`. This is the pattern used for multi-chain support.
+
+```typescript
+import { VeridexSDK } from '@veridex/sdk';
+import { EVMClient } from '@veridex/sdk/chains/evm';
+
+const evmClient = new EVMClient({
+  chainId: 84532,
+  wormholeChainId: 10004,
+  rpcUrl: 'https://sepolia.base.org',
+  hubContractAddress: '0x66D87dE68327f48A099c5B9bE97020Feab9a7c82',
+  wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
+  name: 'Base Sepolia',
+  explorerUrl: 'https://sepolia.basescan.org',
+  vaultFactory: '0xCFaEb5652aa2Ee60b2229dC8895B4159749C7e53',
+  vaultImplementation: '0x0d13367C16c6f0B24eD275CC67C7D9f42878285c',
+});
+
+const sdk = new VeridexSDK({
+  chain: evmClient,
+  persistWallet: true,
+  testnet: true,
+  relayerUrl: '/api/relayer',
+  relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
+  queryApiKey: process.env.NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY,
+  sponsorPrivateKey: process.env.NEXT_PUBLIC_VERIDEX_SPONSOR_KEY,
+  chainRpcUrls: {
+    10004: 'https://sepolia.base.org',
+    10005: 'https://sepolia.optimism.io',
+    10003: 'https://sepolia-rollup.arbitrum.io/rpc',
+  },
+});
+```
+
+**Config:**
+
+```typescript
+interface VeridexSDKConfig {
+  chain: EVMClient;                              // Hub chain client
+  persistWallet?: boolean;                       // Persist wallet state (default: true)
+  testnet?: boolean;                             // Use testnet (default: true)
+  relayerUrl?: string;                           // Relayer URL for gasless transactions
+  relayerApiKey?: string;                        // Relayer API key
+  queryApiKey?: string;                          // Wormhole query API key
+  sponsorPrivateKey?: string;                    // For gasless vault creation
+  integratorSponsorKey?: string;                 // Platform-level sponsorship
+  chainRpcUrls?: Record<number, string>;         // RPC URLs keyed by Wormhole chain ID
+}
+```
+
+### Dynamic Import (SSR-Safe)
+
+For Next.js apps, use dynamic imports to avoid SSR issues:
+
+```typescript
+let sdkInstance: any = null;
+
+export async function getVeridexSDK() {
+  if (!sdkInstance) {
+    const { createSDK } = await import('@veridex/sdk');
+    sdkInstance = createSDK('base', {
+      network: 'testnet',
+      relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+    });
+  }
+  return sdkInstance;
+}
+```
+
 ### Convenience Factories
 
 ```typescript
@@ -167,6 +238,87 @@ const signature = await sdk.passkey.sign(challenge);
 
 ---
 
+### sdk.passkey.saveToLocalStorage
+
+Save the current credential to localStorage for auto-login on next visit.
+
+```typescript
+sdk.passkey.saveToLocalStorage();
+```
+
+---
+
+### sdk.passkey.loadFromLocalStorage
+
+Load a saved credential from localStorage.
+
+```typescript
+const credential = sdk.passkey.loadFromLocalStorage();
+if (credential) {
+  sdk.setCredential(credential);
+}
+```
+
+**Returns:** `PasskeyCredential | null`
+
+---
+
+### sdk.passkey.hasStoredCredential
+
+Check if a credential exists in localStorage.
+
+```typescript
+const hasStored = sdk.passkey.hasStoredCredential();
+```
+
+**Returns:** `boolean`
+
+---
+
+### sdk.passkey.saveCredentialToRelayer
+
+Sync the credential to the relayer for cross-device recovery.
+
+```typescript
+await sdk.passkey.saveCredentialToRelayer();
+```
+
+---
+
+### sdk.passkey.loadCredentialFromRelayer
+
+Recover a credential from the relayer (cross-device login).
+
+```typescript
+const credential = await sdk.passkey.loadCredentialFromRelayer();
+```
+
+**Returns:** `Promise<PasskeyCredential | null>`
+
+---
+
+## Credential Management
+
+### sdk.setCredential
+
+Set the active credential on the SDK instance (used after loading from storage or cross-origin auth).
+
+```typescript
+sdk.setCredential(credential);
+```
+
+---
+
+### sdk.clearCredential
+
+Clear the active credential and reset SDK state.
+
+```typescript
+sdk.clearCredential();
+```
+
+---
+
 ## Vault & Identity
 
 ### sdk.getVaultAddress
@@ -188,6 +340,62 @@ Get the current chain's configuration.
 ```typescript
 const config = sdk.getChainConfig();
 ```
+
+---
+
+### sdk.getUnifiedIdentity
+
+Get the unified identity across all chains, including vault addresses, deployment status, and key hash.
+
+```typescript
+const identity = await sdk.getUnifiedIdentity();
+```
+
+**Returns:** `Promise<UnifiedIdentity>`
+
+```typescript
+interface UnifiedIdentity {
+  keyHash: string;
+  addresses: Array<{
+    wormholeChainId: number;
+    chainName: string;
+    address: string;
+    deployed: boolean;
+  }>;
+}
+```
+
+**Example:**
+
+```typescript
+const identity = await sdk.getUnifiedIdentity();
+const baseAddr = identity.addresses.find(a => a.wormholeChainId === 10004);
+console.log('Base vault:', baseAddr?.address, 'deployed:', baseAddr?.deployed);
+```
+
+---
+
+### sdk.vaultExists
+
+Check if the vault is deployed on the current chain.
+
+```typescript
+const exists = await sdk.vaultExists();
+```
+
+**Returns:** `Promise<boolean>`
+
+---
+
+### sdk.getReceiveAddress
+
+Get the address that can receive tokens (vault address if deployed, otherwise the computed address).
+
+```typescript
+const receiveAddr = sdk.getReceiveAddress();
+```
+
+**Returns:** `string`
 
 ---
 
@@ -276,6 +484,43 @@ interface DispatchResult {
   targetChain: number;
   blockNumber: number;
 }
+```
+
+---
+
+### sdk.transferViaRelayer
+
+Execute a gasless transfer through the relayer. The user only needs their passkey — no MetaMask or gas tokens required. This is the primary transfer method used by both the test-app and sera/dashboard.
+
+```typescript
+const result = await sdk.transferViaRelayer(params);
+```
+
+**Parameters:** `TransferParams` (same as `prepareTransfer`)
+
+**Returns:** `Promise<TransferResult>`
+
+```typescript
+interface TransferResult {
+  transactionHash: string;
+  sequence?: bigint;
+  status: 'pending' | 'confirmed' | 'failed';
+}
+```
+
+**Example:**
+
+```typescript
+import { ethers } from 'ethers';
+
+const result = await sdk.transferViaRelayer({
+  targetChain: 10004,  // Base Sepolia
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: ethers.parseUnits('10', 6), // 10 USDC
+});
+
+console.log('Tx:', result.transactionHash);
 ```
 
 ---
@@ -463,6 +708,61 @@ Prepare an emergency pause transaction.
 
 ```typescript
 const prepared = await sdk.preparePauseVault();
+```
+
+---
+
+## Sponsored Vault Creation
+
+### sdk.isSponsorshipAvailable
+
+Check if the SDK has a sponsor key configured for gasless vault creation.
+
+```typescript
+const canSponsor = sdk.isSponsorshipAvailable();
+```
+
+**Returns:** `boolean`
+
+---
+
+### sdk.ensureSponsoredVaultsOnAllChains
+
+Auto-create vaults on all configured chains using the sponsor key. No gas required from the user. This is called automatically after registration in the test-app.
+
+```typescript
+const result = await sdk.ensureSponsoredVaultsOnAllChains();
+console.log(`Created vaults on ${result.results.filter(r => r.success).length} chains`);
+```
+
+**Returns:** `Promise<{ results: Array<{ chainId: number; success: boolean; error?: string }> }>`
+
+---
+
+## Token Management
+
+### sdk.getTokenList
+
+Get the list of supported tokens on the current chain.
+
+```typescript
+const tokens = sdk.getTokenList();
+for (const token of tokens) {
+  console.log(`${token.symbol}: ${token.address} (${token.decimals} decimals)`);
+}
+```
+
+**Returns:** `TokenInfo[]`
+
+```typescript
+interface TokenInfo {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  wormholeChainId: number;
+  logoUrl?: string;
+}
 ```
 
 ---

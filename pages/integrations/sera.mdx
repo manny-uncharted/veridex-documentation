@@ -64,16 +64,34 @@ SETTLEMENT_WALLET_KEY=your-private-key
 
 ### 3. Initialize Services
 
+This uses **dynamic imports** to avoid SSR issues in Next.js:
+
 ```typescript
-import { createSDK } from '@veridex/sdk';
+import { WalletManager } from '@veridex/sdk';
 import { SeraService } from './sera-service';
 
-// Veridex for authentication
-const veridex = createSDK('ethereum', { network: 'testnet' });
+// Veridex SDK, lazy-loaded singleton to avoid SSR issues
+let sdkInstance: any = null;
+
+export async function getVeridexSDK() {
+  if (!sdkInstance) {
+    const { createSDK } = await import('@veridex/sdk');
+    sdkInstance = createSDK('base', {
+      network: 'testnet',
+      relayerUrl: process.env.NEXT_PUBLIC_VERIDEX_RELAYER_URL,
+      relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
+    });
+  }
+  return sdkInstance;
+}
 
 // Sera for settlement
 const sera = new SeraService(process.env.NEXT_PUBLIC_RPC_URL!);
 ```
+
+<Callout type="info">
+  The `await import('@veridex/sdk')` pattern ensures the SDK is only loaded in the browser, never during server-side rendering. See the [Next.js Integration](/integrations/nextjs) guide for the full pattern.
+</Callout>
 
 ## Contract Addresses
 

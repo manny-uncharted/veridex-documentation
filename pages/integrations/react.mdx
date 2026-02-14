@@ -1,11 +1,17 @@
 ---
 title: React Integration
-description: Integrate Veridex with React applications
+description: Integrate Veridex with React applications using real production patterns
 ---
+
+import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../../components/mdx"
 
 # React Integration
 
-Complete guide to integrating Veridex with React and Next.js applications.
+Complete guide to integrating Veridex with React applications, based on real patterns from the [test-app](https://github.com/Veridex-Protocol/demo/tree/main/test-app) — a production-grade multi-chain passkey wallet.
+
+<Callout type="warning">
+  The Veridex SDK uses browser APIs (WebAuthn, localStorage) and **must only run in client-side code**. In Next.js, always add `'use client'` to components that use the SDK.
+</Callout>
 
 ## Setup
 
@@ -15,86 +21,383 @@ Complete guide to integrating Veridex with React and Next.js applications.
 npm install @veridex/sdk ethers
 ```
 
-### Create SDK Instance
+### Two Ways to Initialize
+
+The SDK supports two initialization patterns:
+
+**1. Quick Start (`createSDK`)** — for simple apps that only need one chain:
 
 ```typescript
-// lib/veridex.ts
 import { createSDK } from '@veridex/sdk';
 
-export const sdk = createSDK('base', {
-  network: process.env.NEXT_PUBLIC_NETWORK as 'testnet' | 'mainnet' || 'testnet',
-  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL || 'https://relayer.veridex.network',
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
 });
 ```
 
-## React Context
+**2. Full Control (`VeridexSDK` + `EVMClient`)** — for multi-chain apps (recommended):
 
-### Create Context Provider
+```typescript
+import { VeridexSDK } from '@veridex/sdk';
+import { EVMClient } from '@veridex/sdk/chains/evm';
+
+const evmClient = new EVMClient({
+  chainId: 84532,
+  wormholeChainId: 10004,
+  rpcUrl: 'https://sepolia.base.org',
+  hubContractAddress: '0x66D87dE68327f48A099c5B9bE97020Feab9a7c82',
+  wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
+  name: 'Base Sepolia',
+  explorerUrl: 'https://sepolia.basescan.org',
+  vaultFactory: '0xCFaEb5652aa2Ee60b2229dC8895B4159749C7e53',
+  vaultImplementation: '0x0d13367C16c6f0B24eD275CC67C7D9f42878285c',
+});
+
+const sdk = new VeridexSDK({
+  chain: evmClient,
+  persistWallet: true,
+  testnet: true,
+  relayerUrl: '/api/relayer',
+  relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
+  queryApiKey: process.env.NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY,
+  sponsorPrivateKey: process.env.NEXT_PUBLIC_VERIDEX_SPONSOR_KEY,
+});
+```
+
+<Callout type="info">
+  The test-app uses the full control pattern with `VeridexSDK` + `EVMClient` because it manages vaults across 6+ chains (Base, Optimism, Arbitrum, Solana, Sui, Aptos, Starknet).
+</Callout>
+
+## React Context (Production Pattern)
+
+This is the real pattern used in the test-app. It manages SDK initialization, passkey authentication, multi-chain vault addresses, balances, and transfers.
+
+### Configuration File
+
+```typescript
+// lib/config.ts
+const RELAYER_DIRECT_URL = process.env.NEXT_PUBLIC_RELAYER_URL
+  || 'https://relay.veridex.network';
+const RELAYER_PROXY_URL = '/api/relayer';
+const relayerUrl = process.env.NODE_ENV === 'production'
+  ? RELAYER_PROXY_URL
+  : RELAYER_DIRECT_URL;
+
+export const config = {
+  chainId: 84532,
+  wormholeChainId: 10004,
+  rpcUrl: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
+  hubContract: '0x66D87dE68327f48A099c5B9bE97020Feab9a7c82',
+  wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
+  chainName: 'Base Sepolia',
+  explorerUrl: 'https://sepolia.basescan.org',
+  vaultFactory: '0xCFaEb5652aa2Ee60b2229dC8895B4159749C7e53',
+  vaultImplementation: '0x0d13367C16c6f0B24eD275CC67C7D9f42878285c',
+  relayerUrl,
+};
+
+export const spokeConfigs = {
+  optimismSepolia: {
+    chainId: 11155420,
+    wormholeChainId: 10005,
+    rpcUrl: 'https://sepolia.optimism.io',
+    vaultFactory: '0xA5653d54079ABeCe780F8d9597B2bc4B09fe464A',
+    vaultImplementation: '0x8099b1406485d2255ff89Ce5Ea18520802AFC150',
+  },
+  arbitrumSepolia: {
+    chainId: 421614,
+    wormholeChainId: 10003,
+    rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
+    vaultFactory: '0xd36D3D5DB59d78f1E33813490F72DABC15C9B07c',
+    vaultImplementation: '0xB10ACf39eBF17fc33F722cBD955b7aeCB0611bc4',
+  },
+};
+```
+
+### Context Provider
 
 ```tsx
-// context/VeridexContext.tsx
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { sdk } from '../lib/veridex';
+// lib/VeridexContext.tsx
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import {
+  VeridexSDK,
+  PasskeyCredential,
+  UnifiedIdentity,
+  PortfolioBalance,
+  PreparedTransfer,
+  TransferResult,
+  TokenInfo,
+  TransferParams,
+  SpendingLimits,
+  FormattedSpendingLimits,
+  LimitCheckResult,
+} from '@veridex/sdk';
+import { EVMClient } from '@veridex/sdk/chains/evm';
+import { SolanaClient } from '@veridex/sdk/chains/solana';
+import { ethers } from 'ethers';
+import { config, spokeConfigs } from '@/lib/config';
 
 interface VeridexContextType {
-  isConnected: boolean;
+  sdk: VeridexSDK | null;
+  credential: PasskeyCredential | null;
+  identity: UnifiedIdentity | null;
+  isRegistered: boolean;
   vaultAddress: string | null;
+  vaultDeployed: boolean;
   isLoading: boolean;
-  connect: () => Promise<void>;
-  disconnect: () => void;
+
+  // Authentication
+  register: (username: string, displayName: string) => Promise<void>;
+  login: () => Promise<void>;
+  logout: () => void;
+  hasStoredCredential: () => boolean;
+
+  // Balances
+  vaultBalances: PortfolioBalance | null;
+  isLoadingBalances: boolean;
+  refreshBalances: () => Promise<void>;
+  getTokenList: () => TokenInfo[];
+
+  // Transfers
+  prepareTransfer: (params: TransferParams) => Promise<PreparedTransfer>;
+  executeTransfer: (prepared: PreparedTransfer) => Promise<TransferResult>;
+  transferGasless: (params: TransferParams) => Promise<TransferResult>;
+
+  // Spending Limits
+  spendingLimits: SpendingLimits | null;
+  formattedSpendingLimits: FormattedSpendingLimits | null;
+  refreshSpendingLimits: () => Promise<void>;
+  checkTransactionLimit: (amount: bigint) => Promise<LimitCheckResult | null>;
 }
 
-const VeridexContext = createContext<VeridexContextType | null>(null);
+const VeridexContext = createContext<VeridexContextType | undefined>(undefined);
 
 export function VeridexProvider({ children }: { children: ReactNode }) {
-  const [isConnected, setIsConnected] = useState(false);
+  const [sdk, setSdk] = useState<VeridexSDK | null>(null);
+  const [credential, setCredential] = useState<PasskeyCredential | null>(null);
+  const [identity, setIdentity] = useState<UnifiedIdentity | null>(null);
   const [vaultAddress, setVaultAddress] = useState<string | null>(null);
+  const [vaultDeployed, setVaultDeployed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [vaultBalances, setVaultBalances] = useState<PortfolioBalance | null>(null);
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [spendingLimits, setSpendingLimits] = useState<SpendingLimits | null>(null);
+  const [formattedSpendingLimits, setFormattedSpendingLimits] =
+    useState<FormattedSpendingLimits | null>(null);
 
-  // Check for existing credential on mount
+  // Initialize SDK on mount
   useEffect(() => {
-    const checkConnection = async () => {
-      const stored = sdk.passkey.getAllStoredCredentials();
-      if (stored.length > 0) {
-        try {
-          await sdk.passkey.authenticate();
-          setVaultAddress(sdk.getVaultAddress());
-          setIsConnected(true);
-        } catch (error) {
-          console.error('Auto-login failed:', error);
+    const initSdk = async () => {
+      setIsLoading(true);
+      try {
+        // Create the EVM chain client (hub chain)
+        const evmClient = new EVMClient({
+          chainId: config.chainId,
+          wormholeChainId: config.wormholeChainId,
+          rpcUrl: config.rpcUrl,
+          hubContractAddress: config.hubContract,
+          wormholeCoreBridge: config.wormholeCoreBridge,
+          name: config.chainName,
+          explorerUrl: config.explorerUrl,
+          vaultFactory: config.vaultFactory,
+          vaultImplementation: config.vaultImplementation,
+        });
+
+        // Create the SDK instance
+        const veridexSdk = new VeridexSDK({
+          chain: evmClient,
+          persistWallet: true,
+          testnet: true,
+          relayerUrl: config.relayerUrl,
+          relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
+          queryApiKey: process.env.NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY,
+          sponsorPrivateKey: process.env.NEXT_PUBLIC_VERIDEX_SPONSOR_KEY,
+          chainRpcUrls: {
+            10004: config.rpcUrl,
+            10005: spokeConfigs.optimismSepolia.rpcUrl,
+            10003: spokeConfigs.arbitrumSepolia.rpcUrl,
+          },
+        });
+
+        setSdk(veridexSdk);
+
+        // Try to restore saved credential (auto-login)
+        const savedCred = veridexSdk.passkey.loadFromLocalStorage();
+        if (savedCred) {
+          veridexSdk.setCredential(savedCred);
+          setCredential(savedCred);
+          await loadIdentity(veridexSdk);
+
+          // Auto-create vaults on all chains (sponsored, gasless)
+          if (veridexSdk.isSponsorshipAvailable()) {
+            await veridexSdk.ensureSponsoredVaultsOnAllChains();
+          }
         }
+      } catch (error) {
+        console.error('SDK initialization error:', error);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
-    checkConnection();
+
+    initSdk();
   }, []);
 
-  const connect = async () => {
+  const loadIdentity = async (sdkInstance: VeridexSDK) => {
+    try {
+      const unifiedIdentity = await sdkInstance.getUnifiedIdentity();
+      setIdentity(unifiedIdentity);
+
+      const chainAddr = unifiedIdentity.addresses.find(
+        a => a.wormholeChainId === config.wormholeChainId
+      );
+      if (chainAddr) {
+        setVaultAddress(chainAddr.address);
+        setVaultDeployed(chainAddr.deployed);
+      } else {
+        const addr = sdkInstance.getVaultAddress();
+        setVaultAddress(addr);
+        setVaultDeployed(await sdkInstance.vaultExists());
+      }
+    } catch (error) {
+      console.warn('Could not load identity:', error);
+    }
+  };
+
+  // --- Authentication ---
+
+  const register = async (username: string, displayName: string) => {
+    if (!sdk) throw new Error('SDK not initialized');
     setIsLoading(true);
     try {
-      const existing = sdk.passkey.getAllStoredCredentials();
-      if (existing.length > 0) {
-        await sdk.passkey.authenticate();
-      } else {
-        await sdk.passkey.register('user@example.com', 'My Wallet');
+      const cred = await sdk.passkey.register(username, displayName);
+      sdk.setCredential(cred);
+      setCredential(cred);
+      sdk.passkey.saveToLocalStorage();
+
+      // Save to relayer for cross-device recovery
+      sdk.passkey.saveCredentialToRelayer().catch(console.warn);
+
+      await loadIdentity(sdk);
+
+      // Auto-create vaults (gasless)
+      if (sdk.isSponsorshipAvailable()) {
+        await sdk.ensureSponsoredVaultsOnAllChains();
+        await loadIdentity(sdk);
       }
-      setVaultAddress(sdk.getVaultAddress());
-      setIsConnected(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const disconnect = () => {
-    sdk.passkey.clearCredential();
-    setIsConnected(false);
-    setVaultAddress(null);
+  const login = async () => {
+    if (!sdk) throw new Error('SDK not initialized');
+    setIsLoading(true);
+    try {
+      const { credential: cred } = await sdk.passkey.authenticate();
+      sdk.setCredential(cred);
+      setCredential(cred);
+      sdk.passkey.saveToLocalStorage();
+      await loadIdentity(sdk);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  const logout = () => {
+    if (sdk) {
+      sdk.clearCredential();
+      sdk.wallet.clearCache();
+    }
+    setCredential(null);
+    setIdentity(null);
+    setVaultAddress(null);
+    setVaultDeployed(false);
+    setVaultBalances(null);
+  };
+
+  const hasStoredCredential = (): boolean => {
+    if (!sdk) return false;
+    return sdk.passkey.hasStoredCredential();
+  };
+
+  // --- Balances ---
+
+  const refreshBalances = async () => {
+    if (!sdk || !vaultAddress) return;
+    setIsLoadingBalances(true);
+    try {
+      const balances = await sdk.getVaultBalances(true);
+      setVaultBalances(balances);
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
+
+  const getTokenList = (): TokenInfo[] => {
+    if (!sdk) return [];
+    return sdk.getTokenList();
+  };
+
+  // --- Transfers ---
+
+  const prepareTransfer = async (params: TransferParams) => {
+    if (!sdk) throw new Error('SDK not initialized');
+    return await sdk.prepareTransfer(params);
+  };
+
+  const executeTransfer = async (prepared: PreparedTransfer) => {
+    if (!sdk) throw new Error('SDK not initialized');
+    const signer = new ethers.BrowserProvider(window.ethereum!).getSigner();
+    return await sdk.executeTransfer(prepared, await signer);
+  };
+
+  const transferGasless = async (params: TransferParams) => {
+    if (!sdk) throw new Error('SDK not initialized');
+    return await sdk.transferViaRelayer(params);
+  };
+
+  // --- Spending Limits ---
+
+  const refreshSpendingLimits = useCallback(async () => {
+    if (!sdk || !vaultAddress) return;
+    try {
+      const limits = await sdk.spendingLimits.getSpendingLimits(
+        vaultAddress, config.wormholeChainId
+      );
+      setSpendingLimits(limits);
+      const formatted = await sdk.spendingLimits.getFormattedSpendingLimits(
+        vaultAddress, config.wormholeChainId
+      );
+      setFormattedSpendingLimits(formatted);
+    } catch (error) {
+      console.error('Error fetching spending limits:', error);
+    }
+  }, [sdk, vaultAddress]);
+
+  const checkTransactionLimit = useCallback(async (amount: bigint) => {
+    if (!sdk || !vaultAddress) return null;
+    return await sdk.spendingLimits.checkTransactionLimit(
+      vaultAddress, config.wormholeChainId, amount
+    );
+  }, [sdk, vaultAddress]);
+
   return (
-    <VeridexContext.Provider
-      value={{ isConnected, vaultAddress, isLoading, connect, disconnect }}
-    >
+    <VeridexContext.Provider value={{
+      sdk, credential, identity,
+      isRegistered: !!credential,
+      vaultAddress, vaultDeployed, isLoading,
+      register, login, logout, hasStoredCredential,
+      vaultBalances, isLoadingBalances, refreshBalances, getTokenList,
+      prepareTransfer, executeTransfer, transferGasless,
+      spendingLimits, formattedSpendingLimits,
+      refreshSpendingLimits, checkTransactionLimit,
+    }}>
       {children}
     </VeridexContext.Provider>
   );
@@ -102,9 +405,7 @@ export function VeridexProvider({ children }: { children: ReactNode }) {
 
 export function useVeridex() {
   const context = useContext(VeridexContext);
-  if (!context) {
-    throw new Error('useVeridex must be used within VeridexProvider');
-  }
+  if (!context) throw new Error('useVeridex must be used within VeridexProvider');
   return context;
 }
 ```
@@ -112,60 +413,85 @@ export function useVeridex() {
 ### Use in App
 
 ```tsx
-// pages/_app.tsx (Next.js) or App.tsx (Create React App)
-import { VeridexProvider } from '../context/VeridexContext';
+// app/layout.tsx (Next.js App Router)
+import { VeridexProvider } from '@/lib/VeridexContext';
 
-export default function App({ Component, pageProps }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <VeridexProvider>
-      <Component {...pageProps} />
-    </VeridexProvider>
+    <html lang="en">
+      <body>
+        <VeridexProvider>{children}</VeridexProvider>
+      </body>
+    </html>
   );
 }
 ```
 
 ## Components
 
-### Connect Button
+### Connect / Register Button
 
 ```tsx
 // components/ConnectButton.tsx
-import { useVeridex } from '../context/VeridexContext';
+'use client';
+
+import { useState } from 'react';
+import { useVeridex } from '@/lib/VeridexContext';
 
 export function ConnectButton() {
-  const { isConnected, vaultAddress, isLoading, connect, disconnect } = useVeridex();
+  const {
+    isRegistered, vaultAddress, isLoading,
+    register, login, logout, hasStoredCredential,
+  } = useVeridex();
+  const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
 
   if (isLoading) {
-    return (
-      <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded-lg">
-        Loading...
-      </button>
-    );
+    return <button disabled>Loading...</button>;
   }
 
-  if (isConnected) {
+  if (isRegistered) {
     return (
       <div className="flex items-center gap-3">
-        <span className="font-mono text-sm">
-          {vaultAddress?.slice(0, 6)}...{vaultAddress?.slice(-4)}
-        </span>
-        <button
-          onClick={disconnect}
-          className="text-red-500 text-sm hover:underline"
-        >
-          Disconnect
-        </button>
+        <code>{vaultAddress?.slice(0, 6)}...{vaultAddress?.slice(-4)}</code>
+        <button onClick={logout} className="text-red-500 text-sm">Disconnect</button>
       </div>
     );
   }
 
   return (
-    <button
-      onClick={connect}
-      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-    >
-      Connect with Passkey
-    </button>
+    <div className="space-y-4">
+      {/* Sign in with existing passkey */}
+      <button
+        onClick={async () => {
+          try { await login(); }
+          catch (err: any) { setError(err.message); }
+        }}
+        className="w-full bg-purple-600 text-white py-3 rounded-xl"
+      >
+        Sign In with Passkey
+      </button>
+
+      {/* Register new passkey */}
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        try { await register(username, username); }
+        catch (err: any) { setError(err.message); }
+      }}>
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Choose a username"
+          className="w-full p-3 border rounded-xl mb-2"
+          required
+        />
+        <button type="submit" className="w-full bg-white/10 py-3 rounded-xl">
+          Create Wallet
+        </button>
+      </form>
+
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+    </div>
   );
 }
 ```
@@ -174,35 +500,23 @@ export function ConnectButton() {
 
 ```tsx
 // components/BalanceDisplay.tsx
-import { useState, useEffect } from 'react';
-import { sdk } from '../lib/veridex';
-import { useVeridex } from '../context/VeridexContext';
+'use client';
+
+import { useEffect } from 'react';
+import { useVeridex } from '@/lib/VeridexContext';
 
 export function BalanceDisplay() {
-  const { isConnected } = useVeridex();
-  const [balances, setBalances] = useState<Record<string, Record<string, string>>>({});
-  const [loading, setLoading] = useState(false);
+  const {
+    isRegistered, vaultBalances, isLoadingBalances, refreshBalances,
+  } = useVeridex();
 
   useEffect(() => {
-    if (isConnected) {
-      loadBalances();
-    }
-  }, [isConnected]);
+    if (isRegistered) refreshBalances();
+  }, [isRegistered]);
 
-  const loadBalances = async () => {
-    setLoading(true);
-    try {
-      const result = await sdk.getBalances();
-      setBalances(result);
-    } catch (error) {
-      console.error('Failed to load balances:', error);
-    }
-    setLoading(false);
-  };
+  if (!isRegistered) return null;
 
-  if (!isConnected) return null;
-
-  if (loading) {
+  if (isLoadingBalances) {
     return <div className="animate-pulse">Loading balances...</div>;
   }
 
@@ -210,44 +524,46 @@ export function BalanceDisplay() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="font-bold">Balances</h3>
-        <button onClick={loadBalances} className="text-sm text-blue-600">
-          Refresh
-        </button>
+        <button onClick={refreshBalances} className="text-sm text-blue-600">Refresh</button>
       </div>
 
-      {Object.entries(balances).map(([chain, tokens]) => (
-        <div key={chain} className="p-3 bg-gray-50 rounded-lg">
-          <h4 className="font-medium text-sm text-gray-600 mb-2">{chain}</h4>
-          {Object.entries(tokens).map(([symbol, balance]) => (
-            <div key={symbol} className="flex justify-between">
-              <span>{symbol}</span>
-              <span className="font-mono">{balance}</span>
-            </div>
-          ))}
+      {vaultBalances?.tokens.map((entry) => (
+        <div key={entry.token.address} className="flex justify-between p-3 bg-gray-50 rounded-lg">
+          <span>{entry.token.symbol}</span>
+          <span className="font-mono">{entry.formatted}</span>
         </div>
       ))}
+
+      {vaultBalances?.totalUsdValue && (
+        <div className="text-right font-bold">
+          Total: ${vaultBalances.totalUsdValue.toFixed(2)}
+        </div>
+      )}
     </div>
   );
 }
 ```
 
-### Transfer Form
+### Gasless Transfer Form
+
+The test-app uses gasless transfers via the relayer — the user only needs their passkey, no MetaMask or gas tokens required.
 
 ```tsx
-// components/TransferForm.tsx
+// components/SendForm.tsx
+'use client';
+
 import { useState } from 'react';
-import { parseUnits } from 'ethers';
-import { sdk } from '../lib/veridex';
-import { useVeridex } from '../context/VeridexContext';
+import { ethers } from 'ethers';
+import { useVeridex } from '@/lib/VeridexContext';
 
-const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 
-export function TransferForm() {
-  const { isConnected } = useVeridex();
+export function SendForm() {
+  const { isRegistered, transferGasless, vaultAddress } = useVeridex();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,242 +571,145 @@ export function TransferForm() {
     setResult(null);
 
     try {
-      const tx = await sdk.transferViaRelayer({
-        token: USDC,
+      const tx = await transferGasless({
+        targetChain: 10004,  // Base Sepolia
+        token: USDC_ADDRESS,
         recipient,
-        amount: parseUnits(amount, 6),
+        amount: ethers.parseUnits(amount, 6), // USDC has 6 decimals
       });
 
-      setResult({
-        success: true,
-        message: `Transfer successful! Tx: ${tx.txHash}`,
-      });
+      setResult(`Sent! Tx: ${tx.transactionHash}`);
       setRecipient('');
       setAmount('');
     } catch (error) {
-      setResult({
-        success: false,
-        message: error instanceof Error ? error.message : 'Transfer failed',
-      });
+      setResult(error instanceof Error ? error.message : 'Transfer failed');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  if (!isConnected) {
-    return (
-      <div className="p-4 bg-gray-100 rounded-lg text-center">
-        Connect your wallet to send tokens
-      </div>
-    );
+  if (!isRegistered) {
+    return <p className="text-center text-gray-500">Connect your wallet to send tokens</p>;
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">Recipient</label>
-        <input
-          type="text"
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
-          placeholder="0x..."
-          className="w-full p-2 border rounded-lg"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-1">Amount (USDC)</label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="10.00"
-          step="0.01"
-          min="0"
-          className="w-full p-2 border rounded-lg"
-          required
-        />
-      </div>
-
+      <input
+        type="text"
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+        placeholder="Recipient address (0x...)"
+        className="w-full p-3 border rounded-lg"
+        required
+      />
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="Amount (USDC)"
+        step="0.01"
+        className="w-full p-3 border rounded-lg"
+        required
+      />
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-blue-600 text-white py-2 rounded-lg disabled:bg-gray-400"
+        className="w-full bg-blue-600 text-white py-3 rounded-lg disabled:bg-gray-400"
       >
-        {loading ? 'Sending...' : 'Send USDC'}
+        {loading ? 'Sending...' : 'Send USDC (Gasless)'}
       </button>
-
-      {result && (
-        <div
-          className={`p-3 rounded-lg ${
-            result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-          }`}
-        >
-          {result.message}
-        </div>
-      )}
+      {result && <p className="text-sm p-3 bg-gray-100 rounded-lg">{result}</p>}
     </form>
   );
 }
 ```
 
-## Hooks
+## Multi-Chain Support
 
-### useBalances Hook
+The test-app initializes chain clients for Solana, Sui, Aptos, and Starknet alongside the EVM hub:
 
-```tsx
-// hooks/useBalances.ts
-import { useState, useEffect, useCallback } from 'react';
-import { sdk } from '../lib/veridex';
+```typescript
+import { SolanaClient } from '@veridex/sdk/chains/solana';
+import { SuiClient } from '@veridex/sdk/chains/sui';
+import { AptosClient } from '@veridex/sdk/chains/aptos';
+import { StarknetClient } from '@veridex/sdk/chains/starknet';
 
-export function useBalances() {
-  const [balances, setBalances] = useState<Record<string, Record<string, string>>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+// Inside your SDK initialization:
+const solClient = new SolanaClient({
+  wormholeChainId: 1,
+  rpcUrl: 'https://api.devnet.solana.com',
+  programId: 'J7JehynQjN4XrucGQ5joMfhQWiViDmmLhQLriGUcWAM2',
+  wormholeCoreBridge: '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+  tokenBridge: 'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
+  network: 'devnet',
+  commitment: 'confirmed',
+});
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await sdk.getBalances();
-      setBalances(result);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to load balances'));
-    }
-    setLoading(false);
-  }, []);
+const suiClientInstance = new SuiClient({
+  wormholeChainId: 21,
+  rpcUrl: 'https://fullnode.testnet.sui.io:443',
+  packageId: '0x6ae854c698d73e39f5dc07c4d2291fa81e8732aded14bbff3b98cfa8bfaebff5',
+  wormholeCoreBridge: '0x31358d198147da50db32eda2562951d53973a0c0ad5ed738e9b17d88b213d790',
+  network: 'testnet',
+});
+```
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+Each chain client provides:
+- `computeVaultAddress(keyHash)` — deterministic vault address
+- `getVaultViaRelayer(keyHash, relayerUrl)` — check if vault exists
+- `createVaultViaRelayer(keyHash, relayerUrl)` — create vault (gasless)
 
-  return { balances, loading, error, refresh };
+## Sponsored Vault Creation
+
+The SDK can auto-create vaults on all chains without gas:
+
+```typescript
+// After registration or login
+if (sdk.isSponsorshipAvailable()) {
+  const result = await sdk.ensureSponsoredVaultsOnAllChains();
+  console.log(`Created vaults on ${result.results.filter(r => r.success).length} chains`);
 }
 ```
 
-### useTransfer Hook
-
-```tsx
-// hooks/useTransfer.ts
-import { useState, useCallback } from 'react';
-import { sdk } from '../lib/veridex';
-
-interface TransferParams {
-  token: string;
-  recipient: string;
-  amount: bigint;
-}
-
-export function useTransfer() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-
-  const transfer = useCallback(async (params: TransferParams) => {
-    setLoading(true);
-    setError(null);
-    setTxHash(null);
-
-    try {
-      const result = await sdk.transferViaRelayer(params);
-      setTxHash(result.txHash);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Transfer failed');
-      setError(error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return { transfer, loading, error, txHash };
-}
-```
-
-### useSession Hook
-
-```tsx
-// hooks/useSession.ts
-import { useState, useEffect, useCallback } from 'react';
-import { sdk } from '../lib/veridex';
-
-export function useSession() {
-  const [session, setSession] = useState(sdk.sessions.getActive());
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    // Check session on mount
-    setSession(sdk.sessions.getActive());
-  }, []);
-
-  const create = useCallback(async (params: { duration: number; maxValue?: bigint }) => {
-    setLoading(true);
-    try {
-      const newSession = await sdk.sessions.create(params);
-      setSession(newSession);
-      return newSession;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const revoke = useCallback(async () => {
-    await sdk.sessions.revoke();
-    setSession(null);
-  }, []);
-
-  return { session, create, revoke, loading };
-}
-```
-
-## Next.js Specific
-
-### App Router (Next.js 13+)
-
-```tsx
-// app/providers.tsx
-'use client';
-
-import { VeridexProvider } from '../context/VeridexContext';
-
-export function Providers({ children }: { children: React.ReactNode }) {
-  return <VeridexProvider>{children}</VeridexProvider>;
-}
-```
-
-```tsx
-// app/layout.tsx
-import { Providers } from './providers';
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
-  );
-}
-```
-
-### Environment Variables
+## Environment Variables
 
 ```bash
 # .env.local
 NEXT_PUBLIC_NETWORK=testnet
-NEXT_PUBLIC_RELAYER_URL=https://relayer.veridex.network
-NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY=your-api-key
+NEXT_PUBLIC_RELAYER_URL=https://relay.veridex.network
+NEXT_PUBLIC_RELAYER_API_KEY=your-api-key
+NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY=your-query-key
+NEXT_PUBLIC_VERIDEX_SPONSOR_KEY=your-sponsor-key
+NEXT_PUBLIC_INTEGRATOR_SPONSOR_KEY=your-integrator-key
 ```
 
 ## Complete Example
 
-See the [test-app](https://github.com/Veridex-Protocol/demo/tree/main/test-app) for a complete Next.js integration example.
+Clone the test-app for a complete working example with 6-chain support:
 
 ```bash
 git clone https://github.com/Veridex-Protocol/demo
 cd demo/test-app
+cp .env.local.example .env.local
 npm install
 npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Next Steps
+
+<Cards>
+  <Card title="Next.js Integration" href="/integrations/nextjs">
+    SSR-safe patterns with dynamic imports
+  </Card>
+  <Card title="Gasless Transactions" href="/guides/gasless-transactions">
+    How relayer-sponsored transfers work
+  </Card>
+  <Card title="Cross-Chain" href="/guides/cross-chain">
+    Bridge tokens across chains with Wormhole
+  </Card>
+  <Card title="Spending Limits" href="/guides/spending-limits">
+    Configure on-chain spending safety
+  </Card>
+</Cards>

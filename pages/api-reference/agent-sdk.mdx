@@ -318,13 +318,115 @@ agent.onSpendingAlert((alert) => {
 
 ### agent.getMCPTools
 
-Get MCP tools for integration with AI assistants (Claude, Cursor).
+Get MCP tools for integration with AI models (Gemini, Claude, GPT, Cursor). Each tool has a name, description, input schema, and handler function. This is the primary integration point used by the [veri_agent](/guides/agent-payments) to give Gemini function-calling access to wallet operations.
 
 ```typescript
 const tools = agent.getMCPTools();
 ```
 
-**Returns:** `any[]` — Array of MCP tool definitions
+**Returns:** `MCPTool[]`
+
+```typescript
+interface MCPTool {
+  name: string;                    // e.g., 'veridex_pay', 'veridex_balance'
+  description: string;             // Human-readable description
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+  handler: (args: any) => Promise<any>;  // Execute the tool
+}
+```
+
+**Available tools:**
+
+| Tool Name | Description |
+|-----------|-------------|
+| `veridex_pay` | Execute a token payment (chain, token, amount, recipient) |
+| `veridex_balance` | Check wallet balance on a specific chain |
+| `veridex_status` | Get session status and spending limits |
+| `veridex_history` | Get payment history |
+
+**Example — Mapping to Gemini function declarations:**
+
+```typescript
+import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
+
+const mcpTools = agent.getMCPTools();
+
+const geminiTools = mcpTools.map(tool => ({
+  declaration: {
+    name: tool.name,
+    description: tool.description,
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: tool.inputSchema.properties,
+      required: tool.inputSchema.required || [],
+    },
+  },
+  execute: async (args: any) => {
+    const result = await tool.handler(args);
+    // Serialize BigInts for JSON compatibility
+    return JSON.parse(JSON.stringify(result, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ));
+  },
+}));
+```
+
+**Example — Mapping to OpenAI/Claude tool format:**
+
+```typescript
+const openaiTools = mcpTools.map(tool => ({
+  type: 'function' as const,
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema,
+  },
+}));
+```
+
+---
+
+### agent.importSession
+
+Import a session key that was provisioned from a frontend dashboard. This enables the **human-in-the-loop provisioning flow** where a user creates a passkey wallet, configures spending limits, generates a session key, and sends it to the agent backend.
+
+```typescript
+await agent.importSession(sessionData);
+```
+
+**Parameters:**
+
+```typescript
+interface SessionData {
+  keyHash: string;
+  encryptedPrivateKey: string;
+  publicKey: string;
+  config: {
+    dailyLimitUSD: number;
+    perTransactionLimitUSD: number;
+    expiryTimestamp: number;
+    allowedChains: number[];
+  };
+  masterKeyHash: string;
+}
+```
+
+**Example (from veri_agent):**
+
+```typescript
+// Backend receives session data from frontend
+app.post('/api/provision', async (req, res) => {
+  const { sessionData } = req.body;
+  const wallet = await getAgentWallet();
+  await wallet.importSession(sessionData);
+  console.log('Session injected into Wallet.');
+  res.json({ success: true });
+});
+```
 
 ---
 
