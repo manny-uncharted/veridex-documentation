@@ -1,0 +1,268 @@
+---
+title: Multisig Wallet
+description: Build a production-grade multisig wallet with Veridex passkeys
+---
+
+import { Callout, Steps, Tabs } from 'nextra/components'
+
+# Multisig Wallet
+
+Build a production-grade multisig wallet with passkey authentication, gasless execution, and on-chain smart contracts.
+
+<Callout type="info">
+  **Full source code:** [github.com/Veridex-Protocol/examples/tree/main/multisig-wallet](https://github.com/Veridex-Protocol/examples/tree/main/multisig-wallet)
+</Callout>
+
+## Overview
+
+This example demonstrates **two approaches** to multi-signer transaction approval:
+
+| Feature | Off-Chain (Veridex SDK) | On-Chain (Smart Contract) |
+|---------|------------------------|--------------------------|
+| **Gas costs** | Gasless — relayer pays | Signers pay gas |
+| **Authentication** | Passkeys (WebAuthn) | EOA wallets (MetaMask) |
+| **Trust model** | Relayer + backend DB | Fully trustless on-chain |
+| **Best for** | Consumer wallets, UX-first | DAOs, treasuries, custody |
+
+---
+
+## Quick Start
+
+<Steps>
+
+### Clone and install
+
+```bash
+git clone https://github.com/Veridex-Protocol/examples.git
+cd examples/multisig-wallet
+bun install
+```
+
+### Configure environment
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | SQLite path (`file:./data/multisig.db`) |
+| `NEXT_PUBLIC_RELAYER_URL` | Veridex relayer for gasless txs |
+| `NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL` | Base Sepolia RPC |
+| `NEXT_PUBLIC_INTEGRATOR_SPONSOR_KEY` | Sponsor key for gasless vault creation |
+
+### Initialize database and run
+
+```bash
+bunx prisma generate
+bunx prisma db push
+bun run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+</Steps>
+
+---
+
+## Approach 1: Off-Chain Multisig (Veridex SDK)
+
+Uses **pre-deployed vault contracts** on supported chains. Multisig logic (proposals, voting, thresholds) runs off-chain in Next.js with SQLite. Approved proposals execute through the Veridex relayer at zero gas cost.
+
+### Architecture
+
+```
+Frontend (React)
+  ├── AuthScreen ─── PasskeyManager (register/login)
+  ├── Dashboard ──── MultisigContext (React Context)
+  └── VaultPanel     ├── REST API (Next.js)
+                     │   /api/wallets, /api/proposals
+                     │   /api/invites, /api/notifications
+                     ├── Prisma + SQLite
+                     └── @veridex/sdk
+                         PasskeyManager, GasSponsor, RelayerClient
+```
+
+### Key SDK patterns
+
+```typescript
+import { VeridexSDK, EVMClient } from '@veridex/sdk';
+
+// Passkey authentication
+await sdk.passkey.register('user@example.com', 'My Wallet');
+
+// Gasless vault deployment
+await sdk.createSponsoredVault();
+
+// Gasless transaction execution
+await sdk.transferViaRelayer({
+  token: 'native',
+  recipient: '0x...',
+  amount: parseEther('0.5'),
+  targetChain: 10004,
+});
+
+// Balance queries
+const portfolio = await sdk.balance.getPortfolioBalance();
+```
+
+### Proposal lifecycle
+
+1. **Create** — Any signer proposes a transaction (auto-approves their own vote)
+2. **Vote** — Other signers approve or reject; status auto-updates at threshold
+3. **Execute** — Once approved, any signer triggers execution via relayer
+4. **Notify** — All signers receive notifications at each stage
+
+```typescript
+// Create proposal
+await api.createProposal(walletId, {
+  title: 'Pay contractor',
+  proposalType: 'transfer',
+  token: 'native',
+  recipient: '0x...',
+  amount: parseEther('0.5'),
+  createdBy: credential.keyHash,
+});
+
+// Vote
+await api.voteOnProposal(proposalId, {
+  signerKeyHash: credential.keyHash,
+  vote: 'approve',
+});
+
+// Execute (gasless)
+const result = await sdk.transferViaRelayer(proposal.transferParams);
+await api.markProposalExecuted(proposalId, credential.keyHash, result.transactionHash);
+```
+
+### Database schema (Prisma)
+
+| Model | Purpose |
+|-------|---------|
+| **Wallet** | Multisig metadata (name, threshold, vault address) |
+| **Signer** | Passkey key hash, name, status |
+| **Invite** | Shareable invite links |
+| **Proposal** | Transaction proposals (type, target, amount, status) |
+| **ProposalVote** | Individual signer votes |
+| **Notification** | Push notifications for events |
+
+---
+
+## Approach 2: On-Chain Multisig (Smart Contract)
+
+All multisig logic lives on-chain in Solidity. A factory contract deploys new wallet instances.
+
+### Contract API
+
+**MultisigFactory:**
+
+| Function | Description |
+|----------|-------------|
+| `createWallet(name, signers, threshold, ttl)` | Deploy a new MultisigWallet |
+| `getWalletsByCreator(address)` | Wallets created by address |
+| `getWalletsBySigner(address)` | Wallets where address is signer |
+
+**MultisigWallet:**
+
+| Function | Description |
+|----------|-------------|
+| `proposeTransfer(title, desc, to, value)` | Propose native transfer |
+| `proposeTokenTransfer(title, desc, token, to, amount)` | Propose ERC-20 transfer |
+| `proposeExecute(title, desc, target, value, data)` | Propose contract call |
+| `proposeAddSigner` / `proposeRemoveSigner` | Signer governance |
+| `approve(id)` / `reject(id)` | Vote on proposal |
+| `execute(id)` | Execute approved proposal |
+
+### Deployment
+
+<Tabs items={['Hardhat', 'Foundry']}>
+  <Tabs.Tab>
+```bash
+npx hardhat run contracts/scripts/deploy.ts --network monadTestnet
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash
+forge create contracts/MultisigFactory.sol:MultisigFactory \
+  --rpc-url $RPC_URL --private-key $DEPLOYER_PRIVATE_KEY
+```
+  </Tabs.Tab>
+</Tabs>
+
+### End-to-end on-chain flow
+
+```typescript
+import { ethers } from 'ethers';
+
+// 1. Deploy 2-of-3 multisig
+const tx = await factory.createWallet(
+  'Team Treasury',
+  [signer1.address, signer2.address, signer3.address],
+  2, 604800 // 7-day TTL
+);
+
+// 2. Fund the wallet
+await signer1.sendTransaction({
+  to: walletAddress, value: ethers.parseEther('1.0')
+});
+
+// 3. Propose transfer (auto-approves as signer1)
+await wallet.proposeTransfer(
+  'Pay contractor', 'Monthly payment',
+  recipientAddress, ethers.parseEther('0.5')
+);
+
+// 4. Second signer approves → 2-of-3 threshold met
+await wallet.connect(signer2).approve(1);
+
+// 5. Execute
+await wallet.execute(1); // 0.5 ETH sent ✓
+```
+
+---
+
+## Project Structure
+
+```
+multisig-wallet/
+├── app/
+│   ├── api/                    # Next.js API routes
+│   │   ├── wallets/            # Wallet CRUD + signers
+│   │   ├── proposals/          # Vote + execute
+│   │   ├── invites/            # Invite accept
+│   │   └── notifications/      # Notification endpoints
+│   ├── layout.tsx              # Root layout
+│   └── page.tsx                # Main page
+├── components/
+│   ├── AuthScreen.tsx          # Passkey registration/login
+│   ├── Dashboard.tsx           # Main dashboard
+│   ├── CreateWalletModal.tsx   # New wallet form
+│   ├── ProposalList.tsx        # Transaction proposals
+│   └── VaultPanel.tsx          # Vault management
+├── contracts/
+│   ├── MultisigWallet.sol      # Core multisig contract
+│   ├── MultisigFactory.sol     # Factory for deploying wallets
+│   └── scripts/deploy.ts       # Deployment script
+├── lib/
+│   ├── MultisigContext.tsx      # React context + SDK
+│   ├── api.ts                  # Frontend API client
+│   ├── config.ts               # Chain configuration
+│   └── db.ts                   # Prisma access layer
+└── prisma/schema.prisma        # Database schema
+```
+
+## Tech Stack
+
+- **Next.js 16** — React framework with API routes
+- **Tailwind CSS v4** — Styling
+- **Prisma ORM** — SQLite database
+- **@veridex/sdk** — Passkey wallet SDK
+- **Solidity ^0.8.24** — On-chain multisig contracts
+
+---
+
+## Next Steps
+
+- **[Examples Hub](/guides/examples)** — Browse all available examples
+- **[Session Keys Guide](/guides/session-keys)** — Understand session key concepts
+- **[Gasless Transactions](/guides/gasless-transactions)** — Learn about relayer-sponsored execution

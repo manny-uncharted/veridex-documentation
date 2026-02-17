@@ -7,5 +7,8 @@
   "spending-limits": "Spending Limits",
   "cross-chain": "Cross-Chain",
   "agent-payments": "Agent Payments",
-  "agent-identity": "Agent Identity"
+  "agent-identity": "Agent Identity",
+  "examples": "Examples",
+  "multisig-wallet": "Multisig Wallet",
+  "advanced-patterns": "Advanced Patterns"
 }

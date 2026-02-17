@@ -1,0 +1,275 @@
+---
+title: Advanced Patterns
+description: VAA verification, session lifecycle, and cross-chain security patterns
+---
+
+import { Callout, Steps } from 'nextra/components'
+
+# Advanced Patterns
+
+Deep-dive into cross-chain security and session key lifecycle management with production-ready patterns.
+
+<Callout type="info">
+  **Full source code:** [github.com/Veridex-Protocol/examples/tree/main/advanced](https://github.com/Veridex-Protocol/examples/tree/main/advanced)
+</Callout>
+
+---
+
+## VAA Verification
+
+Wormhole VAAs (Verifiable Action Approvals) are signed attestations from the Guardian network that prove a cross-chain message is authentic. Verifying VAAs is critical for any application that processes cross-chain data.
+
+```bash
+npm run advanced:vaa
+```
+
+### What's in a VAA
+
+```
+┌──────────────────────────────────────────┐
+│ Header                                    │
+│   Version (1 byte)                        │
+│   Guardian Set Index (4 bytes)            │
+│   Number of Signatures (1 byte)           │
+├──────────────────────────────────────────┤
+│ Signatures (repeated)                     │
+│   Guardian Index (1 byte)                 │
+│   ECDSA Signature (65 bytes)              │
+│   Minimum 13/19 Guardians required        │
+├──────────────────────────────────────────┤
+│ Body                                      │
+│   Timestamp (4 bytes)                     │
+│   Nonce (4 bytes)                         │
+│   Emitter Chain ID (2 bytes)              │
+│   Emitter Address (32 bytes)              │
+│   Sequence Number (8 bytes)               │
+│   Consistency Level (1 byte)              │
+│   Payload (variable)                      │
+└──────────────────────────────────────────┘
+```
+
+### Parse and verify a VAA
+
+```typescript
+import { createSDK, parseVAA, hasQuorum, normalizeEmitterAddress } from '@veridex/sdk';
+import { Wallet, JsonRpcProvider } from 'ethers';
+
+const sdk = createSDK('base');
+const chainConfig = sdk.getChainConfig();
+
+// 1. Execute a cross-chain action to get a VAA
+const prepared = await sdk.prepareTransfer({
+  token: 'native',
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5b0e7',
+  amount: parseEther('0.0001'),
+  targetChain: 10005, // Optimism Sepolia
+});
+const result = await sdk.executeTransfer(prepared, signer);
+
+// 2. Fetch the VAA (wait ~15s for Guardian signatures)
+const vaaBytes = await sdk.fetchVAAForTransaction(result.transactionHash);
+
+// 3. Parse the VAA
+const vaa = parseVAA(vaaBytes);
+console.log('Version:', vaa.version);
+console.log('Signatures:', vaa.signatures.length, '/ 19');
+console.log('Emitter Chain:', vaa.emitterChain);
+console.log('Sequence:', vaa.sequence);
+
+// 4. Verify Guardian quorum (13/19 required)
+const valid = hasQuorum(vaa, true); // true = testnet
+
+// 5. Verify emitter matches your Hub contract
+const hubContract = chainConfig.contracts?.hub || '';
+const emitterMatch =
+  normalizeEmitterAddress(vaa.emitterAddress) ===
+  normalizeEmitterAddress(hubContract);
+```
+
+### Verification checklist
+
+Before accepting any VAA, verify all of the following:
+
+| Check | What to verify |
+|-------|---------------|
+| **Signature quorum** | At least 13/19 Guardian signatures present and valid |
+| **Emitter chain** | Emitter chain ID matches expected source chain |
+| **Emitter address** | Emitter address matches expected contract (normalized to 32 bytes) |
+| **Sequence** | Sequence number hasn't been processed before (replay protection) |
+| **Payload** | Payload format matches expected schema, parameters in range |
+| **Target chain** | Target chain matches the current chain |
+
+### Common errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "VAA not found" | VAA not finalized yet | Wait 15–30 seconds after transaction |
+| "Invalid signatures" | Tampered VAA or wrong Guardian set | Re-fetch from Wormhole API |
+| "Emitter mismatch" | VAA from wrong contract | Verify chain config and Hub address |
+| "Sequence already processed" | Replay attempt | Check sequence tracking before processing |
+
+---
+
+## Session Key Lifecycle
+
+Session keys let users authenticate once with a passkey and then execute multiple transactions without repeated biometric prompts. This example walks through the full create → use → refresh → revoke lifecycle.
+
+```bash
+npm run advanced:session
+```
+
+### Lifecycle overview
+
+```
+CREATE ──→ USE ──→ REFRESH (optional) ──→ REVOKE
+  │          │           │                    │
+  │ Passkey  │ No prompts│ Passkey re-auth    │ Invalidate
+  │ auth     │ needed    │ extends expiry     │ session key
+```
+
+### Step 1: Initialize SessionManager
+
+```typescript
+import { createSDK, SessionManager, EVMHubClientAdapter } from '@veridex/sdk';
+import { parseEther, formatEther, Wallet, JsonRpcProvider, getBytes } from 'ethers';
+
+const sdk = createSDK('base');
+const provider = new JsonRpcProvider('https://sepolia.base.org');
+const signer = new Wallet(PRIVATE_KEY, provider);
+
+const credential = sdk.getCredential();
+if (!credential) {
+  throw new Error('No credential set. Run create-wallet first.');
+}
+
+const hubClient = new EVMHubClientAdapter(
+  sdk.getChainClient() as any,
+  signer as any,
+);
+
+const sessionManager = new SessionManager(
+  credential,
+  hubClient,
+  (challenge) => sdk.passkey.sign(challenge),
+  { duration: 3600, maxValue: parseEther('0.1') },
+);
+```
+
+### Step 2: Create a session
+
+One passkey authentication creates the session. All subsequent actions within the session's bounds require no prompts.
+
+```typescript
+const session = await sessionManager.createSession();
+
+console.log('Key Hash:', session.keyHash);
+console.log('Expires:', new Date(session.expiry).toISOString());
+console.log('Max Value:', formatEther(session.maxValue), 'ETH');
+console.log('Active:', sessionManager.isActive());
+```
+
+### Step 3: Sign actions without prompts
+
+```typescript
+const chainConfig = sdk.getChainConfig();
+
+async function signTransfer(amount: bigint) {
+  const actionPayload = await sdk.buildTransferPayload({
+    targetChain: chainConfig.wormholeChainId,
+    token: 'native',
+    recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5b0e7',
+    amount,
+  });
+
+  return sessionManager.signAction({
+    action: 'transfer',
+    targetChain: chainConfig.wormholeChainId,
+    payload: getBytes(actionPayload),
+    nonce: Number(await sdk.getNonce()),
+    value: amount,
+  });
+}
+
+// All of these execute instantly — no biometric prompts
+await signTransfer(parseEther('0.0001'));
+await signTransfer(parseEther('0.0001'));
+await signTransfer(parseEther('0.0001'));
+```
+
+### Step 4: Check session status
+
+```typescript
+const isActive = sessionManager.isActive();
+const timeRemaining = sessionManager.getTimeRemaining();
+
+console.log('Active:', isActive);
+console.log('Time left:', Math.floor(timeRemaining / 60), 'minutes');
+```
+
+### Step 5: Test session limits
+
+Sessions enforce value limits. Transactions exceeding `maxValue` are rejected:
+
+```typescript
+try {
+  await signTransfer(parseEther('0.2')); // Exceeds 0.1 ETH limit
+} catch (e) {
+  console.log('Correctly rejected:', e.message);
+}
+```
+
+### Step 6: Refresh session
+
+Extend a session before it expires (requires passkey re-authentication):
+
+```typescript
+const refreshed = await sessionManager.refreshSession();
+console.log('New expiry:', new Date(refreshed.expiry).toISOString());
+```
+
+### Step 7: Revoke session
+
+Always revoke sessions when done. Revoked sessions cannot be used:
+
+```typescript
+await sessionManager.revokeSession();
+
+// Verify
+console.log('Active:', sessionManager.isActive()); // false
+
+try {
+  await signTransfer(parseEther('0.0001'));
+} catch (e) {
+  console.log('Correctly rejected:', e.message); // Session revoked
+}
+```
+
+### Security best practices
+
+| Practice | Recommendation |
+|----------|---------------|
+| **Duration** | Keep sessions short (1–24 hours). Longer = higher risk if compromised |
+| **Value limits** | Set `maxValue` appropriate to the use case. Lower = safer |
+| **Revocation** | Always revoke on logout. Implement automatic revocation |
+| **Storage** | Store session keys in encrypted storage. Never expose private keys |
+| **Refresh** | Refresh before expiry for seamless UX. Require periodic re-auth |
+| **Monitoring** | Track session usage. Alert on unusual patterns. Log all operations |
+
+### Use cases
+
+| Use case | Duration | Max value | Notes |
+|----------|----------|-----------|-------|
+| **Gaming** | 2–4 hours | $10–50 | In-game purchases, fast actions |
+| **DeFi trading** | 1–2 hours | $100–1000 | Multiple swaps in a session |
+| **Social/tipping** | 24 hours | $5–20 | Micro-transactions, content purchases |
+| **Mobile apps** | 4–8 hours | $50 | Reduced biometric prompts |
+| **Automation** | 1 hour | Varies | Scheduled transactions, bots |
+
+---
+
+## Next Steps
+
+- **[Examples Hub](/guides/examples)** — Browse all available examples
+- **[Session Keys Guide](/guides/session-keys)** — Session key concepts and theory
+- **[Cross-Chain Guide](/guides/cross-chain)** — Wormhole bridging fundamentals
+- **[Multisig Wallet](/guides/multisig-wallet)** — Build a production multisig app

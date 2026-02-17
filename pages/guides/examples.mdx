@@ -1,0 +1,190 @@
+---
+title: Examples
+description: Runnable examples for every Veridex SDK feature
+---
+
+import { Callout, Cards, Card, Steps, Tabs } from 'nextra/components'
+
+# Examples
+
+Production-ready examples covering every major Veridex SDK feature — from basic wallet creation to full-stack multisig wallets and DeFi integrations.
+
+<Callout type="info">
+  All examples live in the public **[Veridex Examples Repository](https://github.com/Veridex-Protocol/examples)**. Clone it and start building in minutes.
+</Callout>
+
+```bash
+git clone https://github.com/Veridex-Protocol/examples.git
+cd examples
+npm install
+```
+
+---
+
+## Basic Examples
+
+Learn the SDK fundamentals step-by-step.
+
+| Example | What you'll learn | Run command |
+|---------|-------------------|-------------|
+| **Create Wallet** | Passkey registration, vault address derivation | `npm run basic:wallet` |
+| **Get Balances** | Multi-chain balance queries | `npm run basic:balances` |
+| **Send Tokens** | Prepare and execute transfers, spending limits | `npm run basic:send` |
+| **Cross-Chain Bridge** | Bridge tokens between chains via Wormhole | `npm run basic:crosschain` |
+| **Gasless Transactions** | Relayer-sponsored transfers, vault creation | `npm run basic:gasless` |
+
+### Quick taste — Create a wallet
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base');
+await sdk.passkey.register('user@example.com', 'My Wallet');
+
+const vaultAddress = sdk.getVaultAddress(); // Same on every EVM chain
+console.log('Vault:', vaultAddress);
+```
+
+---
+
+## Session Key Examples
+
+Session keys let users approve once and execute many transactions without repeated biometric prompts — essential for gaming, trading, and automation.
+
+| Example | What you'll learn | Run command |
+|---------|-------------------|-------------|
+| **Create Session** | `SessionManager` setup, session creation, status checks | `npm run session:create` |
+| **Execute Batch** | Sign multiple actions with `signAction`, nonce management | `npm run session:execute` |
+| **Revoke Session** | Load, verify, and revoke sessions | `npm run session:revoke` |
+
+### Quick taste — Create and use a session
+
+```typescript
+import { createSDK, SessionManager, EVMHubClientAdapter } from '@veridex/sdk';
+import { Wallet, JsonRpcProvider, parseEther, getBytes } from 'ethers';
+
+const sdk = createSDK('base');
+const provider = new JsonRpcProvider('https://sepolia.base.org');
+const signer = new Wallet(PRIVATE_KEY, provider);
+
+const credential = sdk.getCredential();
+const hubClient = new EVMHubClientAdapter(
+  sdk.getChainClient() as any, signer as any
+);
+
+const sessionManager = new SessionManager(
+  credential,
+  hubClient,
+  (challenge) => sdk.passkey.sign(challenge),
+  { duration: 3600, maxValue: parseEther('0.1') },
+);
+
+// One passkey prompt
+const session = await sessionManager.createSession();
+
+// Then sign unlimited actions within bounds — no prompts!
+await sessionManager.signAction({
+  action: 'transfer',
+  targetChain: sdk.getChainConfig().wormholeChainId,
+  payload: getBytes(encodedData),
+  nonce: Number(await sdk.getNonce()),
+  value: parseEther('0.01'),
+});
+```
+
+---
+
+## Advanced Examples
+
+Deep-dive into cross-chain security and session lifecycle management.
+
+| Example | What you'll learn | Run command |
+|---------|-------------------|-------------|
+| **VAA Verification** | Parse Wormhole VAAs, verify Guardian quorum, validate emitters | `npm run advanced:vaa` |
+| **Session Lifecycle** | Full create → use → refresh → revoke flow | `npm run advanced:session` |
+
+### VAA verification highlights
+
+```typescript
+import { parseVAA, hasQuorum, normalizeEmitterAddress } from '@veridex/sdk';
+
+const vaa = parseVAA(vaaBase64);
+
+// Verify Guardian quorum (13/19 required)
+const valid = hasQuorum(vaa, true); // true = testnet
+
+// Verify emitter matches your Hub contract
+const emitter = normalizeEmitterAddress(vaa.emitterAddress);
+const hub = normalizeEmitterAddress(hubContractAddress);
+console.log('Emitter match:', emitter === hub);
+```
+
+---
+
+## Integration Examples
+
+Full-stack patterns for real-world use cases.
+
+<Cards>
+  <Card title="Multisig Wallet" href="/guides/multisig-wallet">
+    Production-grade 2-of-3 multisig with passkey auth, gasless execution, and on-chain contracts.
+  </Card>
+  <Card title="NFT Marketplace" href="/integrations/nft-marketplace">
+    List, buy, and trade NFTs with passkey authentication and gasless transactions.
+  </Card>
+  <Card title="Gaming" href="/integrations/gaming">
+    Session keys for frictionless gameplay — buy items, complete missions, join tournaments.
+  </Card>
+  <Card title="DeFi Vault" href="/integrations/defi">
+    Automated yield farming with session-key-powered rebalancing.
+  </Card>
+  <Card title="Payment Gateway" href="/integrations/payment-gateway">
+    Accept crypto payments with invoice creation, customer payment, and webhook verification.
+  </Card>
+</Cards>
+
+---
+
+## Running Examples
+
+<Callout type="warning">
+  WebAuthn/Passkey functionality requires a **browser environment with HTTPS**. When running examples in Node.js, passkey registration will fail — but you can see the full API usage patterns and error handling flows.
+</Callout>
+
+### Environment setup
+
+Create a `.env` file in the examples root:
+
+```env
+# Optional: Custom RPC URLs
+BASE_RPC_URL=https://sepolia.base.org
+OPTIMISM_RPC_URL=https://sepolia.optimism.io
+
+# Optional: Relayer for gasless transactions
+RELAYER_URL=https://relayer.veridex.network
+RELAYER_API_KEY=your-api-key
+
+# For examples that require gas payment
+PRIVATE_KEY=your_deployer_key_here
+```
+
+### Supported chains
+
+| Chain | Type | Wormhole ID |
+|-------|------|-------------|
+| Base | Hub (EVM) | 10004 |
+| Optimism | Spoke (EVM) | 10005 |
+| Arbitrum | Spoke (EVM) | 10003 |
+| Ethereum | Spoke (EVM) | 10002 |
+| Solana | Spoke | 1 |
+| Aptos | Spoke | 22 |
+| Sui | Spoke | 21 |
+
+---
+
+## Next Steps
+
+- **[Multisig Wallet Tutorial](/guides/multisig-wallet)** — Build a production multisig app
+- **[Advanced Patterns](/guides/advanced-patterns)** — VAA verification and session lifecycle deep-dive
+- **[Session Keys Guide](/guides/session-keys)** — Understand session key concepts
+- **[Cross-Chain Guide](/guides/cross-chain)** — Learn Wormhole bridging
