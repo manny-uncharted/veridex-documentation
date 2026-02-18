@@ -9,6 +9,21 @@ import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, Card
 
 This guide walks through using the ERC-8004 on-chain identity and reputation system in the Veridex Agent SDK. By the end, your agent will have an on-chain identity (ERC-721 NFT), can accumulate reputation, discover other agents, and enforce trust gates before payments.
 
+<Callout type="warning">
+  **Passkey Wallet Required:** The Agent SDK (`@veridex/agentic-payments`) is built on `@veridex/sdk`, which requires a **passkey wallet created via a browser frontend**. Passkey operations use WebAuthn APIs and cannot run server-side. See the [Agent Payments guide](/guides/agent-payments) for the full setup flow.
+</Callout>
+
+## Try It — Working Examples
+
+<Cards>
+  <Card title="🔵 Advanced Example" href="https://github.com/Veridex-Protocol/examples/tree/main/agent-advanced">
+    Production-grade Next.js app with ERC-8004 identity, trust gates, Gemini AI chat, and MCP tools.
+  </Card>
+  <Card title="🟢 Basic Example" href="https://github.com/Veridex-Protocol/examples/tree/main/agent-basic">
+    Start here if you're new — minimal passkey wallet + agent payments without identity features.
+  </Card>
+</Cards>
+
 ## Overview
 
 The [ERC-8004](https://www.8004.org/learn) standard provides three singleton registries deployed on every EVM chain:
@@ -24,12 +39,47 @@ The SDK provides modular clients for each registry, plus higher-level abstractio
 ## Prerequisites
 
 ```bash
-npm install @veridex/agentic-payments
+bun add @veridex/agentic-payments
 ```
 
 You'll need:
 - A funded wallet on an ERC-8004 supported chain (Base, Ethereum, Monad, etc.)
 - For IPFS publishing: a Pinata or web3.storage API key (optional — data URIs work without external deps)
+
+### Next.js Webpack Configuration
+
+If you're using Next.js, you must configure `next.config.mjs` to handle transitive dependency resolution:
+
+```js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  transpilePackages: ['@veridex/sdk', '@veridex/agentic-payments'],
+  webpack: (config, { isServer }) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+
+    // Ignore problematic transitive deps from @aptos-labs/ts-sdk
+    // that reference unexported paths in @noble/curves
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@aptos-labs/ts-sdk': false,
+    };
+
+    return config;
+  },
+};
+
+export default nextConfig;
+```
+
+<Callout type="warning">
+  **Without this config**, Next.js builds will fail with a `Module not found: Package path ./nist.js is not exported from package @noble/curves` error. See the [Agent Payments guide](/guides/agent-payments#nextjs-webpack-configuration) for details.
+</Callout>
 
 ## 1. Register an Agent Identity
 
@@ -433,6 +483,9 @@ Supported chains: Base, Ethereum, Polygon, Arbitrum, Optimism, Linea, MegaETH, M
 ## Next Steps
 
 <Cards>
+  <Card title="Advanced Example" href="https://github.com/Veridex-Protocol/examples/tree/main/agent-advanced">
+    Full working Next.js app with ERC-8004 identity, Gemini AI, and trust gates
+  </Card>
   <Card title="Agent Payments" href="/guides/agent-payments">
     Payments, spending limits, and monitoring
   </Card>
