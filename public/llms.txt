@@ -1,0 +1,97 @@
+# Veridex Protocol Documentation
+
+> Veridex Protocol — cross-chain passkey authentication, autonomous agent payments, and on-chain identity. Build wallets, bridge tokens, and enable AI agents to pay autonomously using WebAuthn passkeys.
+
+Docs site: https://docs.veridex.network
+Full docs for LLMs: https://docs.veridex.network/llms-full.txt
+API (plain text, filterable): https://docs.veridex.network/api/docs-for-llm
+GitHub: https://github.com/veridex-protocol/
+
+## Getting Started
+
+- [Quick Start](/getting-started/quick-start): Create a passkey wallet in 5 minutes
+- [Installation](/getting-started/installation): Install @veridex/sdk and @veridex/react
+- [Core Concepts](/getting-started/concepts): Hub-and-spoke architecture, passkeys, vaults, Wormhole
+- [FAQ](/getting-started/faq): Common questions about the protocol
+
+## Guides
+
+- [Create Wallet](/guides/create-wallet): Passkey registration, vault address derivation
+- [Send Tokens](/guides/send-tokens): Prepare and execute transfers, gasless payments
+- [Cross-Domain Passkeys](/guides/cross-domain-passkeys): Share passkeys across origins
+- [Gasless Transactions](/guides/gasless-transactions): Relayer-sponsored transfers
+- [Session Keys](/guides/session-keys): Delegated signing without repeated biometrics
+- [Spending Limits](/guides/spending-limits): Per-transaction and daily spending limits
+- [Balance Watching](/guides/balance-watching): Real-time balance subscriptions
+- [Cross-Chain](/guides/cross-chain): Bridge tokens between chains via Wormhole
+- [Error Handling](/guides/error-handling): Unified error codes, retry strategies
+- [React Hooks](/guides/react-hooks): @veridex/react hooks — usePasskey, useBalance, useTransfer
+- [Enterprise Manager](/guides/enterprise-manager): Batch vault operations for enterprises
+- [Agent Payments](/guides/agent-payments): AI agent payment system with session keys
+- [Agent Identity](/guides/agent-identity): On-chain agent identity (ERC-8004)
+- [Examples](/guides/examples): Runnable code examples for every feature
+- [Multisig Wallet](/guides/multisig-wallet): M-of-N multisig with off-chain and on-chain modes
+- [Advanced Patterns](/guides/advanced-patterns): VAA verification, session lifecycle
+
+## Chains
+
+- [EVM](/chains/evm): Base (hub), Optimism, Arbitrum — all EVM spoke chains
+- [Ethereum Sepolia](/chains/ethereum-sepolia): Ethereum Sepolia spoke
+- [Solana](/chains/solana): Solana spoke integration
+- [Aptos](/chains/aptos): Aptos spoke integration
+- [Sui](/chains/sui): Sui spoke integration
+- [Starknet](/chains/starknet): Starknet spoke integration
+- [Stacks](/chains/stacks): Stacks (Bitcoin L2) spoke integration
+
+## Integrations
+
+- [Next.js](/integrations/nextjs): Next.js App Router setup, SSR considerations
+- [React](/integrations/react): Full React context pattern, component examples
+- [Sera DEX](/integrations/sera): Sera decentralized exchange integration
+- [DeFi](/integrations/defi): DeFi vault and yield farming patterns
+- [Payment Gateway](/integrations/payment-gateway): Accept crypto payments
+- [Gaming](/integrations/gaming): Session keys for frictionless gameplay
+- [NFT Marketplace](/integrations/nft-marketplace): NFT trading with passkeys
+
+## Security
+
+- [Audits](/security/audits): Security audit status and reports
+- [Best Practices](/security/best-practices): Security guidelines for integrators
+- [Recovery](/security/recovery): Guardian-based social recovery
+
+## API Reference
+
+- [Core SDK](/api-reference/sdk): VeridexSDK class, factory functions, all methods
+- [Agent SDK](/api-reference/agent-sdk): @veridex/agentic-payments API
+- [Relayer API](/api-reference/relayer): Relayer endpoints, relay requests
+- [Types](/api-reference/types): TypeScript type definitions
+- [Errors](/api-reference/errors): Error codes, VeridexError class
+
+## Resources
+
+- [Architecture Decisions](/resources/architecture-decisions): ADRs — design rationale
+- [AI & LLM Access](/resources/llm-access): Feed these docs to AI agents — llms.txt, llms-full.txt, API
+- [Glossary](/resources/glossary): Protocol terminology
+- [Changelog](/resources/changelog): Version history
+- [Troubleshooting](/resources/troubleshooting): Common issues and fixes
+- [Migration](/resources/migration): Upgrade guides between versions
+
+## Key Packages
+
+- `@veridex/sdk` — Core SDK: createSDK, passkey auth, transfers, bridging, sessions
+- `@veridex/react` — React hooks: VeridexProvider, usePasskey, useBalance, useTransfer, useMultiChainPortfolio
+- `@veridex/agentic-payments` — Agent SDK: createAgentWallet, session-key payments, x402
+
+## Supported Chains (Testnet Wormhole IDs)
+
+| Chain | Wormhole ID | Type |
+|-------|-------------|------|
+| Base | 10004 | Hub (EVM) |
+| Optimism | 10005 | Spoke (EVM) |
+| Arbitrum | 10003 | Spoke (EVM) |
+| Ethereum | 10002 | Spoke (EVM) |
+| Solana | 1 | Spoke |
+| Aptos | 22 | Spoke |
+| Sui | 21 | Spoke |
+| Starknet | 50001 | Spoke |
+| Stacks | 50003 | Spoke |

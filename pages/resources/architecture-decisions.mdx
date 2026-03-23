@@ -1,0 +1,198 @@
+---
+title: Architecture Decisions
+description: Key architectural decision records (ADRs) explaining Veridex protocol design choices
+---
+
+import { Callout } from '../../components/Callout'
+import { Accordion, AccordionGroup } from '../../components/Accordion'
+
+# Architecture Decisions
+
+Veridex maintains Architecture Decision Records (ADRs) for all significant protocol
+design choices. Below is a curated selection of the most impactful decisions that help
+developers understand **why** the protocol works the way it does.
+
+<Callout type="info">
+  ADRs document the context, decision, and consequences of architectural choices.
+  Status can be **Accepted** (implemented), **Proposed** (in review), or **Deprecated**.
+</Callout>
+
+---
+
+## Core Architecture
+
+### ADR-0001: Hub-and-Spoke Architecture
+**Status:** Accepted
+
+The Veridex protocol uses a **hub-and-spoke model** where one chain (Base) serves as the
+identity and configuration hub, while other chains are spokes that receive instructions
+via Wormhole cross-chain messages. This design choice provides:
+
+- **Single source of truth** for identity, vault configuration, and spending limits
+- **Consistent addresses** across all EVM chains via CREATE2-based vault factories
+- **Simplified security model** — authentication happens once on the hub
+- **Extensibility** — new chains are added as spokes without modifying the hub
+
+The tradeoff is cross-chain latency for spoke operations that require hub authorization.
+
+### ADR-0002: WebAuthn / secp256r1 Only
+**Status:** Accepted
+
+Veridex uses **passkeys (WebAuthn)** as the sole authentication mechanism — no seed phrases,
+no private key management, no MetaMask dependency. The P-256 (secp256r1) elliptic curve
+is used for all cryptographic operations.
+
+**Why passkeys only:**
+- Users authenticate with biometrics (Face ID, fingerprint, Windows Hello)
+- Credentials are hardware-bound and phishing-resistant
+- Cross-device sync via iCloud Keychain, Google Password Manager
+- No browser extensions required
+
+**Consequences:**
+- Requires hardware that supports WebAuthn (most modern devices)
+- On-chain signature verification uses precompile (`P256VERIFY`)
+- Recovery requires backup passkeys or social recovery (not seed phrases)
+
+### ADR-0003: Wormhole Cross-Chain Messaging
+**Status:** Accepted
+
+Wormhole was selected as the cross-chain messaging layer for hub-to-spoke communication.
+All administrative actions (vault creation, config changes, spending limits) are dispatched
+from the hub via Wormhole VAAs (Verified Action Approvals).
+
+**Key factors:**
+- Guardian network provides decentralized attestation
+- Broad EVM + non-EVM chain support (Solana, Sui, Aptos)
+- Query API for low-latency verification without waiting for full finality
+- Established security track record
+
+---
+
+## UX Optimizations
+
+### ADR-0004: Session Keys
+**Status:** Accepted
+
+Session keys allow dApps to execute transactions on behalf of users without requiring
+a biometric prompt for every action. A temporary secp256k1 key pair is registered
+on-chain with configurable constraints:
+
+- **Duration** — session expires after N seconds
+- **Value limits** — max transfer amount per transaction
+- **Token whitelist** — only specified tokens can be transferred
+- **Recipient whitelist** — only specified addresses can receive
+
+Session keys are disabled when multisig (ADR-0037) is enabled.
+
+### ADR-0009: Spending Limits
+**Status:** Accepted
+
+On-chain spending limits provide a security layer against compromised passkeys:
+
+- **Daily limit** — caps total spending in a 24-hour rolling window
+- **Per-transaction limit** — caps individual transfer amounts
+- **Circuit breaker** — auto-pauses vault on limit violation
+- **Emergency pause** — owner can freeze vault instantly
+
+Limits are enforced by the vault contract and can be updated via passkey-signed
+transactions through the hub.
+
+### ADR-0018: Cross-Domain Passkey Sharing
+**Status:** Accepted
+
+Enables passkey credentials to work across different origins (domains) using the
+WebAuthn Related Origins (ROR) specification. This allows:
+
+- Auth portal at `auth.veridex.network` creates credentials
+- Third-party dApps at `app.example.com` can authenticate with the same passkey
+- No popup windows or redirects needed (when ROR is supported)
+- Falls back to cross-origin iframe messaging on older browsers
+
+---
+
+## Chain Expansion
+
+### ADR-0026: Stacks Integration
+**Status:** Proposed
+
+Strategy for integrating Stacks (Bitcoin L2) as a spoke chain:
+
+- Clarity smart contracts for vault management
+- sBTC support for Bitcoin-native assets
+- Wormhole integration for cross-chain messaging to/from Stacks
+- Passkey authentication via Clarity contract verification
+
+### ADR-0029: ERC-8004 Agent Identity
+**Status:** Proposed
+
+Integration of the ERC-8004 standard for trustless agent identity and reputation.
+Provides on-chain identity registries for AI agents operating on behalf of users:
+
+- Singleton registries deployed via CREATE2 on all EVM chains
+- Agent registration with metadata, capabilities, and operator info
+- Reputation tracking via feedback and validation systems
+- Universal Agent Identifiers (UAIs) for cross-chain agent identity
+
+---
+
+## Security
+
+### ADR-0035: Enterprise Treasury Architecture
+**Status:** Accepted
+
+Defines the security architecture for enterprise-grade treasury management:
+
+- Cryptographically enforced access controls
+- Multi-signer approval workflows
+- Spending limit hierarchies (org → team → individual)
+- Audit logging and compliance hooks
+
+### ADR-0037: Threshold Multisig Authorization
+**Status:** Proposed
+
+Adds threshold-based multi-key transaction authorization:
+
+- **TransactionPolicy** on the Hub defines threshold requirements
+- Protected actions (transfer, execute, bridge, config) require N-of-M approval
+- Proposal → Approve → Execute lifecycle
+- Proposals expire after configurable TTL (default: 24 hours)
+- Sessions are disabled for threshold-governed identities
+
+```typescript
+// Example: require 2-of-3 approval for transfers
+await sdk.multisig.configurePolicy({
+  signature,
+  threshold: 2,
+  protectedActionMask: PROTECTED_ACTION.TRANSFER | PROTECTED_ACTION.BRIDGE,
+  signer,
+});
+```
+
+---
+
+## Full ADR Index
+
+The complete set of 37+ ADRs is maintained in the source repository under
+`docs/architecture/decisions/`. Each ADR follows a consistent template with
+Context, Decision, Status, and Consequences sections.
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| 0001 | Hub-and-Spoke Architecture | Accepted |
+| 0002 | WebAuthn / secp256r1 Only | Accepted |
+| 0003 | Wormhole Cross-Chain Messaging | Accepted |
+| 0004 | Session Keys for UX | Accepted |
+| 0005 | Social Recovery Integration | Accepted |
+| 0006 | Backup Passkey Registration | Accepted |
+| 0008 | Human-Readable Transactions | Accepted |
+| 0009 | Spending Limits Configuration | Accepted |
+| 0012 | x402 Protocol Agentic Payments | Accepted |
+| 0014 | Agent SDK Capability Negotiation | Accepted |
+| 0018 | Cross-Domain Passkey Sharing | Accepted |
+| 0026 | Stacks Integration | Proposed |
+| 0029 | ERC-8004 Agent Identity | Proposed |
+| 0030 | Layered Passkey Recovery | Accepted |
+| 0033 | Avalanche Hub Deployment | Accepted |
+| 0034 | Decentralized Relayer Network | Accepted |
+| 0035 | Enterprise Treasury AI Trust | Accepted |
+| 0037 | Threshold Multisig | Proposed |

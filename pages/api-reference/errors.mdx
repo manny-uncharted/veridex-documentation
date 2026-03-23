@@ -1,180 +1,305 @@
 ---
-title: Error Codes
-description: Complete error code reference for Veridex SDK and Relayer
+title: Error Handling
+description: Unified error codes, VeridexError class, and cross-chain error normalization
 ---
 
-# Error Codes
+import { Callout } from '../../components/Callout'
+import { Tabs, Tab } from '../../components/Tabs'
 
-Complete reference for error codes returned by the Veridex SDK and Relayer.
+# Error Handling
 
-## SDK Errors
+The Veridex SDK ships a **unified error system** that normalizes chain-specific errors
+from EVM, Solana, Starknet, and Stacks into a single `VeridexError` class.  Catch
+one type everywhere — no more guessing which chain threw what.
 
-### Authentication Errors
-
-| Code | Message | Cause | Solution |
-|------|---------|-------|----------|
-| `PASSKEY_NOT_SUPPORTED` | WebAuthn is not supported | Browser/device doesn't support passkeys | Use a supported browser (Chrome 67+, Safari 14+) |
-| `USER_CANCELLED` | User cancelled the operation | User dismissed biometric prompt | Prompt user to try again |
-| `CREDENTIAL_NOT_FOUND` | No stored credential found | User hasn't registered or credential cleared | Call `passkey.register()` |
-| `INVALID_CREDENTIAL` | Credential is invalid | Corrupted or expired credential | Clear and re-register |
-| `SECURITY_ERROR` | Security context required | Not running on HTTPS | Use HTTPS or localhost |
-
-### Transaction Errors
-
-| Code | Message | Cause | Solution |
-|------|---------|-------|----------|
-| `INSUFFICIENT_BALANCE` | Insufficient balance | Vault doesn't have enough tokens | Check balance before transfer |
-| `INVALID_RECIPIENT` | Invalid recipient address | Malformed address | Validate address format |
-| `INVALID_AMOUNT` | Invalid amount | Zero, negative, or malformed amount | Use positive bigint |
-| `INVALID_TOKEN` | Token not supported | Unknown token address | Use supported token |
-| `NONCE_MISMATCH` | Nonce mismatch | Transaction already processed or out of order | Refresh and retry |
-
-### Session Errors
-
-| Code | Message | Cause | Solution |
-|------|---------|-------|----------|
-| `SESSION_EXISTS` | Session already active | Tried to create while session exists | Revoke existing session first |
-| `SESSION_EXPIRED` | Session has expired | Session exceeded duration | Create new session |
-| `SESSION_LIMIT_EXCEEDED` | Session limit exceeded | Transfer exceeds session's maxValue | Create session with higher limit |
-| `SESSION_TOKEN_NOT_ALLOWED` | Token not allowed | Token not in session's allowedTokens | Use allowed token or create new session |
-| `SESSION_RECIPIENT_NOT_ALLOWED` | Recipient not allowed | Recipient not in allowedRecipients | Use allowed recipient or create new session |
-
-### Spending Limit Errors
-
-| Code | Message | Cause | Solution |
-|------|---------|-------|----------|
-| `SPENDING_LIMIT_EXCEEDED` | Spending limit exceeded | Transfer exceeds configured limit | Wait for reset or adjust limits |
-| `DAILY_LIMIT_EXCEEDED` | Daily limit exceeded | 24-hour limit reached | Wait for reset |
-| `PER_TX_LIMIT_EXCEEDED` | Per-transaction limit exceeded | Single transfer too large | Split into smaller transfers |
-
-### Chain Errors
-
-| Code | Message | Cause | Solution |
-|------|---------|-------|----------|
-| `UNSUPPORTED_CHAIN` | Chain not supported | Chain not in SDK configuration | Use supported chain |
-| `CHAIN_UNAVAILABLE` | Chain unavailable | RPC not responding | Try again or use different RPC |
-| `RPC_ERROR` | RPC request failed | Network or RPC issues | Retry with backoff |
-
----
-
-## Relayer Errors
-
-### Submission Errors
-
-| Code | HTTP | Message | Cause | Solution |
-|------|------|---------|-------|----------|
-| `INVALID_SIGNATURE` | 400 | Signature verification failed | WebAuthn signature invalid | Ensure correct payload signing |
-| `INVALID_PAYLOAD` | 400 | Invalid request payload | Malformed JSON or missing fields | Check request format |
-| `UNSUPPORTED_ACTION` | 400 | Action not supported | Unknown action type | Use valid action |
-| `VAULT_NOT_FOUND` | 400 | Vault doesn't exist | Vault not deployed on target chain | Create vault first |
-
-### Rate Limiting
-
-| Code | HTTP | Message | Cause | Solution |
-|------|------|---------|-------|----------|
-| `RATE_LIMITED` | 429 | Too many requests | Exceeded rate limit | Wait and retry with exponential backoff |
-| `VAULT_RATE_LIMITED` | 429 | Vault rate limited | Too many requests from vault | Wait 60 seconds |
-
-### Relay Errors
-
-| Code | HTTP | Message | Cause | Solution |
-|------|------|---------|-------|----------|
-| `RELAY_FAILED` | 500 | Relay transaction failed | On-chain execution failed | Check error details, may need more gas |
-| `RELAYER_ERROR` | 500 | Internal relayer error | Relayer service issue | Retry or contact support |
-| `INSUFFICIENT_RELAYER_BALANCE` | 503 | Relayer out of funds | Relayer needs refunding | Use different relayer or wait |
-
-### Wormhole Errors
-
-| Code | HTTP | Message | Cause | Solution |
-|------|------|---------|-------|----------|
-| `VAA_NOT_FOUND` | 404 | VAA not yet available | Guardians haven't attested | Wait and retry (~60s) |
-| `VAA_EXPIRED` | 400 | VAA has expired | VAA too old | Re-initiate transaction |
-| `INVALID_VAA` | 400 | Invalid VAA | Malformed or tampered VAA | Re-initiate transaction |
-| `WORMHOLE_UNAVAILABLE` | 503 | Wormhole service unavailable | Guardian network issues | Wait and retry |
-
----
-
-## Handling Errors
-
-### JavaScript/TypeScript
+## VeridexError Class
 
 ```typescript
-import { createSDK } from '@veridex/sdk';
-
-const sdk = createSDK('base', { network: 'testnet' });
+import { VeridexError, VeridexErrorCode } from '@veridex/sdk';
 
 try {
   await sdk.transferViaRelayer({
+    targetChain: 10004,
     token: USDC,
     recipient: '0x...',
-    amount: parseUnits('100', 6),
+    amount: 1_000_000n,
   });
-} catch (error) {
-  switch (error.code) {
-    case 'INSUFFICIENT_BALANCE':
-      showToast('Not enough tokens in your wallet');
-      break;
-    
-    case 'SPENDING_LIMIT_EXCEEDED':
-      showToast(`Limit exceeded. Available: ${error.available}`);
-      break;
-    
-    case 'SESSION_EXPIRED':
-      // Prompt to create new session
-      await sdk.sessions.create({ duration: 3600 });
-      // Retry transfer
-      break;
-    
-    case 'RATE_LIMITED':
-      // Wait and retry
-      await sleep(error.retryAfter * 1000);
-      // Retry transfer
-      break;
-    
-    case 'RELAYER_UNAVAILABLE':
-      showToast('Service temporarily unavailable. Please try again.');
-      break;
-    
-    default:
-      console.error('Unexpected error:', error);
-      showToast('Something went wrong. Please try again.');
+} catch (err) {
+  if (err instanceof VeridexError) {
+    console.log(err.code);      // VeridexErrorCode.INSUFFICIENT_FUNDS
+    console.log(err.message);   // "Insufficient funds in vault."
+    console.log(err.chain);     // "base"
+    console.log(err.retryable); // false
+    console.log(err.cause);     // original ethers / RPC error
   }
 }
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `code` | `VeridexErrorCode` | Unified error code (see table below) |
+| `message` | `string` | Human-readable description |
+| `chain` | `string \| undefined` | Chain that produced the error (`'base'`, `'solana'`, `'starknet'`, etc.) |
+| `cause` | `unknown` | Original chain-specific error object |
+| `retryable` | `boolean` | Whether the operation could succeed if retried |
+
+---
+
+## Error Codes
+
+### Wallet & Identity
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `NO_CREDENTIAL` | No credential set. Call `passkey.register()` or `passkey.setCredential()` first. | No |
+| `UNAUTHORIZED` | Unauthorized: the signer is not an owner of this vault. | No |
+| `INVALID_SIGNATURE` | Signature verification failed. | No |
+
+### Vault State
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `VAULT_NOT_FOUND` | Vault does not exist. Call `ensureVault()` first. | No |
+| `VAULT_PAUSED` | Vault is paused. Unpause before continuing. | No |
+| `PROTOCOL_PAUSED` | Protocol is paused. Try again later. | No |
+
+### Balance & Limits
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `INSUFFICIENT_FUNDS` | Insufficient funds in vault. | No |
+| `DAILY_LIMIT_EXCEEDED` | Daily spending limit exceeded. Try a smaller amount or wait for reset. | No |
+
+### Payload & Dispatch
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `INVALID_PAYLOAD` | Invalid action payload. | No |
+| `INVALID_ACTION` | Unknown or invalid action type. | No |
+| `EXPIRED` | Prepared transaction has expired. Please prepare again. | No |
+
+### Cross-Chain (Wormhole)
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `VAA_ALREADY_PROCESSED` | This cross-chain message has already been processed (replay protection). | No |
+| `INVALID_VAA` | Invalid VAA: verification failed. | No |
+| `INVALID_EMITTER` | Invalid emitter: message source is not trusted. | No |
+| `BRIDGE_ERROR` | Cross-chain bridge error. | No |
+
+### Network & Infrastructure
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `RPC_ERROR` | RPC call failed. The node may be unavailable. | **Yes** |
+| `TIMEOUT` | Operation timed out. | **Yes** |
+| `RELAYER_ERROR` | Relayer submission failed. | **Yes** |
+
+### Sessions
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `SESSION_EXPIRED` | Session key has expired. Create a new session. | No |
+| `SESSION_INVALID` | Session key is invalid or revoked. | No |
+
+### Capability
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `UNSUPPORTED_FEATURE` | This feature is not supported on the current chain. | No |
+
+### Catch-All
+
+| Code | Default Message | Retryable |
+|------|----------------|-----------|
+| `UNKNOWN` | An unknown error occurred. | No |
+
+---
+
+## normalizeError()
+
+The `normalizeError` function converts any chain-specific error into a `VeridexError`.
+The SDK calls this internally at every boundary, but you can use it directly when
+working with chain clients.
+
+```typescript
+import { normalizeError } from '@veridex/sdk';
+
+try {
+  await evmClient.dispatch(signature, pubX, pubY, payload, signer);
+} catch (err) {
+  const veridexErr = normalizeError(err, 'base');
+  // veridexErr.code === 'INSUFFICIENT_FUNDS' (if ethers threw "insufficient funds")
+}
+```
+
+### Chain-Specific Mappings
+
+The normalizer recognizes errors from each chain's native error surface:
+
+<Tabs items={['EVM / ethers', 'Solana / Anchor', 'Starknet', 'Stacks / Clarity']}>
+<Tab>
+**EVM regex patterns** match against the error message:
+
+| Pattern | Maps To |
+|---------|---------|
+| `insufficient funds` | `INSUFFICIENT_FUNDS` |
+| `execution reverted.*paused` | `VAULT_PAUSED` |
+| `execution reverted.*unauthorized` or `not owner` | `UNAUTHORIZED` |
+| `daily.*limit` | `DAILY_LIMIT_EXCEEDED` |
+| `nonce.*expired` or `nonce.*too low` | `EXPIRED` |
+| `already.*processed` or `already known` | `VAA_ALREADY_PROCESSED` |
+| `invalid.*signature` or `ECDSA` | `INVALID_SIGNATURE` |
+| `timeout` or `ETIMEDOUT` or `ECONNREFUSED` | `TIMEOUT` |
+| `could not detect network` or `failed to fetch` | `RPC_ERROR` |
+
+**ethers error codes** are also detected:
+
+| ethers Code | Maps To |
+|-------------|---------|
+| `INSUFFICIENT_FUNDS` | `INSUFFICIENT_FUNDS` |
+| `CALL_EXCEPTION` | `RPC_ERROR` |
+| `NETWORK_ERROR` / `SERVER_ERROR` | `RPC_ERROR` (retryable) |
+| `TIMEOUT` | `TIMEOUT` (retryable) |
+</Tab>
+<Tab>
+**Anchor program error codes** are extracted from `custom program error: 0x...`:
+
+| Anchor Code | Maps To |
+|-------------|---------|
+| 6000 | `PROTOCOL_PAUSED` |
+| 6001 | `VAULT_PAUSED` |
+| 6002 | `VAA_ALREADY_PROCESSED` |
+| 6003–6004 | `INVALID_EMITTER` |
+| 6005 | `UNAUTHORIZED` |
+| 6006 | `BRIDGE_ERROR` |
+| 6007–6008 | `INVALID_PAYLOAD` |
+| 6009 | `INVALID_ACTION` |
+| 6010 | `DAILY_LIMIT_EXCEEDED` |
+| 6011 | `INSUFFICIENT_FUNDS` |
+| 6012 | `UNAUTHORIZED` |
+| 6013 | `INVALID_VAA` |
+</Tab>
+<Tab>
+**Starknet patterns** match against felt/Cairo error messages:
+
+| Pattern | Maps To |
+|---------|---------|
+| `insufficient.*balance` or `not enough` | `INSUFFICIENT_FUNDS` |
+| `PAUSED` or `is paused` | `VAULT_PAUSED` |
+| `UNAUTHORIZED` or `not.*authorized` | `UNAUTHORIZED` |
+| `already.*processed` | `VAA_ALREADY_PROCESSED` |
+| `invalid.*signature` | `INVALID_SIGNATURE` |
+</Tab>
+<Tab>
+**Clarity error codes** are extracted from `(err uNNN)`:
+
+| Clarity Code | Maps To |
+|--------------|---------|
+| 100 | `UNAUTHORIZED` |
+| 101 | `VAULT_PAUSED` |
+| 102 | `INVALID_PAYLOAD` |
+| 103 | `INSUFFICIENT_FUNDS` |
+| 104 | `DAILY_LIMIT_EXCEEDED` |
+| 105 | `VAULT_NOT_FOUND` |
+| 106 | `INVALID_SIGNATURE` |
+| 200 | `VAA_ALREADY_PROCESSED` |
+| 201 | `INVALID_VAA` |
+| 202 | `INVALID_EMITTER` |
+</Tab>
+</Tabs>
+
+---
+
+## Handling Patterns
+
+### Switch on Error Code
+
+```typescript
+import { VeridexError, VeridexErrorCode } from '@veridex/sdk';
+
+try {
+  await sdk.transferViaRelayer(params);
+} catch (err) {
+  if (!(err instanceof VeridexError)) throw err;
+
+  switch (err.code) {
+    case VeridexErrorCode.INSUFFICIENT_FUNDS:
+      showToast('Not enough tokens in your vault');
+      break;
+
+    case VeridexErrorCode.DAILY_LIMIT_EXCEEDED:
+      showToast('Daily limit reached — try again after reset');
+      break;
+
+    case VeridexErrorCode.SESSION_EXPIRED:
+      await sdk.sessions.create({ duration: 3600 });
+      break; // retry
+
+    case VeridexErrorCode.NO_CREDENTIAL:
+      router.push('/login');
+      break;
+
+    default:
+      if (err.retryable) {
+        await sleep(2000);
+        // retry the operation
+      } else {
+        showToast(err.message);
+      }
+  }
+}
+```
+
+### Retry Retryable Errors
+
+```typescript
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof VeridexError && err.retryable && attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('unreachable');
+}
+
+const result = await withRetry(() => sdk.transferViaRelayer(params));
 ```
 
 ### React Error Boundary
 
 ```tsx
-import { Component, ReactNode } from 'react';
+import { VeridexError, VeridexErrorCode } from '@veridex/sdk';
+import { Component, type ReactNode } from 'react';
 
-interface Props {
-  children: ReactNode;
-  fallback: ReactNode;
-}
+class VeridexErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean; error?: VeridexError }
+> {
+  state = { hasError: false, error: undefined as VeridexError | undefined };
 
-interface State {
-  hasError: boolean;
-  error?: Error;
-}
-
-class VeridexErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error) {
+    if (error instanceof VeridexError) {
+      return { hasError: true, error };
+    }
+    return { hasError: true };
   }
 
   render() {
     if (this.state.hasError) {
-      const code = (this.state.error as any)?.code;
-      
-      if (code === 'PASSKEY_NOT_SUPPORTED') {
-        return <div>Your browser doesn't support passkeys.</div>;
+      if (this.state.error?.code === VeridexErrorCode.NO_CREDENTIAL) {
+        return <div>Please log in with your passkey.</div>;
       }
-      
       return this.props.fallback;
     }
-
     return this.props.children;
   }
 }
@@ -184,7 +309,7 @@ class VeridexErrorBoundary extends Component<Props, State> {
 
 ## Agent SDK Errors
 
-The Agent SDK (`@veridex/agentic-payments`) has its own error class and codes:
+The Agent SDK (`@veridex/agentic-payments`) has its own error class:
 
 ```typescript
 import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payments';
@@ -198,106 +323,3 @@ import { AgentPaymentError, AgentPaymentErrorCode } from '@veridex/agentic-payme
 | `CHAIN_NOT_SUPPORTED` | Chain ID not in `allowedChains` | No |
 | `TOKEN_NOT_SUPPORTED` | Token not available on target chain | No |
 | `NETWORK_ERROR` | Network or RPC failure | Yes |
-| `X402_PAYMENT_FAILED` | x402 payment negotiation failed | Yes |
-| `SIGNATURE_FAILED` | Transaction signing failed | No |
-
-### Handling Agent SDK Errors
-
-```typescript
-try {
-  await agent.pay({ chain: 10004, token: 'USDC', amount: '100000000', recipient: '0x...' });
-} catch (error) {
-  if (error instanceof AgentPaymentError) {
-    console.log('Code:', error.code);
-    console.log('Message:', error.message);
-    console.log('Retryable:', error.retryable);
-    console.log('Suggestion:', error.suggestion);
-
-    switch (error.code) {
-      case AgentPaymentErrorCode.LIMIT_EXCEEDED:
-        console.log('Over budget — wait for daily reset');
-        break;
-      case AgentPaymentErrorCode.INSUFFICIENT_BALANCE:
-        console.log('Need more tokens:', error.suggestion);
-        break;
-      case AgentPaymentErrorCode.SESSION_EXPIRED:
-        console.log('Re-initialize agent wallet');
-        break;
-      case AgentPaymentErrorCode.NETWORK_ERROR:
-        if (error.retryable) {
-          console.log('Retrying...');
-        }
-        break;
-    }
-  }
-}
-```
-
----
-
-## Stacks-Specific Errors
-
-| Code | Description | Cause |
-|------|-------------|-------|
-| `STACKS_SPONSORSHIP_LIMIT` | Sponsorship rate limit exceeded | Too many sponsored txs per hour |
-| `STACKS_POST_CONDITION_FAIL` | Post-condition validation failed | Transaction would transfer more than allowed |
-| `STACKS_NONCE_ERROR` | Nonce mismatch on Stacks | Concurrent transaction submission |
-| `STACKS_CONTRACT_ERROR` | Clarity contract execution error | Invalid arguments or state |
-
----
-
-## Error Response Format
-
-All errors follow this format:
-
-### Core SDK
-
-```typescript
-interface VeridexError extends Error {
-  code: string;           // Machine-readable error code
-  message: string;        // Human-readable message
-  details?: {             // Additional context
-    [key: string]: any;
-  };
-  retryAfter?: number;    // Seconds to wait (for rate limits)
-  httpStatus?: number;    // HTTP status code (relayer errors)
-}
-```
-
-### Agent SDK
-
-```typescript
-interface AgentPaymentError extends Error {
-  code: AgentPaymentErrorCode;  // Typed error code enum
-  message: string;              // Human-readable message
-  retryable: boolean;           // Whether the operation can be retried
-  suggestion?: string;          // Suggested action for the user/agent
-}
-```
-
-**Example (Core SDK):**
-
-```json
-{
-  "code": "SPENDING_LIMIT_EXCEEDED",
-  "message": "Transfer exceeds daily spending limit",
-  "details": {
-    "limitType": "daily",
-    "limit": "1000000000000000000",
-    "attempted": "2000000000000000000",
-    "available": "500000000000000000",
-    "resetsAt": 1704153600
-  }
-}
-```
-
-**Example (Agent SDK):**
-
-```json
-{
-  "code": "LIMIT_EXCEEDED",
-  "message": "Transaction of $150.00 exceeds daily limit of $100.00",
-  "retryable": false,
-  "suggestion": "Reduce amount to $75.00 or wait for daily reset at 2026-02-15T00:00:00Z"
-}
-```

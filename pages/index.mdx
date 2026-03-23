@@ -1,160 +1,130 @@
 ---
-title: Veridex Protocol Documentation
+title: Veridex Protocol
 description: Cross-chain passkey authentication, autonomous agent payments, and on-chain identity for the multi-chain web
 ---
 
-import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../components/mdx"
+import Link from "next/link"
 
-# Veridex Protocol
+<div className="vdx-home">
+<section className="vdx-hero">
+  <div className="vdx-hero-badge">Open-source protocol</div>
+  <h1 className="vdx-hero-title">{"One passkey. Any chain."}<br/>{"Fully self-custodial."}</h1>
+  <p className="vdx-hero-subtitle">{"Cross-chain passkey wallets, autonomous agent payments, and on-chain identity — integrate in minutes."}</p>
+  <div className="vdx-hero-actions">
+    <Link href="/getting-started/quick-start" className="vdx-btn vdx-btn-primary">{"Get Started"}</Link>
+    <Link href="/api-reference/sdk" className="vdx-btn vdx-btn-secondary">{"API Reference"}</Link>
+  </div>
+  <div className="vdx-hero-install">
+    <code>{"npm install @veridex/sdk"}</code>
+  </div>
+</section>
+<nav className="vdx-nav-grid">
+  <Link href="/getting-started/quick-start" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🚀"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Get Started"}</span>
+      <span className="vdx-nav-card-desc">{"Install the SDK and create your first passkey wallet in 5 minutes."}</span>
+    </span>
+  </Link>
+  <Link href="/guides/create-wallet" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"📖"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Guides"}</span>
+      <span className="vdx-nav-card-desc">{"Step-by-step walkthroughs for wallets, transfers, sessions, and agents."}</span>
+    </span>
+  </Link>
+  <Link href="/api-reference/sdk" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"⚡"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"API Reference"}</span>
+      <span className="vdx-nav-card-desc">{"Complete SDK, Agent SDK, and Relayer API documentation."}</span>
+    </span>
+  </Link>
+  <Link href="/chains/evm" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🔗"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Chains"}</span>
+      <span className="vdx-nav-card-desc">{"Base, Optimism, Arbitrum, Solana, Aptos, Sui, Starknet, and Stacks."}</span>
+    </span>
+  </Link>
+  <Link href="/integrations/react" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🧩"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Integrations"}</span>
+      <span className="vdx-nav-card-desc">{"React hooks, Next.js, payment gateways, DeFi, and gaming."}</span>
+    </span>
+  </Link>
+  <Link href="/security/best-practices" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🔒"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Security"}</span>
+      <span className="vdx-nav-card-desc">{"Audit reports, best practices, and recovery mechanisms."}</span>
+    </span>
+  </Link>
+</nav>
+<section className="vdx-packages">
+  <h2 className="vdx-section-title">{"Two packages, one protocol"}</h2>
+  <div className="vdx-package-grid">
+    <div className="vdx-package-card">
+      <div className="vdx-package-name">{"@veridex/sdk"}</div>
+      <div className="vdx-package-desc">{"Passkey wallets, vaults, sessions, cross-chain transfers, spending limits, and ERC-8004 utilities."}</div>
+      <code className="vdx-package-install">{"npm install @veridex/sdk"}</code>
+      <Link href="/api-reference/sdk" className="vdx-package-link">{"View SDK docs →"}</Link>
+    </div>
+    <div className="vdx-package-card">
+      <div className="vdx-package-name">{"@veridex/agentic-payments"}</div>
+      <div className="vdx-package-desc">{"Autonomous payments, on-chain identity, reputation scoring, trust gates, and MCP tools for AI agents."}</div>
+      <code className="vdx-package-install">{"npm install @veridex/agentic-payments"}</code>
+      <Link href="/api-reference/agent-sdk" className="vdx-package-link">{"View Agent docs →"}</Link>
+    </div>
+  </div>
+</section>
+</div>
 
-**One passkey. Any chain. Fully self-custodial.**
-
-Veridex is a cross-chain passkey authentication protocol that lets users control assets on any blockchain with FaceID/TouchID — no seed phrases, no wallet apps, no chain switching. It also provides an **Agent SDK** for autonomous AI agent payments, on-chain identity (ERC-8004), and reputation-gated commerce.
-
-## Two Packages, One Protocol
-
-| Package | Purpose | Install |
-|---------|---------|---------|
-| **`@veridex/sdk`** | Core SDK — passkey wallets, vaults, sessions, cross-chain transfers, ERC-8004 utilities | `npm install @veridex/sdk` |
-| **`@veridex/agentic-payments`** | Agent SDK — autonomous payments, on-chain identity, reputation, trust gates, discovery, MCP tools | `npm install @veridex/agentic-payments` |
-
-## Why Veridex?
-
-| Feature | Traditional Wallets | MPC/Custodial | Veridex |
-|---------|---------------------|---------------|---------|
-| **Login** | Seed phrase | Social/email | FaceID only |
-| **Custody** | Self-custody | Custodial | **Fully self-custodial** |
-| **Cross-chain** | Manual bridging | Limited | **Native multi-chain** |
-| **Recovery** | Seed phrase | Via provider | **On-chain social recovery** |
-| **AI Agents** | Not supported | Custodial keys | **Session keys + spending limits** |
-| **Agent Identity** | None | None | **ERC-8004 on-chain identity + reputation** |
-
-## Quick Links
-
-<Cards>
-  <Card title="Quick Start" href="/getting-started/quick-start">
-    Integrate Veridex in 5 minutes
-  </Card>
-  <Card title="SDK Reference" href="/api-reference/sdk">
-    Core SDK API documentation
-  </Card>
-  <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
-    Agent SDK for autonomous payments
-  </Card>
-  <Card title="Agent Identity" href="/guides/agent-identity">
-    ERC-8004 identity, reputation, and discovery
-  </Card>
-</Cards>
-
-## Supported Chains
-
-| Chain | Type | Status |
-|-------|------|--------|
-| Base | Hub (EVM) | ✅ Live |
-| Optimism | Spoke (EVM) | ✅ Live |
-| Arbitrum | Spoke (EVM) | ✅ Live |
-| Solana | Spoke | ✅ Live |
-| Aptos | Spoke | ✅ Live |
-| Sui | Spoke | ✅ Live |
-| Starknet | Spoke | ✅ Live |
-| Stacks | Spoke | ✅ Live |
-| Monad | Spoke (EVM) | ✅ Live |
-
-## How It Works
-
-```mermaid
-flowchart TD
-    A["User authenticates with FaceID/TouchID"] --> B["Hub (Base) verifies P-256 signature"]
-    B --> C["Wormhole broadcasts authorization"]
-    C --> D["Spoke (any chain) executes action"]
-```
-
-Users get the **same deterministic vault address** across all EVM chains, derived from their passkey.
-
-## Core SDK — Quick Example
+## Start building in minutes
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-// Initialize with testnet (default)
-const sdk = createSDK('base', {
-  network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network',
-});
+const sdk = createSDK('base', { network: 'testnet' });
 
 // Register a passkey (prompts biometric)
 const credential = await sdk.passkey.register('alice', 'My Wallet');
 
-// Get your deterministic vault address (same on all EVM chains)
-const vaultAddress = sdk.getVaultAddress();
-console.log('Vault:', vaultAddress);
-
-// Check spending limits
-const limits = await sdk.getSpendingLimits();
-console.log('Daily remaining:', limits.dailyRemaining);
-
-// Prepare and execute a transfer
+// Prepare and execute a cross-chain transfer
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,  // Base Sepolia
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  targetChain: 10004,
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n,    // 1 USDC
+  amount: 1000000n,
 });
-
-// Get human-readable summary before signing
-const summary = await sdk.getTransactionSummary(prepared);
-console.log(summary.title, summary.description);
 ```
 
-## Agent SDK — Quick Example
-
-```typescript
-import { createAgentWallet } from '@veridex/agentic-payments';
-
-// Create an autonomous agent wallet with on-chain identity
-const agent = await createAgentWallet({
-  masterCredential: {
-    credentialId: 'passkey-credential-id',
-    publicKeyX: 0n,
-    publicKeyY: 0n,
-    keyHash: '0x...',
-  },
-  session: {
-    dailyLimitUSD: 50,
-    perTransactionLimitUSD: 10,
-    expiryHours: 24,
-    allowedChains: [10004], // Base Sepolia
-  },
-  erc8004: {
-    enabled: true,
-    testnet: true,
-    minReputationScore: 30, // only pay merchants with 30+ reputation
-  },
-});
-
-// Register on-chain identity (ERC-721 NFT)
-const { agentId } = await agent.register({
-  name: 'My Data Agent',
-  description: 'Autonomous data analyst',
-  services: [{ name: 'analysis', endpoint: 'https://my-agent.com/api' }],
-});
-
-// Fetch with auto-payment + reputation check + auto-feedback
-const response = await agent.fetch('https://paid-api.example.com/data');
-const data = await response.json();
-
-// Discover other agents by capability
-const agents = await agent.discover({ category: 'sentiment' });
-
-// Check a merchant's reputation before subscribing
-const trust = await agent.checkMerchantTrust('https://data-provider.com');
-console.log(`Reputation: ${trust.score}/100`);
-```
-
-## Resources
-
-- [GitHub Repository](https://github.com/Veridex-Protocol/)
-- [Demo Video](https://youtu.be/CgSvFqrVGAw)
-- [Discord Community](https://discord.gg/veridex)
-- [Telegram Community](https://t.me/+1b16cbymIYI4OTVk)
-- [Twitter @VeridexLabs](https://x.com/VeridexLabs)
+<div className="vdx-home">
+<section className="vdx-explore">
+  <h2 className="vdx-section-title">{"Explore the docs"}</h2>
+  <div className="vdx-explore-grid">
+    <Link href="/guides/react-hooks" className="vdx-explore-item">{"React Hooks →"}</Link>
+    <Link href="/guides/cross-chain" className="vdx-explore-item">{"Cross-Chain Transfers →"}</Link>
+    <Link href="/guides/session-keys" className="vdx-explore-item">{"Session Keys →"}</Link>
+    <Link href="/guides/spending-limits" className="vdx-explore-item">{"Spending Limits →"}</Link>
+    <Link href="/guides/agent-payments" className="vdx-explore-item">{"Agent Payments →"}</Link>
+    <Link href="/guides/agent-identity" className="vdx-explore-item">{"Agent Identity (ERC-8004) →"}</Link>
+    <Link href="/guides/enterprise-manager" className="vdx-explore-item">{"Enterprise Manager →"}</Link>
+    <Link href="/guides/multisig-wallet" className="vdx-explore-item">{"Multisig Wallets →"}</Link>
+    <Link href="/guides/balance-watching" className="vdx-explore-item">{"Balance Watching →"}</Link>
+    <Link href="/guides/error-handling" className="vdx-explore-item">{"Error Handling →"}</Link>
+    <Link href="/resources/architecture-decisions" className="vdx-explore-item">{"Architecture Decisions →"}</Link>
+    <Link href="/resources/glossary" className="vdx-explore-item">{"Glossary →"}</Link>
+  </div>
+</section>
+<section className="vdx-community">
+  <h2 className="vdx-section-title">{"Community"}</h2>
+  <div className="vdx-community-grid">
+    <a href="https://github.com/Veridex-Protocol/" target="_blank" rel="noopener noreferrer" className="vdx-community-link">{"GitHub"}</a>
+    <a href="https://discord.gg/veridex" target="_blank" rel="noopener noreferrer" className="vdx-community-link">{"Discord"}</a>
+    <a href="https://t.me/+1b16cbymIYI4OTVk" target="_blank" rel="noopener noreferrer" className="vdx-community-link">{"Telegram"}</a>
+    <a href="https://x.com/VeridexLabs" target="_blank" rel="noopener noreferrer" className="vdx-community-link">{"Twitter"}</a>
+  </div>
+</section>
+</div>

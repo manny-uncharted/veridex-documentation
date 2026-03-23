@@ -1,0 +1,217 @@
+---
+title: Balance Watching
+description: Subscribe to real-time vault balance changes with polling-based watchers
+---
+
+import { Callout } from '../../components/Callout'
+import { Steps, Step } from '../../components/Steps'
+
+# Balance Watching
+
+The SDK provides a polling-based subscription API for vault balance changes.
+Subscribe to incoming transfers, outgoing withdrawals, or spending limit resets
+without implementing your own polling loop.
+
+## Quick Start
+
+<Steps>
+<Step>
+### Subscribe to Balance Changes
+
+```typescript
+const unsub = sdk.watchBalance(
+  (event) => {
+    console.log(`${event.changes.length} token(s) changed`);
+    for (const change of event.changes) {
+      const direction = change.delta > 0n ? 'received' : 'sent';
+      console.log(`${direction} ${change.token.symbol}: ${change.delta}`);
+    }
+  },
+  { intervalMs: 10_000, emitInitial: true },
+);
+```
+</Step>
+<Step>
+### Handle Errors
+
+```typescript
+const unsub = sdk.watchBalance(
+  (event) => { /* handle changes */ },
+  { intervalMs: 10_000 },
+  (error) => {
+    console.error('Balance poll failed:', error.message);
+    // The watcher continues on error — it won't crash
+  },
+);
+```
+</Step>
+<Step>
+### Stop Watching
+
+```typescript
+// Unsubscribe when done (e.g., component unmount)
+unsub();
+```
+</Step>
+</Steps>
+
+---
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `intervalMs` | `number` | `15000` | Poll interval in milliseconds |
+| `minIntervalMs` | `number` | `5000` | Minimum allowed interval (floor) |
+| `emitInitial` | `boolean` | `false` | Emit current balances immediately on subscribe |
+
+<Callout type="warning">
+  The minimum poll interval is 5 seconds to protect against aggressive polling.
+  Setting `intervalMs` below 5000 will be clamped to 5000.
+</Callout>
+
+---
+
+## Balance Change Events
+
+Each callback receives a `BalanceChangeEvent`:
+
+```typescript
+interface BalanceChangeEvent {
+  wormholeChainId: number;       // Chain ID
+  address: string;               // Vault address
+  portfolio: PortfolioBalance;   // Full current portfolio
+  changes: TokenBalanceChange[]; // Only tokens that changed
+  timestamp: number;             // Poll timestamp
+}
+
+interface TokenBalanceChange {
+  token: TokenInfo;
+  previousBalance: bigint;
+  currentBalance: bigint;
+  delta: bigint;  // positive = received, negative = sent
+}
+```
+
+### Detecting Deposits vs Withdrawals
+
+```typescript
+sdk.watchBalance((event) => {
+  for (const change of event.changes) {
+    if (change.delta > 0n) {
+      showNotification(`Received ${formatUnits(change.delta, change.token.decimals)} ${change.token.symbol}`);
+    } else {
+      showNotification(`Sent ${formatUnits(-change.delta, change.token.decimals)} ${change.token.symbol}`);
+    }
+  }
+});
+```
+
+### Detecting New Tokens
+
+When a token appears in the portfolio for the first time, `previousBalance` is `0n`:
+
+```typescript
+sdk.watchBalance((event) => {
+  for (const change of event.changes) {
+    if (change.previousBalance === 0n && change.currentBalance > 0n) {
+      console.log(`New token detected: ${change.token.symbol}`);
+    }
+  }
+});
+```
+
+---
+
+## React Usage
+
+With `@veridex/react`:
+
+```tsx
+import { useBalance } from '@veridex/react';
+
+function VaultBalance() {
+  const { portfolio, loading, error, refetch } = useBalance({
+    pollInterval: 10_000,
+  });
+
+  if (loading) return <Spinner />;
+  if (error) return <p>Error: {error.message}</p>;
+  if (!portfolio) return <p>No credential set</p>;
+
+  return (
+    <div>
+      {portfolio.tokens.map(t => (
+        <div key={t.token.address}>
+          {t.token.symbol}: {t.formatted}
+        </div>
+      ))}
+      <button onClick={refetch}>Refresh</button>
+    </div>
+  );
+}
+```
+
+---
+
+## Enterprise Usage
+
+The `EnterpriseManager` provides balance watching for admin dashboards:
+
+```typescript
+import { EnterpriseManager } from '@veridex/sdk';
+
+const enterprise = new EnterpriseManager({ sdk });
+
+// Watch a specific user's vault
+const unsub = enterprise.watchVaultBalance(
+  10004,           // chain ID
+  '0xVaultAddr',   // vault address
+  (event) => {
+    // Forward to webhook
+    fetch('https://your-api.com/webhooks/balance', {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  },
+  { intervalMs: 30_000 },
+  (error) => alertOps('Balance watch failed', error),
+);
+```
+
+---
+
+## Advanced: Direct BalanceWatcher
+
+For full control, use `BalanceWatcher` directly:
+
+```typescript
+import { BalanceWatcher } from '@veridex/sdk';
+
+const watcher = new BalanceWatcher(
+  async (chainId, address) => {
+    return sdk.balance.getPortfolioBalance(chainId, address, false);
+  },
+);
+
+const unsub = watcher.watch(
+  10004, '0xVaultAddr',
+  (event) => { /* ... */ },
+  { intervalMs: 10_000, emitInitial: true },
+);
+
+// Stop all watchers at once
+watcher.stopAll();
+```
+
+### Multiple Subscribers
+
+Multiple callbacks can subscribe to the same vault — they share one polling loop:
+
+```typescript
+const unsub1 = watcher.watch(10004, '0xVault', onUIUpdate);
+const unsub2 = watcher.watch(10004, '0xVault', onAnalytics);
+// One poll, both callbacks invoked
+
+unsub1(); // UI unsubscribes; analytics continues
+```

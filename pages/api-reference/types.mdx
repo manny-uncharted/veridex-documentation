@@ -1,69 +1,100 @@
 ---
 title: TypeScript Types
-description: TypeScript type definitions for the Veridex SDK
+description: Complete type definitions exported by @veridex/sdk
 ---
 
 # TypeScript Types
 
-All types exported from `@veridex/sdk`.
-
-## Core Types
-
-### SDKOptions
+All types below are exported from `@veridex/sdk` and available via:
 
 ```typescript
-interface SDKOptions {
-  /** Network to use */
-  network?: 'testnet' | 'mainnet';
-  
-  /** Relayer API URL for gasless transactions */
-  relayerUrl?: string;
-  
-  /** API key for Wormhole Query Proxy */
-  relayerApiKey?: string;
-  
-  /** Custom RPC URL */
-  rpcUrl?: string;
-  
-  /** Ethers signer for direct transactions */
-  signer?: Signer;
-  
-  /** Custom storage adapter */
-  storage?: StorageAdapter;
-}
-```
-
-### StorageAdapter
-
-```typescript
-interface StorageAdapter {
-  get(key: string): string | null;
-  set(key: string, value: string): void;
-  remove(key: string): void;
-}
+import type { TransferParams, VeridexConfig, PasskeyCredential /* ... */ } from '@veridex/sdk';
 ```
 
 ---
 
-## Passkey Types
+## Configuration
 
-### Credential
+### SimpleSDKConfig
+
+Passed to `createSDK()` for quick setup.
 
 ```typescript
-interface Credential {
-  /** Base64-encoded credential ID */
-  id: string;
-  
-  /** Raw credential ID */
-  rawId: ArrayBuffer;
-  
-  /** P-256 public key */
-  publicKey: {
-    /** X coordinate (hex) */
-    x: string;
-    /** Y coordinate (hex) */
-    y: string;
-  };
+interface SimpleSDKConfig {
+  network?: 'testnet' | 'mainnet';
+  rpcUrl?: string;
+  relayerUrl?: string;
+  relayerApiKey?: string;
+  sponsorPrivateKey?: string;
+  integratorSponsorKey?: string;
+  rpcUrls?: Record<ChainName, string>;
+}
+```
+
+### VeridexConfig
+
+Full config for the `VeridexSDK` constructor.
+
+```typescript
+interface VeridexConfig {
+  chain: ChainClient;
+  persistWallet?: boolean;
+  testnet?: boolean;
+  relayerUrl?: string;
+  relayerApiKey?: string;
+  queryApiKey?: string;
+  sponsorPrivateKey?: string;
+  integratorSponsorKey?: string;
+  chainRpcUrls?: Record<number, string>;
+}
+```
+
+### ChainConfig
+
+Returned by `sdk.getChainConfig()`.
+
+```typescript
+interface ChainConfig {
+  chainId: number;
+  wormholeChainId: number;
+  rpcUrl: string;
+  hubContractAddress: string;
+  wormholeCoreBridge: string;
+  name: string;
+  explorerUrl: string;
+  vaultFactory: string;
+  vaultImplementation: string;
+}
+```
+
+### ChainName
+
+```typescript
+type ChainName =
+  | 'base' | 'optimism' | 'arbitrum' | 'ethereum' | 'polygon'
+  | 'monad' | 'solana' | 'aptos' | 'sui' | 'starknet' | 'stacks';
+```
+
+### NetworkType
+
+```typescript
+type NetworkType = 'testnet' | 'mainnet';
+```
+
+---
+
+## Passkey & Identity
+
+### PasskeyCredential
+
+Returned by `sdk.passkey.register()` and `sdk.passkey.authenticate()`.
+
+```typescript
+interface PasskeyCredential {
+  credentialId: string;
+  publicKeyX: bigint;
+  publicKeyY: bigint;
+  keyHash: string;
 }
 ```
 
@@ -71,82 +102,153 @@ interface Credential {
 
 ```typescript
 interface WebAuthnSignature {
-  /** ECDSA r value (hex) */
   r: string;
-  
-  /** ECDSA s value (hex) */
   s: string;
-  
-  /** Authenticator data (hex) */
   authenticatorData: string;
-  
-  /** Client data JSON (base64) */
   clientDataJSON: string;
+}
+```
+
+### UnifiedIdentity
+
+Returned by `sdk.getUnifiedIdentity()`.
+
+```typescript
+interface UnifiedIdentity {
+  keyHash: string;
+  addresses: Array<{
+    wormholeChainId: number;
+    chainName: string;
+    address: string;
+    deployed: boolean;
+  }>;
+}
+```
+
+### IdentityState
+
+```typescript
+interface IdentityState {
+  keyHash: string;
+  authorizedKeys: AuthorizedKey[];
+  keyCount: number;
+}
+```
+
+### AuthorizedKey
+
+```typescript
+interface AuthorizedKey {
+  keyHash: string;
+  publicKeyX: bigint;
+  publicKeyY: bigint;
+  addedAt: bigint;
+  label?: string;
 }
 ```
 
 ---
 
-## Transfer Types
+## Transfer & Dispatch
 
 ### TransferParams
 
 ```typescript
 interface TransferParams {
-  /** Token address or 'native' for native token */
-  token: string;
-  
-  /** Recipient address */
-  recipient: string;
-  
-  /** Amount in smallest unit (wei, lamports, etc.) */
-  amount: bigint;
+  targetChain: number;   // Wormhole chain ID
+  token: string;         // Token address or 'native'
+  recipient: string;     // Recipient address
+  amount: bigint;        // Amount in smallest unit (wei, lamports, etc.)
+}
+```
+
+### PreparedTransfer
+
+Returned by `sdk.prepareTransfer()`.
+
+```typescript
+interface PreparedTransfer {
+  params: TransferParams;
+  actionPayload: string;
+  nonce: bigint;
+  challenge: string;
+  estimatedGas: bigint;
+  gasPrice: bigint;
+  messageFee: bigint;
+  totalCost: bigint;
+  formattedCost: string;
+  preparedAt: number;
+  expiresAt: number;      // 5-minute TTL
 }
 ```
 
 ### TransferResult
 
+Returned by `sdk.executeTransfer()` and `sdk.transferViaRelayer()`.
+
 ```typescript
 interface TransferResult {
-  /** Whether transfer succeeded */
-  success: boolean;
-  
-  /** Transaction hash */
-  txHash: string;
-  
-  /** Block number (if confirmed) */
-  blockNumber?: number;
-  
-  /** Transaction status */
+  transactionHash: string;
+  sequence?: bigint;
   status: 'pending' | 'confirmed' | 'failed';
-  
-  /** Error message (if failed) */
-  error?: string;
+}
+```
+
+### DispatchResult
+
+Returned by low-level `sdk.transfer()`, `sdk.execute()`, `sdk.bridge()`.
+
+```typescript
+interface DispatchResult {
+  transactionHash: string;
+  sequence: bigint;
+  userKeyHash: string;
+  targetChain: number;
+  blockNumber: number;
+}
+```
+
+### ExecuteParams
+
+```typescript
+interface ExecuteParams {
+  targetChain: number;
+  target: string;
+  value: bigint;
+  callData: string;
 }
 ```
 
 ---
 
-## Bridge Types
+## Cross-Chain / Bridge
 
 ### BridgeParams
 
 ```typescript
 interface BridgeParams {
-  /** Wormhole chain ID of target chain */
-  targetChain: number;
-  
-  /** Token address or 'native' */
+  sourceChain: number;
+  destinationChain: number;
   token: string;
-  
-  /** Recipient address on target chain */
   recipient: string;
-  
-  /** Amount in smallest unit */
   amount: bigint;
-  
-  /** Force specific verification path */
-  path?: 'query' | 'vaa';
+}
+```
+
+### PreparedBridge
+
+```typescript
+interface PreparedBridge {
+  params: BridgeParams;
+  actionPayload: string;
+  nonce: bigint;
+  challenge: string;
+  estimatedGas: bigint;
+  messageFee: bigint;
+  totalCost: bigint;
+  formattedCost: string;
+  preparedAt: number;
+  expiresAt: number;
 }
 ```
 
@@ -154,209 +256,346 @@ interface BridgeParams {
 
 ```typescript
 interface BridgeResult {
-  /** Whether bridge initiated successfully */
   success: boolean;
-  
-  /** Source chain transaction hash */
   txHash: string;
-  
-  /** Estimated confirmation time in seconds */
   estimatedTimeSeconds: number;
-  
-  /** Verification path used */
   path: 'query' | 'vaa';
 }
 ```
 
-### BridgeStatus
+### CrossChainFees
 
 ```typescript
-interface BridgeStatus {
-  /** Current state */
-  state: 'pending' | 'attested' | 'completed' | 'failed';
-  
-  /** Source chain transaction hash */
-  sourceTxHash: string;
-  
-  /** Destination chain transaction hash */
-  destinationTxHash?: string;
-  
-  /** VAA sequence number */
-  sequence?: bigint;
-  
-  /** Error message (if failed) */
-  error?: string;
+interface CrossChainFees {
+  sourceGas: bigint;
+  messageFee: bigint;
+  relayerFee: bigint;
+  totalCost: bigint;
+  formattedTotal: string;
+  currency: string;
 }
 ```
 
 ---
 
-## Session Types
+## Balance
 
-### SessionParams
+### TokenBalance
 
 ```typescript
-interface SessionParams {
-  /** Session duration in seconds */
-  duration: number;
-  
-  /** Maximum total value (in wei equivalent) */
-  maxValue?: bigint;
-  
-  /** Allowed token addresses */
-  allowedTokens?: string[];
-  
-  /** Allowed recipient addresses */
-  allowedRecipients?: string[];
+interface TokenBalance {
+  token: TokenInfo;
+  balance: bigint;
+  formatted: string;
+  usdValue?: number;
 }
 ```
 
-### Session
+### PortfolioBalance
 
 ```typescript
-interface Session {
-  /** Unique session ID */
-  id: string;
-  
-  /** Expiration timestamp (Unix ms) */
-  expiresAt: number;
-  
-  /** Maximum allowed value */
-  maxValue: bigint;
-  
-  /** Value used so far */
-  usedValue: bigint;
-  
-  /** Remaining value */
-  remainingValue: bigint;
-  
-  /** Allowed tokens (if restricted) */
-  allowedTokens?: string[];
-  
-  /** Allowed recipients (if restricted) */
-  allowedRecipients?: string[];
-  
-  /** Session key address */
-  sessionKey: string;
+interface PortfolioBalance {
+  wormholeChainId: number;
+  chainName: string;
+  address: string;
+  tokens: TokenBalance[];
+  totalUsdValue?: number;
+  lastUpdated: Date;
+}
+```
+
+### TokenInfo
+
+```typescript
+interface TokenInfo {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  wormholeChainId: number;
+  logoUrl?: string;
 }
 ```
 
 ---
 
-## Spending Limit Types
+## Balance Watcher
 
-### SpendingLimitConfig
+### BalanceChangeEvent
+
+Delivered to `watchBalance()` subscribers when token balances change.
 
 ```typescript
-interface SpendingLimitConfig {
-  /** Daily limit (in wei equivalent) */
-  daily?: bigint;
-  
-  /** Per-transaction limit */
-  perTransaction?: bigint;
-  
-  /** Token-specific limits */
-  tokens?: {
-    [address: string]: {
-      daily?: bigint;
-      perTransaction?: bigint;
-    };
-  };
+interface BalanceChangeEvent {
+  wormholeChainId: number;
+  address: string;
+  portfolio: PortfolioBalance;
+  changes: TokenBalanceChange[];
+  timestamp: number;
 }
 ```
+
+### TokenBalanceChange
+
+```typescript
+interface TokenBalanceChange {
+  token: TokenInfo;
+  previousBalance: bigint;
+  currentBalance: bigint;
+  delta: bigint; // positive = received, negative = sent
+}
+```
+
+### BalanceWatcherOptions
+
+```typescript
+interface BalanceWatcherOptions {
+  intervalMs?: number;        // Poll interval (default: 15000)
+  minIntervalMs?: number;     // Floor (default: 5000)
+  emitInitial?: boolean;      // Emit current balances immediately
+}
+```
+
+---
+
+## Spending Limits
 
 ### SpendingLimits
 
+Raw on-chain spending limits.
+
 ```typescript
 interface SpendingLimits {
-  /** Daily limit */
-  daily: bigint;
-  
-  /** Per-transaction limit */
-  perTransaction: bigint;
-  
-  /** Amount used today */
-  usedToday: bigint;
-  
-  /** Remaining for today */
-  remaining: bigint;
-  
-  /** When limits reset (Unix timestamp) */
-  resetsAt: number;
-  
-  /** Token-specific limits */
-  tokens: {
-    [address: string]: {
-      daily: bigint;
-      perTransaction: bigint;
-      usedToday: bigint;
-      remaining: bigint;
-    };
-  };
+  dailyLimit: bigint;
+  dailySpent: bigint;
+  dailyRemaining: bigint;
+  dayResetTime: Date;
+  timeUntilReset: number;       // milliseconds
+  transactionLimit: bigint;
+  isPaused: boolean;
+  lastUpdated: Date;
+  chainId: number;
 }
 ```
 
-### SpendingCheck
+### FormattedSpendingLimits
+
+Human-readable version for UI display, returned by `sdk.getFormattedSpendingLimits()`.
 
 ```typescript
-interface SpendingCheck {
-  /** Whether transfer is allowed */
+interface FormattedSpendingLimits {
+  dailyLimit: string;
+  dailyLimitValue: number;
+  dailySpent: string;
+  dailySpentValue: number;
+  dailyRemaining: string;
+  dailyRemainingValue: number;
+  dailyUsedPercentage: number;     // 0–100
+  timeUntilReset: string;          // e.g. "6h 23m"
+  transactionLimit: string;
+  transactionLimitValue: number;
+  isPaused: boolean;
+  hasDailyLimit: boolean;
+  hasTransactionLimit: boolean;
+}
+```
+
+### LimitCheckResult
+
+Returned by `sdk.checkSpendingLimit()`.
+
+```typescript
+interface LimitCheckResult {
   allowed: boolean;
-  
-  /** Reason if not allowed */
-  reason?: string;
-  
-  /** Available amount */
-  available: bigint;
-  
-  /** When limit resets */
-  resetsAt: number;
+  message?: string;
+  suggestions?: string[];
 }
 ```
 
 ---
 
-## Chain Types
+## Sessions
 
-### ChainConfig
+### SessionConfig
 
 ```typescript
-interface ChainConfig {
-  /** Chain name */
-  name: string;
-  
-  /** Native chain ID */
-  chainId: number;
-  
-  /** Wormhole chain ID */
-  wormholeChainId: number;
-  
-  /** RPC URL */
-  rpcUrl: string;
-  
-  /** Chain type */
-  type: 'evm' | 'solana' | 'aptos' | 'sui' | 'starknet';
-  
-  /** Contract addresses */
-  contracts: {
-    factory?: string;
-    implementation?: string;
-    hub?: string;
-    programId?: string;
-    moduleAddress?: string;
-    packageId?: string;
-  };
+interface SessionConfig {
+  duration: number;            // seconds
+  maxValue?: bigint;           // max transfer per session tx
+  allowedTokens?: string[];   // token addresses
+  allowedRecipients?: string[];
 }
 ```
 
-### ChainBalances
+### SessionSignature
 
 ```typescript
-interface ChainBalances {
-  [chainName: string]: {
-    [symbol: string]: string;
-  };
+interface SessionSignature {
+  r: string;
+  s: string;
+  v: number;
 }
+```
+
+### KeyPair
+
+```typescript
+interface KeyPair {
+  privateKey: string;
+  publicKey: string;
+  address: string;
+}
+```
+
+---
+
+## Transaction Summary
+
+### TransactionSummary
+
+Returned by `sdk.getTransactionSummary()`.
+
+```typescript
+interface TransactionSummary {
+  title: string;
+  description: string;
+  details: ActionDetails;
+  risks: RiskWarning[];
+  gasCost: string;
+  expiresIn: number;
+}
+```
+
+### RiskWarning
+
+```typescript
+interface RiskWarning {
+  level: 'info' | 'warning' | 'danger';
+  message: string;
+  code: string;
+}
+```
+
+---
+
+## Multisig (ADR-0037)
+
+### MultisigPolicy
+
+```typescript
+interface MultisigPolicy {
+  enabled: boolean;
+  threshold: number;
+  protectedActionMask: number;
+  proposalTtl: number;
+  disableSessions: boolean;
+}
+```
+
+### TransactionProposal
+
+```typescript
+interface TransactionProposal {
+  proposalId: string;
+  identityKeyHash: string;
+  proposerKeyHash: string;
+  targetChain: number;
+  actionType: number;
+  actionHash: string;
+  actionPayload: string;
+  createdAt: bigint;
+  expiresAt: bigint;
+  approvalCount: number;
+  requiredThreshold: number;
+  state: 'none' | 'pending' | 'approved' | 'executed' | 'cancelled' | 'expired';
+}
+```
+
+---
+
+## Enterprise Manager
+
+### EnterpriseManagerConfig
+
+```typescript
+interface EnterpriseManagerConfig {
+  sdk: VeridexSDK;
+  maxConcurrency?: number;    // default: 3
+}
+```
+
+### BatchVaultRequest / BatchVaultResult
+
+```typescript
+interface BatchVaultRequest {
+  keyHashes: string[];
+  chainIds?: number[];
+  maxConcurrency?: number;
+}
+
+interface BatchVaultResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{
+    keyHash: string;
+    result: MultiChainVaultResult | null;
+    error?: string;
+  }>;
+}
+```
+
+### BatchTransferRequest / BatchTransferResult
+
+```typescript
+interface BatchTransferRequest {
+  transfers: TransferParams[];
+  signer: any;
+  maxConcurrency?: number;
+}
+
+interface BatchTransferResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{
+    params: TransferParams;
+    result: TransferResult | null;
+    error?: string;
+  }>;
+}
+```
+
+### BatchSpendingLimitRequest / BatchSpendingLimitResult
+
+```typescript
+interface BatchSpendingLimitRequest {
+  updates: Array<{ newLimit: bigint }>;
+  signer: any;
+}
+
+interface BatchSpendingLimitResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{
+    newLimit: bigint;
+    result: TransferResult | null;
+    error?: string;
+  }>;
+}
+```
+
+### BatchLifecycleEvent
+
+Callback events emitted during batch operations.
+
+```typescript
+type BatchLifecycleEvent =
+  | { type: 'started'; total: number }
+  | { type: 'item_started'; index: number; total: number }
+  | { type: 'item_completed'; index: number; total: number; success: boolean; error?: string }
+  | { type: 'completed'; succeeded: number; failed: number; total: number };
 ```
 
 ---
@@ -366,45 +605,114 @@ interface ChainBalances {
 ### VeridexError
 
 ```typescript
-interface VeridexError extends Error {
-  /** Machine-readable error code */
-  code: string;
-  
-  /** Human-readable message */
-  message: string;
-  
-  /** Additional context */
-  details?: Record<string, any>;
-  
-  /** Seconds to wait before retry */
-  retryAfter?: number;
-  
-  /** HTTP status code */
-  httpStatus?: number;
+class VeridexError extends Error {
+  readonly code: VeridexErrorCode;
+  readonly chain: string | undefined;
+  readonly cause: unknown;
+  readonly retryable: boolean;
+}
+```
+
+### VeridexErrorCode
+
+```typescript
+enum VeridexErrorCode {
+  NO_CREDENTIAL = 'NO_CREDENTIAL',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  INVALID_SIGNATURE = 'INVALID_SIGNATURE',
+  VAULT_NOT_FOUND = 'VAULT_NOT_FOUND',
+  VAULT_PAUSED = 'VAULT_PAUSED',
+  PROTOCOL_PAUSED = 'PROTOCOL_PAUSED',
+  INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS',
+  DAILY_LIMIT_EXCEEDED = 'DAILY_LIMIT_EXCEEDED',
+  INVALID_PAYLOAD = 'INVALID_PAYLOAD',
+  INVALID_ACTION = 'INVALID_ACTION',
+  EXPIRED = 'EXPIRED',
+  VAA_ALREADY_PROCESSED = 'VAA_ALREADY_PROCESSED',
+  INVALID_VAA = 'INVALID_VAA',
+  INVALID_EMITTER = 'INVALID_EMITTER',
+  BRIDGE_ERROR = 'BRIDGE_ERROR',
+  RPC_ERROR = 'RPC_ERROR',
+  TIMEOUT = 'TIMEOUT',
+  RELAYER_ERROR = 'RELAYER_ERROR',
+  SESSION_EXPIRED = 'SESSION_EXPIRED',
+  SESSION_INVALID = 'SESSION_INVALID',
+  UNSUPPORTED_FEATURE = 'UNSUPPORTED_FEATURE',
+  UNKNOWN = 'UNKNOWN',
 }
 ```
 
 ---
 
-## Importing Types
+## Cross-Origin Auth
+
+### CrossOriginAuthConfig
 
 ```typescript
-import type {
-  SDKOptions,
-  Credential,
-  WebAuthnSignature,
-  TransferParams,
-  TransferResult,
-  BridgeParams,
-  BridgeResult,
-  BridgeStatus,
-  SessionParams,
-  Session,
-  SpendingLimitConfig,
-  SpendingLimits,
-  SpendingCheck,
-  ChainConfig,
-  ChainBalances,
-  VeridexError,
+interface CrossOriginAuthConfig {
+  authPortalUrl: string;
+  relayerUrl: string;
+  appName: string;
+  appIcon?: string;
+}
+```
+
+### CrossOriginSession
+
+```typescript
+interface CrossOriginSession {
+  credential: PasskeyCredential;
+  vaultAddress: string;
+  expiresAt: number;
+}
+```
+
+---
+
+## Full Import Example
+
+```typescript
+import {
+  // Config
+  type VeridexConfig, type SimpleSDKConfig, type ChainConfig,
+  type ChainName, type NetworkType,
+
+  // Passkey
+  type PasskeyCredential, type WebAuthnSignature,
+
+  // Actions
+  type TransferParams, type ExecuteParams, type BridgeParams,
+  type PreparedTransfer, type PreparedBridge,
+
+  // Results
+  type DispatchResult, type TransferResult, type BridgeResult, type CrossChainFees,
+
+  // Balance
+  type TokenBalance, type PortfolioBalance, type TokenInfo,
+  type BalanceChangeEvent, type TokenBalanceChange, type BalanceWatcherOptions,
+
+  // Spending Limits
+  type SpendingLimits, type FormattedSpendingLimits, type LimitCheckResult,
+
+  // Sessions
+  type SessionConfig, type SessionSignature, type KeyPair,
+
+  // Summaries
+  type TransactionSummary, type RiskWarning,
+
+  // Identity
+  type UnifiedIdentity, type VaultInfo,
+
+  // Enterprise
+  type EnterpriseManagerConfig, type BatchVaultRequest, type BatchVaultResult,
+  type BatchTransferRequest, type BatchTransferResult,
+  type BatchSpendingLimitRequest, type BatchSpendingLimitResult,
+  type BatchLifecycleEvent,
+
+  // Multisig
+  type MultisigPolicy, type TransactionProposal,
+
+  // Errors
+  VeridexError, VeridexErrorCode,
 } from '@veridex/sdk';
 ```

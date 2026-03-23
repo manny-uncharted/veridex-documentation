@@ -60,7 +60,7 @@ Session keys let users approve once and execute many transactions without repeat
 ### Quick taste — Create and use a session
 
 ```typescript
-import { createSDK, SessionManager, EVMHubClientAdapter } from '@veridex/sdk';
+import { createSDK, SessionManager, EVMHubClientAdapter, getChainConfig } from '@veridex/sdk';
 import { Wallet, JsonRpcProvider, parseEther, getBytes } from 'ethers';
 
 const sdk = createSDK('base');
@@ -106,7 +106,7 @@ Deep-dive into cross-chain security and session lifecycle management.
 ### VAA verification highlights
 
 ```typescript
-import { parseVAA, hasQuorum, normalizeEmitterAddress } from '@veridex/sdk';
+import { parseVAA, hasQuorum, normalizeEmitterAddress, validateEmitter } from '@veridex/sdk';
 
 const vaa = parseVAA(vaaBase64);
 

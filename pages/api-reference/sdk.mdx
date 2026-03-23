@@ -3,6 +3,10 @@ title: SDK Reference
 description: Complete TypeScript SDK API documentation for @veridex/sdk
 ---
 
+import { Callout } from '../../components/Callout'
+import { Tabs, Tab } from '../../components/Tabs'
+import { Steps, Step } from '../../components/Steps'
+
 # SDK Reference
 
 Complete API reference for the Veridex Core SDK (`@veridex/sdk`).
@@ -13,6 +17,8 @@ Complete API reference for the Veridex Core SDK (`@veridex/sdk`).
 npm install @veridex/sdk ethers
 ```
 
+---
+
 ## Initialization
 
 ### createSDK
@@ -22,55 +28,50 @@ Creates a new `VeridexSDK` instance with sensible defaults.
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK(chain, config?);
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
 ```
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `chain` | `ChainName` | Chain name (see supported chains below) |
+| `chain` | `ChainName` | Chain name — see supported chains below |
 | `config` | `SimpleSDKConfig` | Optional configuration |
 
-**Supported chain names:** `'base'`, `'optimism'`, `'arbitrum'`, `'ethereum'`, `'polygon'`, `'monad'`, `'solana'`, `'aptos'`, `'sui'`, `'starknet'`, `'stacks'`
-
-**Config:**
+**Supported chains:** `'base'`, `'optimism'`, `'arbitrum'`, `'ethereum'`, `'polygon'`, `'monad'`, `'solana'`, `'aptos'`, `'sui'`, `'starknet'`, `'stacks'`
 
 ```typescript
 interface SimpleSDKConfig {
-  network?: 'testnet' | 'mainnet';     // Default: 'testnet'
-  rpcUrl?: string;                      // Custom RPC URL
-  relayerUrl?: string;                  // Relayer for gasless transactions
-  relayerApiKey?: string;               // Relayer API key
-  sponsorPrivateKey?: string;           // For gasless vault creation
-  integratorSponsorKey?: string;        // Platform-level sponsorship
-  rpcUrls?: Record<ChainName, string>;  // Multi-chain RPC URLs
+  network?: 'testnet' | 'mainnet';
+  rpcUrl?: string;
+  relayerUrl?: string;
+  relayerApiKey?: string;
+  sponsorPrivateKey?: string;
+  integratorSponsorKey?: string;
+  rpcUrls?: Record<ChainName, string>;
 }
 ```
 
-**Example:**
+### Convenience Factories
 
 ```typescript
-// Simplest — testnet by default
-const sdk = createSDK('base');
+import { createHubSDK, createTestnetSDK, createMainnetSDK, createSessionSDK } from '@veridex/sdk';
 
-// With relayer for gasless transactions
-const sdk = createSDK('base', {
-  network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network',
-});
-
-// Stacks
-const stacksSdk = createSDK('stacks', { network: 'testnet' });
+const hubSdk  = createHubSDK();                 // Base hub chain
+const testSdk = createTestnetSDK('optimism');    // Force testnet
+const mainSdk = createMainnetSDK('base');        // Force mainnet
+const sessSdk = createSessionSDK('base');        // Session-optimized
 ```
 
 ### VeridexSDK (Direct Constructor)
 
-For full control over chain configuration, use the `VeridexSDK` class directly with an `EVMClient`. This is the pattern used for multi-chain support.
+For full control, use the class directly with an `EVMClient`:
 
 ```typescript
-import { VeridexSDK } from '@veridex/sdk';
-import { EVMClient } from '@veridex/sdk/chains/evm';
+import { VeridexSDK, EVMClient } from '@veridex/sdk';
 
 const evmClient = new EVMClient({
   chainId: 84532,
@@ -86,11 +87,9 @@ const evmClient = new EVMClient({
 
 const sdk = new VeridexSDK({
   chain: evmClient,
-  persistWallet: true,
   testnet: true,
   relayerUrl: '/api/relayer',
   relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
-  queryApiKey: process.env.NEXT_PUBLIC_WORMHOLE_QUERY_API_KEY,
   sponsorPrivateKey: process.env.NEXT_PUBLIC_VERIDEX_SPONSOR_KEY,
   chainRpcUrls: {
     10004: 'https://sepolia.base.org',
@@ -100,28 +99,12 @@ const sdk = new VeridexSDK({
 });
 ```
 
-**Config:**
-
-```typescript
-interface VeridexSDKConfig {
-  chain: EVMClient;                              // Hub chain client
-  persistWallet?: boolean;                       // Persist wallet state (default: true)
-  testnet?: boolean;                             // Use testnet (default: true)
-  relayerUrl?: string;                           // Relayer URL for gasless transactions
-  relayerApiKey?: string;                        // Relayer API key
-  queryApiKey?: string;                          // Wormhole query API key
-  sponsorPrivateKey?: string;                    // For gasless vault creation
-  integratorSponsorKey?: string;                 // Platform-level sponsorship
-  chainRpcUrls?: Record<number, string>;         // RPC URLs keyed by Wormhole chain ID
-}
-```
-
 ### Dynamic Import (SSR-Safe)
 
 For Next.js apps, use dynamic imports to avoid SSR issues:
 
 ```typescript
-let sdkInstance: any = null;
+let sdkInstance: VeridexSDK | null = null;
 
 export async function getVeridexSDK() {
   if (!sdkInstance) {
@@ -135,32 +118,17 @@ export async function getVeridexSDK() {
 }
 ```
 
-### Convenience Factories
-
-```typescript
-import { createHubSDK, createTestnetSDK, createMainnetSDK, createSessionSDK } from '@veridex/sdk';
-
-const hubSdk = createHubSDK();                    // Base hub chain
-const testSdk = createTestnetSDK('optimism');      // Force testnet
-const mainSdk = createMainnetSDK('base');          // Force mainnet
-const sessSdk = createSessionSDK('base');          // Session-optimized
-```
-
 ---
 
 ## Passkey Management (`sdk.passkey`)
-
-The `passkey` property is a `PasskeyManager` instance.
 
 ### sdk.passkey.register
 
 Register a new passkey with biometric authentication.
 
 ```typescript
-const credential = await sdk.passkey.register(username, displayName);
+const credential = await sdk.passkey.register('alice', 'Alice Doe');
 ```
-
-**Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -168,17 +136,6 @@ const credential = await sdk.passkey.register(username, displayName);
 | `displayName` | `string` | Display name for the credential |
 
 **Returns:** `Promise<PasskeyCredential>`
-
-```typescript
-interface PasskeyCredential {
-  credentialId: string;
-  publicKeyX: bigint;
-  publicKeyY: bigint;
-  keyHash: string;
-}
-```
-
----
 
 ### sdk.passkey.authenticate
 
@@ -190,131 +147,54 @@ const { credential, signature } = await sdk.passkey.authenticate();
 
 **Returns:** `Promise<{ credential: PasskeyCredential; signature: WebAuthnSignature }>`
 
----
-
 ### sdk.passkey.getCredential
 
-Get the currently active credential (set by `register` or `authenticate`).
-
 ```typescript
-const credential = sdk.passkey.getCredential();
+const credential = sdk.passkey.getCredential(); // PasskeyCredential | null
 ```
 
-**Returns:** `PasskeyCredential | null`
-
----
-
 ### sdk.passkey.setCredential
-
-Manually set the active credential.
 
 ```typescript
 sdk.passkey.setCredential(credential);
 ```
 
----
-
 ### sdk.passkey.getAllStoredCredentials
 
-Get all passkey credentials saved in local storage.
-
 ```typescript
-const credentials = sdk.passkey.getAllStoredCredentials();
+const credentials = sdk.passkey.getAllStoredCredentials(); // PasskeyCredential[]
 ```
-
-**Returns:** `PasskeyCredential[]`
-
----
 
 ### sdk.passkey.sign
 
-Sign a challenge with the passkey.
-
 ```typescript
-const signature = await sdk.passkey.sign(challenge);
+const signature = await sdk.passkey.sign(challenge); // WebAuthnSignature
 ```
 
-**Returns:** `Promise<WebAuthnSignature>`
-
----
-
-### sdk.passkey.saveToLocalStorage
-
-Save the current credential to localStorage for auto-login on next visit.
+### Local Storage
 
 ```typescript
 sdk.passkey.saveToLocalStorage();
-```
-
----
-
-### sdk.passkey.loadFromLocalStorage
-
-Load a saved credential from localStorage.
-
-```typescript
 const credential = sdk.passkey.loadFromLocalStorage();
-if (credential) {
-  sdk.setCredential(credential);
-}
-```
-
-**Returns:** `PasskeyCredential | null`
-
----
-
-### sdk.passkey.hasStoredCredential
-
-Check if a credential exists in localStorage.
-
-```typescript
 const hasStored = sdk.passkey.hasStoredCredential();
 ```
 
-**Returns:** `boolean`
-
----
-
-### sdk.passkey.saveCredentialToRelayer
-
-Sync the credential to the relayer for cross-device recovery.
+### Relayer Sync (Cross-Device)
 
 ```typescript
 await sdk.passkey.saveCredentialToRelayer();
-```
-
----
-
-### sdk.passkey.loadCredentialFromRelayer
-
-Recover a credential from the relayer (cross-device login).
-
-```typescript
 const credential = await sdk.passkey.loadCredentialFromRelayer();
 ```
-
-**Returns:** `Promise<PasskeyCredential | null>`
 
 ---
 
 ## Credential Management
 
-### sdk.setCredential
-
-Set the active credential on the SDK instance (used after loading from storage or cross-origin auth).
-
 ```typescript
-sdk.setCredential(credential);
-```
-
----
-
-### sdk.clearCredential
-
-Clear the active credential and reset SDK state.
-
-```typescript
-sdk.clearCredential();
+sdk.setCredential(credential);    // Set active credential
+sdk.clearCredential();             // Clear active credential
+const cred = sdk.getCredential(); // Get active credential
+const has = sdk.hasCredential();  // Check if credential is set
 ```
 
 ---
@@ -323,91 +203,107 @@ sdk.clearCredential();
 
 ### sdk.getVaultAddress
 
-Get the deterministic vault address derived from the passkey.
+Get the deterministic vault address derived from the passkey. Same address on all EVM chains.
 
 ```typescript
-const address = sdk.getVaultAddress();
+const address = sdk.getVaultAddress(); // string
 ```
-
-**Returns:** `string` — Same address on all EVM chains for the same passkey.
-
----
-
-### sdk.getChainConfig
-
-Get the current chain's configuration.
-
-```typescript
-const config = sdk.getChainConfig();
-```
-
----
-
-### sdk.getUnifiedIdentity
-
-Get the unified identity across all chains, including vault addresses, deployment status, and key hash.
-
-```typescript
-const identity = await sdk.getUnifiedIdentity();
-```
-
-**Returns:** `Promise<UnifiedIdentity>`
-
-```typescript
-interface UnifiedIdentity {
-  keyHash: string;
-  addresses: Array<{
-    wormholeChainId: number;
-    chainName: string;
-    address: string;
-    deployed: boolean;
-  }>;
-}
-```
-
-**Example:**
-
-```typescript
-const identity = await sdk.getUnifiedIdentity();
-const baseAddr = identity.addresses.find(a => a.wormholeChainId === 10004);
-console.log('Base vault:', baseAddr?.address, 'deployed:', baseAddr?.deployed);
-```
-
----
 
 ### sdk.vaultExists
 
-Check if the vault is deployed on the current chain.
-
 ```typescript
-const exists = await sdk.vaultExists();
+const exists = await sdk.vaultExists(); // boolean
 ```
 
-**Returns:** `Promise<boolean>`
+### sdk.getVaultInfo
 
----
+```typescript
+const info = await sdk.getVaultInfo(targetChainId?); // VaultInfo | null
+```
+
+### sdk.getUnifiedIdentity
+
+```typescript
+const identity = await sdk.getUnifiedIdentity();
+for (const addr of identity.addresses) {
+  console.log(`${addr.chainName}: ${addr.address} (deployed: ${addr.deployed})`);
+}
+```
+
+### sdk.getMultiChainAddresses
+
+Get vault addresses across all configured chains.
+
+```typescript
+const addresses = sdk.getMultiChainAddresses();
+// { 10004: '0x...', 10005: '0x...', 10003: '0x...' }
+```
+
+**Returns:** `Record<number, string>` — Wormhole chain ID → vault address
+
+### sdk.getMultiChainPortfolio
+
+Get combined portfolio across multiple chains.
+
+```typescript
+const portfolios = await sdk.getMultiChainPortfolio([10004, 10005]);
+for (const p of portfolios) {
+  console.log(`${p.chainName}: $${p.totalUsdValue}`);
+}
+```
+
+**Returns:** `Promise<PortfolioBalance[]>`
+
+### sdk.getChainConfig
+
+```typescript
+const config = sdk.getChainConfig(); // ChainConfig
+```
 
 ### sdk.getReceiveAddress
 
-Get the address that can receive tokens (vault address if deployed, otherwise the computed address).
-
 ```typescript
-const receiveAddr = sdk.getReceiveAddress();
+const addr = sdk.getReceiveAddress(); // ReceiveAddress
 ```
-
-**Returns:** `string`
-
----
 
 ### sdk.getNonce
 
-Get the current nonce for the authenticated passkey.
-
 ```typescript
-const nonce = await sdk.getNonce();
+const nonce = await sdk.getNonce(); // bigint
 ```
 
-**Returns:** `Promise<bigint>`
+---
+
+## Feature Detection
+
+### sdk.supportsFeature
+
+Check if the current chain supports a specific feature.
+
+```typescript
+if (sdk.supportsFeature('sessions')) {
+  // Sessions are available
+}
+if (sdk.supportsFeature('crossChainBridge')) {
+  // Bridging is available
+}
+```
+
+**Returns:** `boolean`
+
+### sdk.getCapabilityMatrix
+
+Get the full capability matrix for the current chain and platform.
+
+```typescript
+const matrix = sdk.getCapabilityMatrix({
+  webauthnSupported: true,
+  conditionalUISupported: true,
+  platformAuthenticatorAvailable: true,
+});
+```
+
+**Returns:** `PlatformCapabilityMatrix`
 
 ---
 
@@ -415,56 +311,21 @@ const nonce = await sdk.getNonce();
 
 ### sdk.prepareTransfer
 
-Prepare a transfer with gas estimation. Call this before signing to show the user costs.
-
-```typescript
-const prepared = await sdk.prepareTransfer(params);
-```
-
-**Parameters:**
-
-```typescript
-interface TransferParams {
-  targetChain: number;   // Wormhole chain ID
-  token: string;         // Token address or 'native'
-  recipient: string;     // Recipient address
-  amount: bigint;        // Amount in smallest unit
-}
-```
-
-**Returns:** `Promise<PreparedTransfer>`
-
-```typescript
-interface PreparedTransfer {
-  params: TransferParams;
-  actionPayload: string;
-  nonce: bigint;
-  challenge: string;
-  estimatedGas: bigint;
-  gasPrice: bigint;
-  messageFee: bigint;
-  totalCost: bigint;
-  formattedCost: string;
-  preparedAt: number;
-  expiresAt: number;      // 5 minutes TTL
-}
-```
-
-**Example:**
+Prepare a transfer with gas estimation. Call before signing to show costs.
 
 ```typescript
 const prepared = await sdk.prepareTransfer({
   targetChain: 10004,
   token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n,
+  amount: 1_000_000n, // 1 USDC
 });
 
 console.log('Gas cost:', prepared.formattedCost);
 console.log('Expires:', new Date(prepared.expiresAt));
 ```
 
----
+**Returns:** `Promise<PreparedTransfer>`
 
 ### sdk.executeTransfer
 
@@ -472,91 +333,43 @@ Execute a prepared transfer (requires a signer to pay gas).
 
 ```typescript
 const result = await sdk.executeTransfer(prepared, signer);
+console.log('Tx:', result.transactionHash);
 ```
-
-**Returns:** `Promise<DispatchResult>`
-
-```typescript
-interface DispatchResult {
-  transactionHash: string;
-  sequence: bigint;
-  userKeyHash: string;
-  targetChain: number;
-  blockNumber: number;
-}
-```
-
----
-
-### sdk.transferViaRelayer
-
-Execute a gasless transfer through the relayer. The user only needs their passkey — no MetaMask or gas tokens required. This is the primary transfer method used by both the test-app and sera/dashboard.
-
-```typescript
-const result = await sdk.transferViaRelayer(params);
-```
-
-**Parameters:** `TransferParams` (same as `prepareTransfer`)
 
 **Returns:** `Promise<TransferResult>`
 
-```typescript
-interface TransferResult {
-  transactionHash: string;
-  sequence?: bigint;
-  status: 'pending' | 'confirmed' | 'failed';
-}
-```
+### sdk.transferViaRelayer
 
-**Example:**
+**Gasless transfer** through the relayer — the primary transfer method. The user only needs their passkey.
 
 ```typescript
 import { ethers } from 'ethers';
 
 const result = await sdk.transferViaRelayer({
-  targetChain: 10004,  // Base Sepolia
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  targetChain: 10004,
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: ethers.parseUnits('10', 6), // 10 USDC
+  amount: ethers.parseUnits('10', 6),
 });
-
-console.log('Tx:', result.transactionHash);
 ```
 
----
+**Returns:** `Promise<TransferResult>`
+
+### sdk.transferWithTracking
+
+```typescript
+const result = await sdk.transferWithTracking(params, signer, (status) => {
+  console.log(status.state); // 'pending' → 'confirmed'
+});
+```
 
 ### sdk.getTransactionSummary
 
-Get a human-readable summary of a prepared transaction.
-
 ```typescript
 const summary = await sdk.getTransactionSummary(prepared);
-```
-
-**Returns:** `Promise<TransactionSummary>`
-
-```typescript
-interface TransactionSummary {
-  title: string;           // e.g., "Transfer"
-  description: string;     // e.g., "Send 1.0 USDC to 0x742d...5A234"
-  details: ActionDetails;
-  risks: RiskWarning[];    // e.g., large_transaction, unknown_recipient
-  gasCost: string;
-  expiresIn: number;
-}
-```
-
-**Example:**
-
-```typescript
-const prepared = await sdk.prepareTransfer({ ... });
-const summary = await sdk.getTransactionSummary(prepared);
-
-console.log(summary.title);        // "Transfer"
-console.log(summary.description);  // "Send 1.0 USDC to 0x742d...5A234"
-if (summary.risks.length > 0) {
-  console.warn('Risks:', summary.risks.map(r => r.message));
-}
+console.log(summary.title);       // "Transfer"
+console.log(summary.description); // "Send 1.0 USDC to 0x742d...5A234"
+console.log(summary.risks);       // [{level:'warning', message:'Large transaction'}]
 ```
 
 ---
@@ -565,101 +378,51 @@ if (summary.risks.length > 0) {
 
 ### sdk.prepareBridge
 
-Prepare a cross-chain bridge with fee estimation.
-
 ```typescript
-const prepared = await sdk.prepareBridge(params);
-```
-
-**Parameters:**
-
-```typescript
-interface BridgeParams {
-  sourceChain: number;        // Source Wormhole chain ID
-  destinationChain: number;   // Destination Wormhole chain ID
-  token: string;
-  recipient: string;
-  amount: bigint;
-}
-```
-
----
-
-### sdk.executeBridge
-
-Execute a prepared bridge with cross-chain tracking.
-
-```typescript
-const result = await sdk.executeBridge(prepared, signer, onProgress?);
-```
-
-**Progress callback:**
-
-```typescript
-sdk.executeBridge(prepared, signer, (progress) => {
-  console.log(`Step ${progress.step}/${progress.totalSteps}: ${progress.message}`);
-  // Steps: signing → dispatching → waiting_confirmations → fetching_vaa → relaying → completed
+const prepared = await sdk.prepareBridge({
+  sourceChain: 10004,
+  destinationChain: 10005,
+  token: '0x...',
+  recipient: '0x...',
+  amount: 1_000_000n,
 });
 ```
 
----
+### sdk.executeBridge
+
+```typescript
+const result = await sdk.executeBridge(prepared, signer, (progress) => {
+  console.log(`Step ${progress.step}/${progress.totalSteps}: ${progress.message}`);
+});
+```
 
 ### sdk.bridgeViaRelayer
 
-Execute a gasless bridge using the relayer.
+Gasless bridge using the relayer.
 
 ```typescript
 const result = await sdk.bridgeViaRelayer(params, onProgress?);
 ```
 
----
-
-### sdk.bridgeWithTracking
-
-Convenience method that prepares and executes a bridge in one call.
-
-```typescript
-const result = await sdk.bridgeWithTracking(params, signer, onProgress?);
-```
-
----
-
 ### sdk.getBridgeFees
-
-Estimate bridge fees without executing.
 
 ```typescript
 const fees = await sdk.getBridgeFees(params);
-```
-
-**Returns:** `Promise<CrossChainFees>`
-
-```typescript
-interface CrossChainFees {
-  sourceGas: bigint;
-  messageFee: bigint;
-  relayerFee: bigint;
-  totalCost: bigint;
-  formattedTotal: string;
-  currency: string;
-}
+console.log('Total:', fees.formattedTotal); // "0.0012 ETH"
 ```
 
 ---
 
-## Spending Limits (`sdk.spendingLimits`)
+## Spending Limits
 
 ### sdk.getSpendingLimits
 
-Get current on-chain spending limits for your vault.
+Get raw on-chain spending limits.
 
 ```typescript
 const limits = await sdk.getSpendingLimits(chainId?);
+console.log('Daily remaining:', limits.dailyRemaining);
 ```
-
-**Returns:** `Promise<SpendingLimits>`
-
----
 
 ### sdk.getFormattedSpendingLimits
 
@@ -667,19 +430,16 @@ Get spending limits formatted for UI display.
 
 ```typescript
 const formatted = await sdk.getFormattedSpendingLimits();
-console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
+console.log(`${formatted.dailyUsedPercentage}% used`);
 console.log(`Resets in: ${formatted.timeUntilReset}`);
+console.log(`Per-tx limit: ${formatted.transactionLimit}`);
 ```
-
----
 
 ### sdk.checkSpendingLimit
 
 Check if a transaction amount is within limits.
 
 ```typescript
-import { ethers } from 'ethers';
-
 const check = await sdk.checkSpendingLimit(ethers.parseEther('1.0'));
 if (!check.allowed) {
   console.log(check.message);
@@ -687,27 +447,75 @@ if (!check.allowed) {
 }
 ```
 
-**Returns:** `Promise<LimitCheckResult>`
-
----
-
 ### sdk.prepareSetDailyLimit
-
-Prepare a transaction to update the daily spending limit.
 
 ```typescript
 const prepared = await sdk.prepareSetDailyLimit(ethers.parseEther('5.0'));
-// Sign and execute with sdk.executeTransfer(prepared, signer)
+await sdk.executeTransfer(prepared, signer);
+```
+
+### sdk.preparePauseVault / sdk.prepareUnpauseVault
+
+```typescript
+const pause = await sdk.preparePauseVault();
+const unpause = await sdk.prepareUnpauseVault();
 ```
 
 ---
 
-### sdk.preparePauseVault
+## Balance Watching
 
-Prepare an emergency pause transaction.
+### sdk.watchBalance
+
+Subscribe to vault balance changes via polling. Returns an unsubscribe function.
 
 ```typescript
-const prepared = await sdk.preparePauseVault();
+const unsub = sdk.watchBalance(
+  (event) => {
+    for (const change of event.changes) {
+      console.log(`${change.token.symbol}: ${change.delta > 0n ? '+' : ''}${change.delta}`);
+    }
+  },
+  { intervalMs: 10_000, emitInitial: true },
+  (error) => console.error('Watch error:', error),
+);
+
+// Later: stop watching
+unsub();
+```
+
+See the [Balance Watching guide](/guides/balance-watching) for full usage patterns.
+
+---
+
+## Balance Management
+
+### sdk.getVaultBalances
+
+```typescript
+const portfolio = await sdk.getVaultBalances();
+for (const entry of portfolio.tokens) {
+  console.log(`${entry.token.symbol}: ${entry.formatted}`);
+}
+```
+
+### sdk.getVaultNativeBalance
+
+```typescript
+const native = await sdk.getVaultNativeBalance();
+console.log(`${native.token.symbol}: ${native.formatted}`);
+```
+
+### sdk.getVaultTokenBalance
+
+```typescript
+const balance = await sdk.getVaultTokenBalance(tokenAddress);
+```
+
+### sdk.getMultiChainBalances
+
+```typescript
+const results = await sdk.getMultiChainBalances([10004, 10005, 10003]);
 ```
 
 ---
@@ -716,146 +524,223 @@ const prepared = await sdk.preparePauseVault();
 
 ### sdk.isSponsorshipAvailable
 
-Check if the SDK has a sponsor key configured for gasless vault creation.
-
 ```typescript
-const canSponsor = sdk.isSponsorshipAvailable();
+const canSponsor = sdk.isSponsorshipAvailable(); // boolean
 ```
-
-**Returns:** `boolean`
-
----
 
 ### sdk.ensureSponsoredVaultsOnAllChains
 
-Auto-create vaults on all configured chains using the sponsor key. No gas required from the user. This is called automatically after registration in the test-app.
+Auto-create vaults on all configured chains using the sponsor key.
 
 ```typescript
 const result = await sdk.ensureSponsoredVaultsOnAllChains();
-console.log(`Created vaults on ${result.results.filter(r => r.success).length} chains`);
+console.log(`Created on ${result.results.filter(r => r.success).length} chains`);
 ```
 
-**Returns:** `Promise<{ results: Array<{ chainId: number; success: boolean; error?: string }> }>`
+### sdk.createSponsoredVault
+
+```typescript
+const result = await sdk.createSponsoredVault(10004); // Base Sepolia
+```
+
+### sdk.getSponsoredChains
+
+```typescript
+const chains = sdk.getSponsoredChains();
+```
+
+---
+
+## Backup Passkeys (Multi-Key Identity)
+
+### sdk.addBackupPasskey
+
+```typescript
+const newCred = await sdk.passkey.register('alice-backup', 'Alice Backup');
+const result = await sdk.addBackupPasskey(newCred, signer);
+```
+
+### sdk.listAuthorizedPasskeys
+
+```typescript
+const keys = await sdk.listAuthorizedPasskeys();
+```
+
+### sdk.hasBackupPasskeys
+
+```typescript
+const hasBackup = await sdk.hasBackupPasskeys(); // boolean
+```
+
+### sdk.removePasskey
+
+```typescript
+await sdk.removePasskey(keyHash, signer);
+```
+
+---
+
+## Multisig (ADR-0037)
+
+Access via `sdk.multisig`:
+
+```typescript
+// Configure policy
+await sdk.multisig.configurePolicy({
+  signature, threshold: 2, signer,
+});
+
+// Create proposal
+const proposal = await sdk.multisig.proposeTransfer(params, signer);
+
+// Approve
+const approval = await sdk.multisig.approveProposal(proposal.proposalId, signer);
+
+// Execute (once threshold reached)
+if (approval.thresholdReached) {
+  const result = await sdk.multisig.executeProposal(proposal.proposalId, signer);
+}
+```
+
+See the [Multisig Wallet guide](/guides/multisig-wallet) for full setup.
+
+---
+
+## Enterprise Manager
+
+Orchestration layer for batch operations and admin dashboards.
+
+```typescript
+import { EnterpriseManager } from '@veridex/sdk';
+
+const enterprise = new EnterpriseManager({ sdk, maxConcurrency: 5 });
+```
+
+### enterprise.batchCreateVaults
+
+```typescript
+const result = await enterprise.batchCreateVaults(
+  { keyHashes: ['0xabc...', '0xdef...'], maxConcurrency: 3 },
+  (event) => console.log(event.type, event),
+);
+console.log(`${result.succeeded}/${result.total} vaults created`);
+```
+
+### enterprise.batchTransfer
+
+```typescript
+const result = await enterprise.batchTransfer({
+  transfers: [
+    { targetChain: 10004, token: USDC, recipient: '0xAlice', amount: 1_000_000n },
+    { targetChain: 10004, token: USDC, recipient: '0xBob', amount: 2_000_000n },
+  ],
+  signer,
+  maxConcurrency: 2,
+});
+```
+
+### enterprise.batchSetSpendingLimits
+
+```typescript
+const result = await enterprise.batchSetSpendingLimits({
+  updates: [
+    { newLimit: ethers.parseEther('5.0') },
+    { newLimit: ethers.parseEther('10.0') },
+  ],
+  signer,
+});
+```
+
+### enterprise.watchVaultBalance
+
+```typescript
+const unsub = enterprise.watchVaultBalance(10004, vaultAddress, (event) => {
+  callWebhook(event);
+});
+```
+
+### enterprise.getSpendingLimitsForVault
+
+```typescript
+const limits = await enterprise.getSpendingLimitsForVault('0xVault...', 10004);
+```
+
+See the [Enterprise Manager guide](/guides/enterprise-manager) for full patterns.
+
+---
+
+## Error Handling
+
+All SDK methods throw `VeridexError` with unified error codes:
+
+```typescript
+import { VeridexError, VeridexErrorCode, normalizeError } from '@veridex/sdk';
+
+try {
+  await sdk.transferViaRelayer(params);
+} catch (err) {
+  if (err instanceof VeridexError) {
+    switch (err.code) {
+      case VeridexErrorCode.INSUFFICIENT_FUNDS:
+        showToast('Not enough tokens');
+        break;
+      case VeridexErrorCode.DAILY_LIMIT_EXCEEDED:
+        showToast('Daily limit reached');
+        break;
+      default:
+        if (err.retryable) { /* retry */ }
+    }
+  }
+}
+```
+
+See [Error Handling](/api-reference/errors) for the full error code reference and chain-specific mappings.
 
 ---
 
 ## Token Management
 
-### sdk.getTokenList
-
-Get the list of supported tokens on the current chain.
-
 ```typescript
 const tokens = sdk.getTokenList();
-for (const token of tokens) {
-  console.log(`${token.symbol}: ${token.address} (${token.decimals} decimals)`);
-}
+const usdc = sdk.getTokenBySymbol('USDC');
 ```
 
-**Returns:** `TokenInfo[]`
+### Token Constants
 
 ```typescript
-interface TokenInfo {
-  address: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  wormholeChainId: number;
-  logoUrl?: string;
-}
-```
-
----
-
-## Balance Management
-
-### sdk.getVaultNativeBalance
-
-Get the native token balance of the vault.
-
-```typescript
-const native = await sdk.getVaultNativeBalance();
-console.log(`${native.token.symbol}: ${native.formatted}`);
+import {
+  NATIVE_TOKEN_ADDRESS,
+  BASE_SEPOLIA_TOKENS,
+  TOKEN_REGISTRY,
+  getTokenList,
+  getTokenBySymbol,
+  getTokenByAddress,
+  isNativeToken,
+} from '@veridex/sdk';
 ```
 
 ---
 
-### sdk.getVaultBalances
-
-Get all token balances on the current chain.
+## Chain Presets & Utilities
 
 ```typescript
-const portfolio = await sdk.getVaultBalances();
-for (const entry of portfolio.tokens) {
-  console.log(`${entry.token.symbol}: ${entry.formatted}`);
-}
-console.log('Total USD:', portfolio.totalUsdValue);
-```
+import {
+  getChainConfig,
+  getSupportedChains,
+  getHubChains,
+  isChainSupported,
+  getDefaultHub,
+  CHAIN_PRESETS,
+  CHAIN_NAMES,
+} from '@veridex/sdk';
 
----
-
-### sdk.getVaultTokenBalance
-
-Get balance of a specific token.
-
-```typescript
-const balance = await sdk.getVaultTokenBalance(tokenAddress);
-console.log(`${balance.token.symbol}: ${balance.formatted}`);
-```
-
----
-
-### sdk.getMultiChainBalances
-
-Get balances across multiple chains.
-
-```typescript
-const results = await sdk.getMultiChainBalances([10004, 10005, 10003]);
-for (const chain of results) {
-  console.log(`${chain.chainName}: ${chain.tokens.length} tokens`);
-}
-```
-
----
-
-### sdk.balance (Low-Level)
-
-Direct access to the `BalanceManager` for advanced queries:
-
-```typescript
-const portfolio = await sdk.balance.getPortfolioBalance(chainId, address);
-const multi = await sdk.balance.getMultiChainBalances(address, [10004, 10005]);
-```
-
----
-
-## Transaction Tracking (`sdk.transactions`)
-
-### sdk.transactions.track
-
-Track a transaction's status.
-
-```typescript
-sdk.transactions.track(txHash, chainId, callback?, sequence?);
-```
-
----
-
-## Gas Sponsorship (`sdk.sponsor`)
-
-### sdk.sponsor
-
-Gasless vault creation for new users.
-
-```typescript
-const result = await sdk.sponsor.createVault(chainId, credential);
+const chains = getSupportedChains('testnet');
+const config = getChainConfig('stacks', 'testnet');
 ```
 
 ---
 
 ## Chain Clients
-
-The SDK provides chain-specific clients:
 
 ```typescript
 import {
@@ -889,117 +774,20 @@ import {
 
 ---
 
-## Chain Presets & Utilities
+## ERC-8004 Utilities
 
 ```typescript
 import {
-  getChainConfig,
-  getSupportedChains,
-  getHubChains,
-  isChainSupported,
-  getDefaultHub,
-  CHAIN_PRESETS,
-  CHAIN_NAMES,
-} from '@veridex/sdk';
-
-// Get all supported chains
-const chains = getSupportedChains('testnet');
-// ['base', 'optimism', 'arbitrum', 'solana', 'aptos', 'sui', 'starknet', 'stacks']
-
-// Get chain config
-const config = getChainConfig('stacks', 'testnet');
-console.log('Wormhole ID:', config.wormholeChainId); // 50003
-```
-
----
-
-## Token Constants
-
-```typescript
-import {
-  NATIVE_TOKEN_ADDRESS,
-  BASE_SEPOLIA_TOKENS,
-  TOKEN_REGISTRY,
-  getTokenList,
-  getTokenBySymbol,
-  getTokenByAddress,
-  isNativeToken,
-} from '@veridex/sdk';
-
-const usdc = getTokenBySymbol(10004, 'USDC');
-console.log('USDC address:', usdc?.address);
-```
-
----
-
-## ERC-8004 Utilities (`erc8004/`)
-
-The core SDK provides low-level ERC-8004 contract utilities for direct registry interaction.
-
-```typescript
-import {
-  // Addresses
   getERC8004Addresses,
   isERC8004Chain,
   ERC8004_CHAINS,
-
-  // ABIs
   IDENTITY_REGISTRY_ABI,
-  IDENTITY_REGISTRY_READ_ABI,
   REPUTATION_REGISTRY_ABI,
-  REPUTATION_REGISTRY_READ_ABI,
-  VALIDATION_REGISTRY_ABI,
-
-  // Types
-  type ERC8004AgentRegistration,
-  type ERC8004MetadataEntry,
-  type ERC8004FeedbackEntry,
-  type ERC8004FeedbackSummary,
-  type ERC8004ValidationStatus,
-  type UniversalAgentIdentifier,
 } from '@veridex/sdk';
-```
 
-### getERC8004Addresses
-
-Get canonical ERC-8004 registry addresses for a network.
-
-```typescript
 const addresses = getERC8004Addresses('mainnet');
-// {
-//   identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
-//   reputationRegistry: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
-// }
-
-const testnetAddresses = getERC8004Addresses('testnet');
-// {
-//   identityRegistry: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
-//   reputationRegistry: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
-// }
+const supported = isERC8004Chain('base'); // true
 ```
-
-### isERC8004Chain
-
-Check if a chain has ERC-8004 singleton registries deployed.
-
-```typescript
-const supported = isERC8004Chain('base');      // true
-const supported2 = isERC8004Chain('monad');    // true
-const supported3 = isERC8004Chain('solana');   // false (non-EVM)
-```
-
-### ERC8004_CHAINS
-
-List of all chains with ERC-8004 singletons:
-
-```typescript
-console.log(ERC8004_CHAINS);
-// ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism', 'linea', 'megaeth', 'monad', ...]
-```
-
-### Canonical Addresses
-
-The same singleton addresses work on **every EVM chain** (deployed via CREATE2):
 
 | Registry | Mainnet | Testnet |
 |----------|---------|---------|
@@ -1008,49 +796,12 @@ The same singleton addresses work on **every EVM chain** (deployed via CREATE2):
 
 ---
 
-## Types
-
-Full TypeScript types are available:
+## Transaction Tracking
 
 ```typescript
-import type {
-  // Config
-  VeridexConfig, SimpleSDKConfig, ChainConfig, ChainName, NetworkType,
+sdk.transactions.track(txHash, chainId, (state) => {
+  console.log(state); // 'pending' | 'confirmed' | 'failed'
+}, sequence);
 
-  // Passkey
-  PasskeyCredential, WebAuthnSignature,
-
-  // Cross-Origin Authentication
-  CrossOriginAuth, CrossOriginAuthConfig, CrossOriginSession,
-  ServerSessionToken, AuthPortalMessage,
-  createCrossOriginAuth, sendAuthResponse, sendAuthError,
-  DEFAULT_AUTH_PORTAL_URL, DEFAULT_RELAYER_URL, AUTH_MESSAGE_TYPES,
-
-  // Actions
-  TransferParams, ExecuteParams, BridgeParams,
-  DispatchResult, PreparedTransfer, PreparedBridge,
-
-  // Results
-  TransferResult, BridgeResult, CrossChainFees,
-
-  // Spending Limits
-  SpendingLimits, FormattedSpendingLimits, LimitCheckResult,
-
-  // Sessions
-  SessionConfig, SessionSignature, KeyPair,
-
-  // Balances
-  TokenBalance, PortfolioBalance,
-
-  // Transaction Summaries
-  TransactionSummary, RiskWarning,
-
-  // Vault & Identity
-  VaultInfo, UnifiedIdentity,
-
-  // ERC-8004
-  ERC8004AgentRegistration, ERC8004MetadataEntry,
-  ERC8004FeedbackEntry, ERC8004FeedbackSummary,
-  ERC8004ValidationStatus, UniversalAgentIdentifier,
-} from '@veridex/sdk';
+const state = await sdk.waitForTransaction(txHash);
 ```

@@ -1,0 +1,82 @@
+# AI & LLM Access
+
+Veridex documentation is designed to be easily consumed by AI agents, coding assistants, and large language models. Use these resources to feed our docs into your preferred AI tool.
+
+## Quick Copy
+
+Need to paste our full docs into ChatGPT, Claude, or another AI assistant? Download the complete documentation as a single plain-text file:
+
+**[Download llms-full.txt →](/llms-full.txt)**
+
+This file contains all 48 pages of documentation (~420 KB) concatenated into clean, readable markdown — no HTML, no JSX, no imports. Just content.
+
+## Discovery (`llms.txt`)
+
+We follow the [llms.txt standard](https://llmstxt.org/) — a structured index file that helps AI agents discover and navigate our documentation automatically.
+
+```
+https://docs.veridex.network/llms.txt
+```
+
+This lightweight file lists every page in the docs with a short description, organized by section. Point your agent here first.
+
+## API Endpoint
+
+For programmatic access, use our API to fetch docs as plain text:
+
+```bash
+# Full documentation
+curl https://docs.veridex.network/api/docs-for-llm
+
+# Filter by section
+curl https://docs.veridex.network/api/docs-for-llm?section=guides
+curl https://docs.veridex.network/api/docs-for-llm?section=api-reference
+curl https://docs.veridex.network/api/docs-for-llm?section=chains
+```
+
+### Available Sections
+
+| Section | Description |
+|---------|-------------|
+| `getting-started` | Quick start, installation, core concepts, FAQ |
+| `guides` | Wallets, transfers, sessions, agents, React hooks |
+| `api-reference` | SDK, Agent SDK, Relayer API |
+| `chains` | EVM, Solana, Aptos, Sui, Starknet, Stacks |
+| `integrations` | React, Next.js, DeFi, gaming, payments |
+| `security` | Audits, best practices, recovery |
+| `resources` | Architecture decisions, glossary, changelog |
+
+## How to Use
+
+### ChatGPT / Claude / Gemini
+
+1. Download [llms-full.txt](/llms-full.txt)
+2. Attach it to your conversation or paste the contents
+3. Ask your questions about Veridex
+
+### Cursor / GitHub Copilot / Windsurf
+
+Add the docs URL to your AI coding assistant's context:
+
+```
+https://docs.veridex.network/llms-full.txt
+```
+
+### Custom Agents
+
+If you're building an agent that integrates with Veridex:
+
+```python
+import requests
+
+# Fetch just the guides section
+response = requests.get(
+    "https://docs.veridex.network/api/docs-for-llm",
+    params={"section": "guides"}
+)
+docs = response.text
+```
+
+## Staying Up to Date
+
+The `llms-full.txt` file is regenerated on every build, so it always reflects the latest documentation. The API endpoint serves the same content dynamically.

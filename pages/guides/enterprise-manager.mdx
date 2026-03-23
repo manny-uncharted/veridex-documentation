@@ -1,0 +1,233 @@
+---
+title: Enterprise Manager
+description: Batch vault creation, transfers, and spending limits for enterprise integrations
+---
+
+import { Callout } from '../../components/Callout'
+import { Steps, Step } from '../../components/Steps'
+import { Tabs, Tab } from '../../components/Tabs'
+
+# Enterprise Manager
+
+The `EnterpriseManager` provides batch operations for enterprise back-ends that need to
+manage many vaults, execute bulk transfers, and monitor balances across multiple users.
+
+<Callout type="info">
+  EnterpriseManager is an orchestration layer — it delegates to existing SDK primitives
+  with concurrency control, lifecycle callbacks, and error isolation per item.
+</Callout>
+
+## Quick Start
+
+<Steps>
+<Step>
+### Create an SDK with Sponsor Key
+
+```typescript
+import { createSDK, EnterpriseManager } from '@veridex/sdk';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  sponsorPrivateKey: process.env.SPONSOR_KEY,
+  relayerUrl: 'https://relayer.veridex.network',
+  relayerApiKey: process.env.RELAYER_API_KEY,
+});
+```
+</Step>
+<Step>
+### Initialize Enterprise Manager
+
+```typescript
+const enterprise = new EnterpriseManager({
+  sdk,
+  maxConcurrency: 5, // up to 5 parallel operations
+});
+```
+</Step>
+<Step>
+### Batch Create Vaults
+
+```typescript
+const result = await enterprise.batchCreateVaults({
+  keyHashes: userKeyHashes,
+  maxConcurrency: 3,
+});
+
+console.log(`${result.succeeded}/${result.total} vaults created`);
+
+for (const r of result.results) {
+  if (r.error) {
+    console.error(`Failed for ${r.keyHash}: ${r.error}`);
+  }
+}
+```
+</Step>
+</Steps>
+
+---
+
+## Batch Operations
+
+### Batch Vault Creation
+
+Create sponsored vaults for multiple users across all configured chains.
+Errors are captured per key hash — the batch continues on individual failures.
+
+```typescript
+const result = await enterprise.batchCreateVaults(
+  {
+    keyHashes: ['0xabc...', '0xdef...', '0x123...'],
+    maxConcurrency: 3,
+  },
+  // Optional lifecycle callback
+  (event) => {
+    switch (event.type) {
+      case 'started':
+        console.log(`Creating vaults for ${event.total} users...`);
+        break;
+      case 'item_completed':
+        const pct = Math.round(((event.index + 1) / event.total) * 100);
+        console.log(`[${pct}%] User ${event.index + 1}: ${event.success ? 'OK' : event.error}`);
+        break;
+      case 'completed':
+        console.log(`Done: ${event.succeeded} succeeded, ${event.failed} failed`);
+        break;
+    }
+  },
+);
+```
+
+### Batch Transfers
+
+Execute multiple transfers with concurrent preparation and execution:
+
+```typescript
+const result = await enterprise.batchTransfer({
+  transfers: [
+    { targetChain: 10004, token: USDC, recipient: '0xAlice', amount: 1_000_000n },
+    { targetChain: 10004, token: USDC, recipient: '0xBob',   amount: 2_000_000n },
+    { targetChain: 10005, token: USDC, recipient: '0xCarol', amount: 500_000n },
+  ],
+  signer,
+  maxConcurrency: 2,
+}, (event) => {
+  if (event.type === 'item_completed' && !event.success) {
+    alertOps(`Transfer ${event.index} failed: ${event.error}`);
+  }
+});
+
+console.log(`${result.succeeded}/${result.total} transfers completed`);
+```
+
+### Batch Spending Limits
+
+Update daily spending limits. These execute sequentially since each requires a passkey signature:
+
+```typescript
+import { ethers } from 'ethers';
+
+const result = await enterprise.batchSetSpendingLimits({
+  updates: [
+    { newLimit: ethers.parseEther('5.0') },
+    { newLimit: ethers.parseEther('10.0') },
+  ],
+  signer,
+});
+```
+
+---
+
+## Admin Operations
+
+### Check Vault Status
+
+```typescript
+const status = await enterprise.checkVaults('0xUserKeyHash...');
+// { 10004: { exists: true, address: '0x...' }, 10005: { exists: false, address: '0x...' } }
+```
+
+### Inspect Spending Limits
+
+Read limits for any vault address without owning it — useful for admin dashboards:
+
+```typescript
+const limits = await enterprise.getSpendingLimitsForVault('0xVaultAddr', 10004);
+console.log('Daily remaining:', limits.dailyRemaining);
+console.log('Paused:', limits.isPaused);
+```
+
+### Monitor Vault Balances
+
+Subscribe to balance changes for webhook-style notifications:
+
+```typescript
+const unsub = enterprise.watchVaultBalance(
+  10004,
+  '0xVaultAddr',
+  (event) => {
+    for (const change of event.changes) {
+      if (change.delta > 0n) {
+        notifyUser(`Received ${change.token.symbol}`);
+      }
+    }
+  },
+  { intervalMs: 15_000, emitInitial: true },
+  (error) => alertOps('Balance watch failed', error),
+);
+
+// Later: stop monitoring
+unsub();
+```
+
+---
+
+## Lifecycle Callbacks
+
+All batch methods accept an optional lifecycle callback that reports progress:
+
+```typescript
+type BatchLifecycleEvent =
+  | { type: 'started'; total: number }
+  | { type: 'item_started'; index: number; total: number }
+  | { type: 'item_completed'; index: number; total: number; success: boolean; error?: string }
+  | { type: 'completed'; succeeded: number; failed: number; total: number };
+```
+
+Use these to power progress bars, logging, or webhook notifications:
+
+```typescript
+enterprise.batchCreateVaults(request, (event) => {
+  if (event.type === 'item_completed') {
+    updateProgressBar(event.index + 1, event.total);
+  }
+  if (event.type === 'completed') {
+    sendSlackNotification(
+      `Vault batch: ${event.succeeded}/${event.total} succeeded`,
+    );
+  }
+});
+```
+
+---
+
+## Concurrency Control
+
+The `maxConcurrency` parameter controls how many operations run in parallel.
+This is important for:
+
+- **Rate limiting** — avoid hitting RPC or relayer rate limits
+- **Resource management** — control memory and network usage
+- **Signing constraints** — spending limit updates must be sequential
+
+| Method | Default Concurrency | Parallel? |
+|--------|-------------------|-----------|
+| `batchCreateVaults` | 3 | Yes |
+| `batchTransfer` | 3 | Yes |
+| `batchSetSpendingLimits` | 1 (sequential) | No — requires passkey signature |
+
+Override per-call:
+
+```typescript
+enterprise.batchCreateVaults({ keyHashes, maxConcurrency: 10 });
+enterprise.batchTransfer({ transfers, signer, maxConcurrency: 1 }); // sequential
+```

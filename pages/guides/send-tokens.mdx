@@ -20,7 +20,7 @@ Transfer tokens from your Veridex vault to any address.
 ### Prepare and Execute
 
 ```typescript
-import { createSDK } from '@veridex/sdk';
+import { createSDK, getChainConfig } from '@veridex/sdk';
 import { ethers } from 'ethers';
 
 const sdk = createSDK('base', {
@@ -31,9 +31,12 @@ const sdk = createSDK('base', {
 // Authenticate first (shows passkey picker)
 const { credential } = await sdk.passkey.authenticate();
 
+// Use chain presets instead of hardcoded Wormhole IDs
+const baseConfig = getChainConfig('base', 'testnet');
+
 // Step 1: Prepare the transfer (shows gas cost before signing)
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,  // Base Sepolia Wormhole chain ID
+  targetChain: baseConfig.wormholeChainId,
   token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
   amount: ethers.parseUnits('10', 6), // 10 USDC
@@ -59,8 +62,10 @@ console.log('Sequence:', result.sequence);
 ### Native Token Transfer
 
 ```typescript
+const baseConfig = getChainConfig('base', 'testnet');
+
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,
+  targetChain: baseConfig.wormholeChainId,
   token: 'native',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
   amount: ethers.parseEther('0.01'), // 0.01 ETH
@@ -148,6 +153,53 @@ console.log('Sequence:', result.sequence);
 ```
 
 ## React Example
+
+### Using `@veridex/react` Hooks (Recommended)
+
+```tsx
+import { useTransfer, useBalance } from '@veridex/react';
+import { parseUnits } from 'ethers';
+
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+export function SendForm() {
+  const { balance } = useBalance();
+  const { transferViaRelayer, step, result, error, reset } = useTransfer();
+
+  const handleSend = (recipient: string, amount: string) => {
+    transferViaRelayer({
+      targetChain: 'base',        // Chain name — resolved automatically
+      token: USDC,
+      recipient,
+      amount: parseUnits(amount, 6),
+    });
+  };
+
+  if (step === 'confirmed') {
+    return (
+      <div>
+        <p>Sent! Tx: {result?.transactionHash}</p>
+        <button onClick={reset}>Send Another</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p>Balance: {balance?.tokens[0]?.formatted ?? '...'}</p>
+      <button
+        onClick={() => handleSend('0x...', '10')}
+        disabled={step === 'executing'}
+      >
+        {step === 'executing' ? 'Sending...' : 'Send 10 USDC'}
+      </button>
+      {error && <p className="text-red-500">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### Using SDK Directly
 
 ```tsx
 import { useState } from 'react';

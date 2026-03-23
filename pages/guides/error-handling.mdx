@@ -1,0 +1,196 @@
+---
+title: Error Handling Patterns
+description: Best practices for handling errors across chains with VeridexError
+---
+
+import { Callout } from '../../components/Callout'
+import { Tabs, Tab } from '../../components/Tabs'
+
+# Error Handling Patterns
+
+The Veridex SDK normalizes errors from EVM, Solana, Starknet, and Stacks into a single
+`VeridexError` class. This guide covers practical patterns for handling errors in your app.
+
+## Basic Error Handling
+
+```typescript
+import { VeridexError, VeridexErrorCode } from '@veridex/sdk';
+
+try {
+  await sdk.transferViaRelayer(params);
+} catch (err) {
+  if (err instanceof VeridexError) {
+    console.log(err.code);      // 'INSUFFICIENT_FUNDS'
+    console.log(err.message);   // Human-readable message
+    console.log(err.chain);     // 'base', 'solana', etc.
+    console.log(err.retryable); // true for RPC_ERROR, TIMEOUT, RELAYER_ERROR
+    console.log(err.cause);     // Original chain error
+  }
+}
+```
+
+<Callout type="tip">
+  The `retryable` flag is `true` for `RPC_ERROR`, `TIMEOUT`, and `RELAYER_ERROR`.
+  All other codes are non-retryable by default.
+</Callout>
+
+---
+
+## Common Patterns
+
+### User-Facing Error Messages
+
+Map error codes to friendly messages:
+
+```typescript
+function getErrorMessage(err: VeridexError): string {
+  switch (err.code) {
+    case VeridexErrorCode.NO_CREDENTIAL:
+      return 'Please log in with your passkey first.';
+    case VeridexErrorCode.INSUFFICIENT_FUNDS:
+      return 'Not enough tokens in your vault.';
+    case VeridexErrorCode.DAILY_LIMIT_EXCEEDED:
+      return 'Daily spending limit reached. Try again after reset.';
+    case VeridexErrorCode.VAULT_NOT_FOUND:
+      return 'Your vault hasn\'t been created yet.';
+    case VeridexErrorCode.SESSION_EXPIRED:
+      return 'Your session has expired. Please sign in again.';
+    case VeridexErrorCode.UNSUPPORTED_FEATURE:
+      return 'This feature is not available on the current chain.';
+    default:
+      return err.retryable
+        ? 'Something went wrong. Please try again.'
+        : err.message;
+  }
+}
+```
+
+### Retry with Exponential Backoff
+
+```typescript
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRetryable = err instanceof VeridexError && err.retryable;
+      const isLastAttempt = attempt === maxRetries - 1;
+
+      if (!isRetryable || isLastAttempt) throw err;
+
+      const delay = 1000 * 2 ** attempt; // 1s, 2s, 4s
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('unreachable');
+}
+
+// Usage
+const result = await withRetry(() => sdk.transferViaRelayer(params));
+```
+
+### Chain-Aware Error Handling
+
+Use `err.chain` to provide chain-specific guidance:
+
+```typescript
+try {
+  await sdk.transferViaRelayer(params);
+} catch (err) {
+  if (!(err instanceof VeridexError)) throw err;
+
+  if (err.code === VeridexErrorCode.INSUFFICIENT_FUNDS) {
+    switch (err.chain) {
+      case 'solana':
+        showToast('Fund your vault with SOL for rent + tokens');
+        break;
+      case 'stacks':
+        showToast('Fund your vault with STX + tokens');
+        break;
+      default:
+        showToast('Not enough tokens in your vault');
+    }
+  }
+}
+```
+
+---
+
+## normalizeError for Chain Clients
+
+If you work directly with chain clients, use `normalizeError` to convert
+chain-specific errors:
+
+```typescript
+import { normalizeError } from '@veridex/sdk';
+
+try {
+  await evmClient.dispatch(signature, pubX, pubY, payload, signer);
+} catch (err) {
+  const error = normalizeError(err, 'base');
+  // error.code is now a VeridexErrorCode
+}
+```
+
+The normalizer detects:
+- **EVM:** ethers error codes, revert messages (`insufficient funds`, `execution reverted`, etc.)
+- **Solana:** Anchor program error codes (`6000`–`6013`)
+- **Starknet:** Cairo/felt error patterns
+- **Stacks:** Clarity error codes (`(err u100)` through `(err u202)`)
+
+See the [Error Code Reference](/api-reference/errors) for the complete mapping tables.
+
+---
+
+## React Integration
+
+### Error Boundary
+
+```tsx
+import { VeridexError, VeridexErrorCode } from '@veridex/sdk';
+import { Component, type ReactNode } from 'react';
+
+class VeridexErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean; code?: VeridexErrorCode }
+> {
+  state: { hasError: boolean; code?: VeridexErrorCode } = { hasError: false };
+
+  static getDerivedStateFromError(error: Error) {
+    if (error instanceof VeridexError) {
+      return { hasError: true, code: error.code };
+    }
+    return { hasError: true };
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    if (this.state.code === VeridexErrorCode.NO_CREDENTIAL) {
+      return <LoginPrompt />;
+    }
+    return this.props.fallback;
+  }
+}
+```
+
+### Hook Error State
+
+With `@veridex/react`:
+
+```tsx
+import { useTransfer } from '@veridex/react';
+
+function SendButton() {
+  const { prepare, execute, error, step } = useTransfer();
+
+  if (error) {
+    return <p className="text-red-500">{getErrorMessage(error)}</p>;
+  }
+
+  return <button onClick={() => prepare(params)}>Send</button>;
+}
+```

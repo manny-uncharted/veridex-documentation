@@ -37,8 +37,8 @@ const config: DocsThemeConfig = {
       titleTemplate: '%s — Veridex Protocol',
     };
   },
-  primaryHue: 155,
-  primarySaturation: 70,
+  primaryHue: 302,
+  primarySaturation: 100,
   sidebar: {
     defaultMenuCollapseLevel: 1,
     toggleButton: true,

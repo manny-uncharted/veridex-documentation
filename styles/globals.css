@@ -1,5 +1,327 @@
 /* Veridex Docs — Custom Styles for Nextra */
 
+/* ── Homepage ── */
+
+.vdx-home {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Hero */
+.vdx-hero {
+  text-align: center;
+  padding: 4rem 0 3rem;
+}
+
+.vdx-hero-badge {
+  display: inline-block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.3);
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
+  margin-bottom: 1.5rem;
+}
+
+.vdx-hero-title {
+  font-size: 2.75rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .vdx-hero-title {
+    font-size: 1.75rem;
+  }
+}
+
+.vdx-hero-subtitle {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  opacity: 0.7;
+  max-width: 36rem;
+  margin: 0 auto 2rem;
+}
+
+.vdx-hero-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.vdx-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.vdx-btn-primary {
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+  color: #fff;
+}
+
+.vdx-btn-primary:hover {
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 38%);
+  color: #fff;
+}
+
+.vdx-btn-secondary {
+  border: 1px solid hsl(var(--nextra-border));
+  color: inherit;
+}
+
+.vdx-btn-secondary:hover {
+  border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+}
+
+.vdx-hero-install {
+  display: flex;
+  justify-content: center;
+}
+
+.vdx-hero-install code {
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--nextra-border));
+  background: hsl(var(--nextra-border) / 0.15);
+  user-select: all;
+}
+
+/* Navigation Grid */
+.vdx-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 3rem 0;
+}
+
+@media (max-width: 768px) {
+  .vdx-nav-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vdx-nav-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--nextra-border));
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.vdx-nav-card:hover {
+  border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+  box-shadow: 0 2px 12px hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
+}
+
+.vdx-nav-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.vdx-nav-card p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.65;
+}
+
+.vdx-nav-card-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.vdx-nav-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.vdx-nav-card-desc {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  opacity: 0.65;
+}
+
+.vdx-nav-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* Section Titles */
+.vdx-section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+}
+
+/* Packages */
+.vdx-packages {
+  margin: 3rem 0;
+}
+
+.vdx-packages h2,
+.vdx-packages .vdx-section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+}
+
+.vdx-package-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .vdx-package-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vdx-package-card {
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--nextra-border));
+}
+
+.vdx-package-card h3,
+.vdx-package-name {
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: var(--nextra-font-mono, ui-monospace, monospace);
+  margin: 0 0 0.5rem;
+}
+
+.vdx-package-card p,
+.vdx-package-desc {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  opacity: 0.65;
+  margin: 0 0 0.75rem;
+}
+
+.vdx-package-card code,
+code.vdx-package-install {
+  display: block;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid hsl(var(--nextra-border));
+  background: hsl(var(--nextra-border) / 0.15);
+  margin-bottom: 0.75rem;
+  user-select: all;
+}
+
+.vdx-package-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+  text-decoration: none;
+}
+
+.vdx-package-link:hover {
+  text-decoration: underline;
+}
+
+/* Example */
+.vdx-example {
+  margin: 3rem 0;
+}
+
+
+
+/* Explore Grid */
+.vdx-explore {
+  margin: 3rem 0;
+}
+
+
+
+.vdx-explore-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .vdx-explore-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .vdx-explore-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vdx-explore-item {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.vdx-explore-item:hover {
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
+}
+
+/* Community */
+.vdx-community {
+  margin: 3rem 0 4rem;
+  text-align: center;
+}
+
+
+
+.vdx-community-grid {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.vdx-community-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid hsl(var(--nextra-border));
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s;
+}
+
+.vdx-community-link:hover {
+  border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+}
+
 /* Card Grid */
 .vdx-cards {
   display: grid;
@@ -23,7 +345,7 @@
 
 .vdx-card:hover {
   border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.08);
+  box-shadow: 0 2px 12px hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
 }
 
 .vdx-card-icon {

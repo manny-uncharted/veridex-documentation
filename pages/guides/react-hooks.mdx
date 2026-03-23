@@ -1,0 +1,501 @@
+---
+title: React Hooks
+description: Use @veridex/react for pre-built hooks — passkeys, balances, transfers, and more
+---
+
+import { Callout } from '../../components/Callout'
+import { Steps, Step } from '../../components/Steps'
+import { Tabs, Tab } from '../../components/Tabs'
+
+# React Hooks (`@veridex/react`)
+
+`@veridex/react` provides pre-built hooks that handle loading states, error boundaries,
+and polling — so you don't write boilerplate for every SDK call.
+
+<Callout type="info">
+  This package is a thin wrapper around `@veridex/sdk`. For manual integration
+  without the hooks package, see [React Integration](/integrations/react).
+</Callout>
+
+## Installation
+
+```bash
+npm install @veridex/react @veridex/sdk react
+```
+
+`@veridex/sdk` and `react` are peer dependencies.
+
+---
+
+## Quick Start
+
+<Steps>
+<Step>
+### Wrap Your App with VeridexProvider
+
+```tsx
+'use client';
+
+import { VeridexProvider } from '@veridex/react';
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+});
+
+export default function App({ children }: { children: React.ReactNode }) {
+  return (
+    <VeridexProvider sdk={sdk} network="testnet">
+      {children}
+    </VeridexProvider>
+  );
+}
+```
+</Step>
+<Step>
+### Use Hooks in Components
+
+```tsx
+'use client';
+
+import { usePasskey, useBalance, useTransfer } from '@veridex/react';
+
+export function Wallet() {
+  const { credential, register, authenticate, loading } = usePasskey();
+  const { balance } = useBalance({ pollInterval: 10_000 });
+  const { prepare, execute, step, error } = useTransfer();
+
+  if (!credential) {
+    return (
+      <div>
+        <button onClick={() => register('alice', 'Alice')} disabled={loading}>
+          Create Passkey
+        </button>
+        <button onClick={authenticate} disabled={loading}>
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2>Balance</h2>
+      {balance?.tokens.map(t => (
+        <p key={t.token.address}>{t.token.symbol}: {t.formatted}</p>
+      ))}
+
+      <h2>Send</h2>
+      <button onClick={() => prepare({
+        targetChain: 'base',
+        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        recipient: '0x...',
+        amount: 1_000_000n,
+      })}>
+        Prepare Transfer
+      </button>
+    </div>
+  );
+}
+```
+</Step>
+</Steps>
+
+---
+
+## Hooks Reference
+
+### usePasskey
+
+Handles passkey registration and authentication state.
+
+```tsx
+const {
+  credential,    // PasskeyCredential | null
+  loading,       // boolean
+  error,         // Error | null
+  register,      // (username, displayName) => Promise<void>
+  authenticate,  // () => Promise<void>
+  clear,         // () => void
+} = usePasskey();
+```
+
+**Example: Login / Register flow**
+
+```tsx
+function AuthScreen() {
+  const { credential, register, authenticate, loading, error } = usePasskey();
+
+  if (credential) return <p>Logged in as {credential.credentialId.slice(0, 8)}...</p>;
+
+  return (
+    <div>
+      <button onClick={() => register('user', 'User')} disabled={loading}>
+        Create Account
+      </button>
+      <button onClick={authenticate} disabled={loading}>
+        Sign In
+      </button>
+      {error && <p className="text-red-500">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### useNetwork
+
+Returns the current network type from the provider context.
+
+```tsx
+import { useNetwork } from '@veridex/react';
+
+const network = useNetwork(); // 'testnet' | 'mainnet'
+```
+
+Useful for displaying network indicators or conditionally rendering testnet-specific UI.
+
+### useBalance
+
+Auto-polling vault balance with configurable interval.
+
+```tsx
+const {
+  balance,    // PortfolioBalance | null
+  loading,    // boolean
+  error,      // Error | null
+  refetch,    // () => Promise<void>
+} = useBalance({
+  pollInterval: 15_000,  // ms (default: 15000)
+  enabled: true,         // disable polling (default: true)
+});
+```
+
+**Example: Token list**
+
+```tsx
+function TokenList() {
+  const { balance, loading, refetch } = useBalance({ pollInterval: 10_000 });
+
+  if (loading) return <Spinner />;
+  if (!balance) return <p>No wallet connected</p>;
+
+  return (
+    <div>
+      {balance.tokens.map(t => (
+        <div key={t.token.address} className="flex justify-between">
+          <span>{t.token.symbol}</span>
+          <span>{t.formatted}</span>
+        </div>
+      ))}
+      <button onClick={refetch}>Refresh</button>
+    </div>
+  );
+}
+```
+
+### useTransfer
+
+State machine for the prepare → review → execute transfer flow. Uses `TransferInput` with
+`ChainTarget` (chain name or numeric Wormhole chain ID) for `targetChain`.
+
+```tsx
+import type { TransferInput } from '@veridex/react';
+
+const {
+  step,              // 'idle' | 'preparing' | 'prepared' | 'executing' | 'confirmed' | 'error'
+  prepared,          // PreparedTransfer | null
+  result,            // TransferResult | null
+  error,             // Error | null
+  loading,           // boolean
+  prepare,           // (params: TransferInput) => Promise<void>
+  execute,           // (signer: any) => Promise<void>
+  transferViaRelayer,// (params: TransferInput) => Promise<void>
+  reset,             // () => void
+} = useTransfer();
+```
+
+The `TransferInput` type accepts a `ChainTarget` for `targetChain` — either a chain name
+string (`'base'`, `'optimism'`, `'arbitrum'`, `'solana'`, etc.) or a numeric Wormhole chain ID.
+The hook resolves chain names to numeric IDs internally using the provider's network context.
+
+```tsx
+interface TransferInput {
+  targetChain: ChainTarget;  // 'base' | 'optimism' | 10004 | ...
+  token: string;
+  recipient: string;
+  amount: bigint;
+}
+
+type ChainTarget = ChainName | number;
+```
+
+**Example: Gasless transfer**
+
+```tsx
+function SendForm() {
+  const { transferViaRelayer, step, result, error, reset } = useTransfer();
+
+  const handleSend = () => {
+    transferViaRelayer({
+      targetChain: 'base',
+      token: USDC_ADDRESS,
+      recipient: recipientAddress,
+      amount: parseUnits(amount, 6),
+    });
+  };
+
+  if (step === 'confirmed') {
+    return (
+      <div>
+        <p>Sent! Tx: {result?.transactionHash}</p>
+        <button onClick={reset}>Send Another</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button onClick={handleSend} disabled={step === 'executing'}>
+        {step === 'executing' ? 'Sending...' : 'Send USDC'}
+      </button>
+      {error && <p className="text-red-500">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+**Example: Prepare → Review → Execute**
+
+```tsx
+function TransferWithReview() {
+  const { prepare, execute, step, prepared, error } = useTransfer();
+
+  return (
+    <div>
+      {step === 'idle' && (
+        <button onClick={() => prepare(transferParams)}>Prepare</button>
+      )}
+
+      {step === 'prepared' && prepared && (
+        <div>
+          <p>Gas cost: {prepared.formattedCost}</p>
+          <p>Expires: {new Date(prepared.expiresAt).toLocaleString()}</p>
+          <button onClick={() => execute(signer)}>Confirm & Send</button>
+        </div>
+      )}
+
+      {step === 'executing' && <p>Submitting transaction...</p>}
+      {step === 'confirmed' && <p>Done!</p>}
+      {error && <p className="text-red-500">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### useMultiChainPortfolio
+
+Combined portfolio and addresses across multiple chains. Accepts optional `chains` parameter
+using `ChainTarget` (chain names or numeric IDs).
+
+```tsx
+const {
+  portfolio,   // PortfolioBalance[] | null
+  addresses,   // Record<number, string> | null  (chainId → vault address)
+  loading,     // boolean
+  error,       // Error | null
+  refetch,     // () => Promise<void>
+} = useMultiChainPortfolio({
+  chains: ['base', 'optimism', 'arbitrum'],  // ChainTarget[] — optional
+  pollInterval: 30_000,
+  enabled: true,
+});
+```
+
+**Example: Multi-chain dashboard**
+
+```tsx
+function Dashboard() {
+  const { portfolio, loading } = useMultiChainPortfolio({
+    chains: ['base', 'optimism', 'solana'],
+    pollInterval: 30_000,
+  });
+
+  if (loading || !portfolio) return <Spinner />;
+
+  return (
+    <div>
+      {portfolio.map(chain => (
+        <div key={chain.wormholeChainId}>
+          <h3>{chain.chainName}</h3>
+          {chain.tokens.map(t => (
+            <p key={t.token.address}>{t.token.symbol}: {t.formatted}</p>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### useSpendingLimits
+
+Formatted spending limits with amount checking.
+
+```tsx
+const {
+  limits,      // { dailyLimit, dailySpent, dailyRemaining, dailyUsedPercentage, transactionLimit, timeUntilReset } | null
+  loading,     // boolean
+  error,       // Error | null
+  checkAmount, // (amount: bigint) => Promise<{ allowed: boolean; message?: string }>
+  refetch,     // () => Promise<void>
+} = useSpendingLimits();
+```
+
+**Example: Spending limit bar**
+
+```tsx
+function SpendingLimitBar() {
+  const { limits, loading } = useSpendingLimits();
+
+  if (loading || !limits) return null;
+
+  return (
+    <div>
+      <progress value={limits.dailyUsedPercentage} max={100} />
+      <p>
+        {limits.dailyUsedPercentage}% used — resets in {limits.timeUntilReset}
+      </p>
+      <p>Remaining: {limits.dailyRemaining}</p>
+    </div>
+  );
+}
+```
+
+---
+
+## Chain Name Resolution
+
+The React hooks support human-readable chain names via the `ChainTarget` type.
+Instead of remembering Wormhole chain IDs, use names like `'base'`, `'optimism'`, or `'solana'`.
+
+```tsx
+import { resolveChainId, resolveChainIds } from '@veridex/react';
+import type { ChainTarget } from '@veridex/react';
+
+// Resolve a single chain
+const baseId = resolveChainId('base', 'testnet');     // → 10004
+const opId = resolveChainId('optimism', 'testnet');   // → 10005
+
+// Resolve multiple chains
+const ids = resolveChainIds(['base', 'optimism', 'solana'], 'testnet');
+// → [10004, 10005, 1]
+
+// Numeric IDs pass through unchanged
+const id = resolveChainId(10004, 'testnet'); // → 10004
+```
+
+The hooks resolve chain names automatically using the `network` prop from `VeridexProvider`.
+You can also import and use the resolution utilities directly.
+
+---
+
+## Accessing the SDK Directly
+
+Use `useVeridexSDK()` for operations not covered by hooks:
+
+```tsx
+import { useVeridexSDK } from '@veridex/react';
+
+function CustomComponent() {
+  const sdk = useVeridexSDK();
+
+  const handleBridge = async () => {
+    const result = await sdk.bridgeViaRelayer({
+      sourceChain: 10004,
+      destinationChain: 10005,
+      token: USDC,
+      recipient: '0x...',
+      amount: 1_000_000n,
+    });
+  };
+
+  return <button onClick={handleBridge}>Bridge USDC</button>;
+}
+```
+
+<Callout type="info">
+  When using `useVeridexSDK()` directly, you work with the raw SDK API which
+  uses numeric Wormhole chain IDs. Chain name resolution is a feature of
+  the React hooks layer only.
+</Callout>
+
+---
+
+## Next.js Setup
+
+<Callout type="warning">
+  The SDK uses browser APIs (WebAuthn, localStorage). In Next.js App Router,
+  add `'use client'` to any component that uses Veridex hooks.
+</Callout>
+
+```tsx
+// app/providers.tsx
+'use client';
+
+import { VeridexProvider } from '@veridex/react';
+import { createSDK } from '@veridex/sdk';
+import { useMemo } from 'react';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const sdk = useMemo(() => createSDK('base', {
+    network: 'testnet',
+    relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+  }), []);
+
+  return <VeridexProvider sdk={sdk} network="testnet">{children}</VeridexProvider>;
+}
+```
+
+```tsx
+// app/layout.tsx
+import { Providers } from './providers';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+---
+
+## Full Exports
+
+Everything exported from `@veridex/react`:
+
+```tsx
+// Components
+import { VeridexProvider } from '@veridex/react';
+
+// Hooks
+import {
+  useVeridexSDK,
+  useNetwork,
+  usePasskey,
+  useBalance,
+  useTransfer,
+  useMultiChainPortfolio,
+  useSpendingLimits,
+} from '@veridex/react';
+
+// Utilities
+import { resolveChainId, resolveChainIds } from '@veridex/react';
+
+// Types
+import type { TransferInput, ChainTarget } from '@veridex/react';
+```

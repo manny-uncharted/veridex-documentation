@@ -20,7 +20,7 @@ Veridex uses Wormhole for cross-chain messaging. When you transfer cross-chain:
 ## Basic Cross-Chain Transfer
 
 ```typescript
-import { createSDK } from '@veridex/sdk';
+import { createSDK, getChainConfig } from '@veridex/sdk';
 import { ethers } from 'ethers';
 
 const sdk = createSDK('base', {
@@ -30,10 +30,14 @@ const sdk = createSDK('base', {
 
 const { credential } = await sdk.passkey.authenticate();
 
+// Use chain presets instead of hardcoded Wormhole IDs
+const base = getChainConfig('base', 'testnet');
+const optimism = getChainConfig('optimism', 'testnet');
+
 // Step 1: Estimate bridge fees
 const fees = await sdk.getBridgeFees({
-  sourceChain: 10004,       // Base Sepolia
-  destinationChain: 10005,  // Optimism Sepolia
+  sourceChain: base.wormholeChainId,
+  destinationChain: optimism.wormholeChainId,
   token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   recipient: sdk.getVaultAddress(),
   amount: 10000000n,
@@ -46,8 +50,8 @@ console.log('Relayer fee:', fees.relayerFee);
 
 // Step 2: Prepare the bridge
 const prepared = await sdk.prepareBridge({
-  sourceChain: 10004,
-  destinationChain: 10005,
+  sourceChain: base.wormholeChainId,
+  destinationChain: optimism.wormholeChainId,
   token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   recipient: sdk.getVaultAddress(),
   amount: 10000000n,
@@ -105,10 +109,13 @@ console.log(optimism);
 
 ```typescript
 // Base → Optimism
+const base = getChainConfig('base', 'testnet');
+const optimism = getChainConfig('optimism', 'testnet');
+
 const result = await sdk.bridgeWithTracking(
   {
-    sourceChain: 10004,
-    destinationChain: 10005, // Optimism Sepolia
+    sourceChain: base.wormholeChainId,
+    destinationChain: optimism.wormholeChainId,
     token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
     recipient: sdk.getVaultAddress(), // Same address!
     amount: 10000000n,
@@ -122,10 +129,12 @@ const result = await sdk.bridgeWithTracking(
 
 ```typescript
 // Base → Solana
+const solana = getChainConfig('solana', 'testnet');
+
 const result = await sdk.bridgeWithTracking(
   {
-    sourceChain: 10004,
-    destinationChain: 1, // Solana
+    sourceChain: base.wormholeChainId,
+    destinationChain: solana.wormholeChainId,
     token: USDC,
     recipient: 'DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy', // Solana address
     amount: 50000000n, // 50 USDC
@@ -139,10 +148,12 @@ const result = await sdk.bridgeWithTracking(
 
 ```typescript
 // Base → Aptos
+const aptos = getChainConfig('aptos', 'testnet');
+
 const result = await sdk.bridgeWithTracking(
   {
-    sourceChain: 10004,
-    destinationChain: 22, // Aptos
+    sourceChain: base.wormholeChainId,
+    destinationChain: aptos.wormholeChainId,
     token: USDC,
     recipient: '0x1a89da9e9f8f0bc90d8d492890bd55fb261c6277d2a95dfcac70c268d0c23dcc',
     amount: 25000000n, // 25 USDC

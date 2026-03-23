@@ -1,4 +1,6 @@
 {
+  "architecture-decisions": "Architecture Decisions",
+  "llm-access": "AI & LLM Access",
   "glossary": "Glossary",
   "changelog": "Changelog",
   "troubleshooting": "Troubleshooting",

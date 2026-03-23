@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "generate:llms": "node scripts/generate-llms-full.mjs",
+    "prebuild": "node scripts/generate-llms-full.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
