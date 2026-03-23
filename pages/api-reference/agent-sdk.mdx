@@ -1008,19 +1008,340 @@ const fromAddr = await discovery.resolve('0x742d35Cc6634C0532925a3b844Bc9e7595f5
 
 ---
 
+## Protocol Abstraction Layer
+
+### Supported Protocols
+
+| Protocol | Creator | Priority | Detection |
+|----------|---------|----------|-----------|
+| **UCP** | Google/Shopify | 100 | `.well-known/ucp` manifest or `Link: rel="ucp-manifest"` header |
+| **ACP** | OpenAI/Stripe | 90 | `openai-acp-version` or `x-acp-checkout-url` header |
+| **MPP** | Tempo | 85 | `WWW-Authenticate: Payment` header (charge/session intents) |
+| **AP2** | Google | 80 | `x-ap2-mandate-url` or `x-google-a2a-mandate` header |
+| **x402** | Coinbase | 70 | HTTP 402 with `PAYMENT-REQUIRED` header |
+
+### ProtocolRegistry
+
+Formal capability declarations for intelligent protocol selection.
+
+```typescript
+import { ProtocolRegistry } from '@veridex/agentic-payments';
+
+const registry = new ProtocolRegistry();
+
+// Find by capabilities
+const escrowProtocols = registry.findByCapabilities(['escrow', 'refund']);
+
+// Find best for requirements
+const best = registry.findBest({
+  capabilities: ['one_time_payment', 'cross_chain'],
+  chainId: 10004,
+  token: 'USDC',
+  amountUSD: 5,
+});
+
+// Find by chain
+const baseProtocols = registry.findByChain(10004);
+```
+
+**Capabilities:** `one_time_payment`, `subscription`, `streaming`, `escrow`, `refund`, `partial_refund`, `prepaid_session`, `multi_token`, `cross_chain`, `gasless`, `eip712_signing`, `reputational_feedback`, `metered_billing`, `mandate_based`.
+
+### PaymentIntent
+
+Universal payment normalization — every protocol converts its challenge into a `PaymentIntent`:
+
+```typescript
+import { createPaymentIntent, intentToProposedAction, isIntentExpired } from '@veridex/agentic-payments';
+
+const intent = createPaymentIntent('x402', costEstimate, resourceUrl, {
+  recipient: '0x...',
+  ttlMs: 300_000,
+  description: 'Premium API access',
+});
+
+// Check expiry
+if (isIntentExpired(intent)) { /* handle */ }
+
+// Convert for policy evaluation
+const action = intentToProposedAction(intent);
+```
+
+**PaymentSchemes:** `exact`, `upto`, `subscription`, `streaming`, `escrow`, `prepaid`.
+
+### SettlementVerifier
+
+Confirms payments settled on-chain with pluggable strategies:
+
+```typescript
+import { SettlementVerifier, EVMSettlementStrategy } from '@veridex/agentic-payments';
+
+const verifier = new SettlementVerifier({
+  rpcEndpoints: { 10004: 'https://sepolia.base.org' },
+  confirmations: 1,
+  timeoutMs: 30_000,
+});
+
+verifier.registerStrategy(new EVMSettlementStrategy('x402', {
+  10004: 'https://sepolia.base.org',
+}));
+
+const proof = await verifier.verify(settlement, traceHash);
+// → { txHash, traceHashInCalldata, chain }
+```
+
+---
+
+## Agent-Safe Execution Control Plane
+
+### Policy Engine
+
+Evaluates every proposed action against a versioned mandate before execution.
+
+```typescript
+import {
+  PolicyEngine,
+  SpendingLimitRule,
+  VelocityRule,
+  AssetWhitelistRule,
+  ChainWhitelistRule,
+  ProtocolWhitelistRule,
+  CounterpartyRule,
+  TimeWindowRule,
+  HumanApprovalRule,
+} from '@veridex/agentic-payments';
+
+const engine = new PolicyEngine();
+engine.addRule(new SpendingLimitRule());
+engine.addRule(new VelocityRule({ maxPerMinute: 5, maxPerHour: 50 }));
+engine.addRule(new AssetWhitelistRule());
+engine.addRule(new ChainWhitelistRule());
+
+const verdict = await engine.evaluate(proposedAction, context);
+// verdict.verdict: 'allow' | 'deny' | 'escalate'
+// verdict.reasons: string[]
+```
+
+### Security Firewall
+
+```typescript
+import {
+  InjectionDetector,
+  ToolSanitizer,
+  OutputGuard,
+  AnomalyDetector,
+} from '@veridex/agentic-payments';
+
+// Prompt injection detection
+const detector = new InjectionDetector();
+const result = detector.detect(input);
+// result.detected, result.matches: [{ category, pattern, matched }]
+
+// Tool description sanitization (strips hidden instructions)
+const sanitizer = new ToolSanitizer(detector);
+const sanitized = sanitizer.sanitizeToolDescription(tool);
+// sanitized.safe, sanitized.strippedContent
+
+// Tool pinning for rug-pull detection
+sanitizer.pinToolDescriptions(tools);
+const validation = sanitizer.validatePins(tools);
+// validation[i].valid, validation[i].reason
+
+// Secret scanning on outputs
+const guard = new OutputGuard();
+const scan = guard.scanForSecrets(text);
+// scan.found, scan.matches: [{ type, value }]
+
+// Anomaly detection
+const anomaly = new AnomalyDetector({
+  baselineWindowMs: 7 * 24 * 60 * 60 * 1000,
+  amountStdDevThreshold: 2.5,
+});
+const analysis = anomaly.analyze(action, history, Date.now());
+// analysis.detected, analysis.anomalies, analysis.riskScore
+```
+
+### Trace & Evidence
+
+Cryptographically verifiable audit trail for every agent decision.
+
+```typescript
+import { TraceInterceptor, EvidenceBundle } from '@veridex/agentic-payments';
+
+const interceptor = new TraceInterceptor(storageAdapter);
+const trace = await interceptor.captureTrace({
+  traceId: 'unique-id',
+  agentId: 'agent-1',
+  toolCalls: [{ name: 'veridex_pay', args: {}, result: {} }],
+  reasoning: { prompt: '...', response: '...' },
+});
+
+const bundle = new EvidenceBundle(trace);
+const evidence = bundle.build();
+```
+
+### Storage Adapters
+
+| Adapter | Backend | Import |
+|---------|---------|--------|
+| `MemoryStorage` | In-memory | `@veridex/agentic-payments` |
+| `JSONFileStorage` | Local filesystem | `@veridex/agentic-payments` |
+| `PostgresStorage` | PostgreSQL | `@veridex/agentic-payments` |
+| `IPFSStorage` | IPFS (Kubo/Pinata/Infura) | `@veridex/agentic-payments` |
+| `ArweaveStorage` | Arweave permaweb | `@veridex/agentic-payments` |
+| `FilecoinStorage` | Filecoin Cloud | `@veridex/agentic-payments` |
+| `StorachaStorage` | Storacha | `@veridex/agentic-payments` |
+| `AkaveStorage` | Akave | `@veridex/agentic-payments` |
+
+```typescript
+import {
+  MemoryStorage,
+  PostgresStorage,
+  FilecoinStorage,
+  StorachaStorage,
+} from '@veridex/agentic-payments';
+
+// PostgreSQL — works with pg, postgres.js, drizzle, etc.
+const postgres = new PostgresStorage({
+  db: pool, // any object with query(sql, params) method
+  tableName: 'veridex_traces',
+  autoCreateTable: true,
+});
+
+// Filecoin Cloud via @filoz/synapse-sdk
+import { Synapse } from '@filoz/synapse-sdk';
+import { privateKeyToAccount } from 'viem/accounts';
+const synapse = Synapse.create({ account: privateKeyToAccount('0x...'), source: 'veridex' });
+const filecoin = new FilecoinStorage({ client: synapse.storage });
+
+// Storacha via @storacha/client
+import * as Client from '@storacha/client';
+import * as Proof from '@storacha/client/proof';
+import { Signer } from '@storacha/client/principal/ed25519';
+const principal = Signer.parse(process.env.KEY);
+const client = await Client.create({ principal, store: new StoreMemory() });
+const proof = await Proof.parse(process.env.PROOF);
+const space = await client.addSpace(proof);
+await client.setCurrentSpace(space.did());
+const storacha = new StorachaStorage({ client });
+```
+
+### Escalation Manager
+
+Human-in-the-loop escalation for high-risk actions.
+
+```typescript
+import { EscalationManager } from '@veridex/agentic-payments';
+
+const escalation = new EscalationManager(5 * 60 * 1000); // 5 min timeout
+
+// Create ticket
+const ticket = escalation.escalate(proposedAction, verdict);
+// ticket.id, ticket.status: 'pending'
+
+// Listen for events
+escalation.on('escalated', (t) => notifyAdmin(t));
+escalation.on('approved', (t) => proceedWithAction(t));
+escalation.on('rejected', (t) => abortAction(t));
+escalation.on('timeout', (t) => handleTimeout(t));
+
+// Approve or reject
+escalation.approve(ticket.id, 'admin@company.com');
+escalation.reject(ticket.id, 'admin@company.com', 'Too risky');
+```
+
+### Circuit Breaker
+
+Halts agent operations after repeated failures.
+
+```typescript
+import { CircuitBreaker } from '@veridex/agentic-payments';
+
+const breaker = new CircuitBreaker({
+  failureThreshold: 3,
+  resetTimeoutMs: 60_000,
+});
+
+// Record outcomes
+breaker.recordSuccess();
+breaker.recordFailure();
+
+// Check state before operations
+if (breaker.isOpen()) {
+  console.warn('Agent is halted');
+}
+
+// Listen for state changes
+breaker.on('open', () => alertOps('Agent halted'));
+breaker.on('half-open', () => log('Testing recovery'));
+breaker.on('close', () => log('Agent resumed'));
+```
+
+---
+
+## Hardened MCP Server
+
+```typescript
+import { MCPServer } from '@veridex/agentic-payments';
+
+const server = new MCPServer(agent, {
+  allowedTools: ['veridex_pay', 'veridex_check_balance'],
+  toolSpendingLimits: { veridex_pay: 10 },
+  sanitizeDescriptions: true,
+  pinDescriptions: true,
+  scanInputs: true,
+  scanOutputs: true,
+});
+
+const tools = server.getTools();
+```
+
+**MCPServerConfig:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allowedTools` | `string[]` | `[]` (all) | Whitelist of tool names |
+| `toolSpendingLimits` | `Record<string, number>` | `{}` | Per-tool USD limits |
+| `sanitizeDescriptions` | `boolean` | `true` | Strip hidden instructions |
+| `pinDescriptions` | `boolean` | `true` | Detect rug-pulls |
+| `scanInputs` | `boolean` | `true` | Injection detection |
+| `scanOutputs` | `boolean` | `true` | Secret scanning |
+
+---
+
 ## React Hooks
 
 The Agent SDK provides React hooks for frontend integration.
 
 ```typescript
 import {
+  AgentWalletProvider,
   useAgentWallet,
-  useSpendingStatus,
+  useAgentWalletContext,
+  usePayment,
+  useSessionStatus,
   useFetchWithPayment,
   useCostEstimate,
   useProtocolDetection,
+  useMultiChainBalance,
+  usePaymentHistory,
+  useSpendingAlerts,
+  useCanPay,
 } from '@veridex/agentic-payments';
 ```
+
+| Hook | Purpose |
+|------|---------|
+| `useAgentWallet(config)` | Create and manage an AgentWallet instance |
+| `useAgentWalletContext()` | Access wallet from context (inside `AgentWalletProvider`) |
+| `usePayment(wallet)` | Make payments with loading/error state |
+| `useSessionStatus(wallet)` | Get session status with auto-refresh |
+| `useFetchWithPayment(wallet)` | Make paid HTTP requests with protocol detection |
+| `useCostEstimate(wallet, url)` | Estimate cost before paying |
+| `useProtocolDetection(wallet, url)` | Detect which payment protocol a URL uses |
+| `useMultiChainBalance(wallet)` | Fetch balances across all chains |
+| `usePaymentHistory(wallet)` | Get payment history |
+| `useSpendingAlerts(wallet)` | Subscribe to spending alerts |
+| `useCanPay(wallet, amountUSD)` | Check if wallet can make a payment |
 
 ---
 

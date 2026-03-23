@@ -499,3 +499,111 @@ import { resolveChainId, resolveChainIds } from '@veridex/react';
 // Types
 import type { TransferInput, ChainTarget } from '@veridex/react';
 ```
+
+---
+
+## Agent SDK Hooks
+
+The Agent SDK (`@veridex/agentic-payments`) provides additional hooks for agent dashboard UIs. These are separate from the core `@veridex/react` hooks and focus on agent-specific functionality like spending, payment, and protocol detection.
+
+```tsx
+import {
+  AgentWalletProvider,
+  useAgentWallet,
+  useAgentWalletContext,
+  usePayment,
+  useSessionStatus,
+  useFetchWithPayment,
+  useCostEstimate,
+  useProtocolDetection,
+  useMultiChainBalance,
+  usePaymentHistory,
+  useSpendingAlerts,
+  useCanPay,
+} from '@veridex/agentic-payments';
+```
+
+### AgentWalletProvider
+
+Wraps your app to provide a shared `AgentWallet` instance via context:
+
+```tsx
+<AgentWalletProvider config={walletConfig}>
+  <AgentDashboard />
+</AgentWalletProvider>
+```
+
+### usePayment
+
+Make payments with loading and error state:
+
+```tsx
+const { pay, isPaying, lastReceipt, error } = usePayment(wallet);
+
+await pay({ amount: '1000000', token: 'USDC', recipient: '0x...', chain: 10004 });
+```
+
+### useFetchWithPayment
+
+Make paid HTTP requests with automatic protocol detection:
+
+```tsx
+const { fetchWithPayment, data, isPending, detectedProtocol, costEstimate } =
+  useFetchWithPayment(wallet);
+
+await fetchWithPayment('https://api.example.com/premium', {
+  onBeforePayment: async (estimate) => estimate.amountUSD < 10,
+});
+```
+
+### useCostEstimate
+
+Preview payment cost before executing:
+
+```tsx
+const { estimate, isLoading } = useCostEstimate(wallet, 'https://api.example.com/data');
+// estimate?.amountUSD, estimate?.scheme
+```
+
+### useProtocolDetection
+
+Detect which payment protocol a URL uses:
+
+```tsx
+const { protocol, isDetecting } = useProtocolDetection(wallet, url);
+// protocol: 'x402' | 'ucp' | 'acp' | 'ap2' | 'mpp' | null
+```
+
+### useCanPay
+
+Check if the wallet can afford a payment:
+
+```tsx
+const { canPay, reason } = useCanPay(wallet, 5.00);
+// canPay: boolean, reason: 'Exceeds daily limit' | null
+```
+
+### useSessionStatus
+
+Get session status with auto-refresh (every 30s):
+
+```tsx
+const { status, isExpired, refreshStatus } = useSessionStatus(wallet);
+// status.isValid, status.remainingDailyLimitUSD, status.expiry
+```
+
+### useMultiChainBalance
+
+Fetch balances across all configured chains:
+
+```tsx
+const { balances, totalUSD, isLoading } = useMultiChainBalance(wallet);
+```
+
+### useSpendingAlerts
+
+Subscribe to real-time spending alerts:
+
+```tsx
+const { alerts, latestAlert, clearAlerts } = useSpendingAlerts(wallet);
+```

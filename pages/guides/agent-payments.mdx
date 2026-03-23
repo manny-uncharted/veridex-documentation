@@ -28,11 +28,15 @@ Build autonomous AI agents that can make payments using the Veridex Agent SDK (`
 
 The Agent SDK enables AI agents to:
 
-- **Pay for APIs automatically** via multiple protocols (x402, UCP, ACP, AP2) with auto-detection
-- **Expose MCP tools** for integration with AI models (Gemini, Claude, GPT)
+- **Pay for APIs automatically** via multiple protocols (x402, UCP, ACP, AP2, MPP) with auto-detection
+- **Expose MCP tools** for integration with AI models (Gemini, Claude, GPT) with security hardening
 - **Manage spending limits** with daily and per-transaction caps
 - **Use session keys** so the master passkey isn't needed for every payment
 - **Register on-chain identity** via ERC-8004 and enforce trust gates
+- **Enforce policies** via the Policy Engine (8 built-in rules, allow/deny/escalate)
+- **Detect threats** via the Security Firewall (injection, tool poisoning, secret leaks, anomalies)
+- **Track evidence** via Trace & Evidence layer (8 storage backends, cryptographic audit trails)
+- **Escalate to humans** for high-risk actions with configurable timeouts
 - **Monitor spending** with real-time alerts and audit logs
 - **Operate across chains** including EVM, Solana, Stacks, Monad, and more
 
@@ -237,6 +241,23 @@ const mcpTools = agent.getMCPTools();
 | `veridex_revoke_session` | Revoke agent wallet access |
 | `veridex_get_payment_history` | Retrieve transaction history |
 
+### Hardened MCP Server
+
+The `MCPServer` includes security layers for production AI integrations:
+
+```typescript
+import { MCPServer } from '@veridex/agentic-payments';
+
+const server = new MCPServer(agent, {
+  allowedTools: ['veridex_pay', 'veridex_check_balance'],
+  toolSpendingLimits: { veridex_pay: 10 },
+  sanitizeDescriptions: true,  // Strip hidden instructions from tool descriptions
+  pinDescriptions: true,       // Detect tool description rug-pulls
+  scanInputs: true,            // Injection detection on all inputs
+  scanOutputs: true,           // Secret scanning on all outputs
+});
+```
+
 ### Mapping to Gemini
 
 ```typescript
@@ -271,7 +292,7 @@ const tools = mcpTools.map(tool => ({
 When the agent uses `agent.fetch()`, payment protocols are handled transparently:
 
 ```typescript
-// Auto-detects x402, UCP, ACP, or AP2 and handles payment
+// Auto-detects x402, UCP, ACP, AP2, or MPP and handles payment
 const response = await agent.fetch('https://paid-api.example.com/data', {
   onBeforePayment: async (estimate) => {
     console.log(`About to pay $${estimate.amountUSD}`);
@@ -357,7 +378,7 @@ agent.onSpendingAlert((alert) => {
     ERC-8004 identity, reputation, and discovery
   </Card>
   <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
-    Complete API documentation
+    Complete API documentation including Policy Engine, Security Firewall, Trace & Evidence
   </Card>
   <Card title="Spending Limits" href="/guides/spending-limits">
     Configure spending safety
