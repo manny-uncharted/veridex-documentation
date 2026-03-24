@@ -408,6 +408,62 @@ const ethPrice = await oracle.getPrice('ETH');
 const stxPrice = await oracle.getPrice('STX');
 ```
 
+## Veridex Agent Fabric Concepts
+
+The newer framework layer extends Veridex beyond commerce-specific agents into broader agentic software.
+
+### Core idea
+
+`@veridex/agents` is designed to work for:
+
+- ordinary assistants
+- workflow automation
+- multi-agent systems
+- agents that later need payments, approvals, or stronger enterprise controls
+
+Payments are optional. Governance-ready runtime primitives are not.
+
+### Core runtime primitives
+
+The framework is organized around:
+
+- `AgentDefinition`
+- `Run`
+- `Turn`
+- `ToolContract`
+- `RuntimeHook`
+- `MemoryStore`
+- `ContextPlan`
+- `CheckpointStore`
+- transports for `MCP`, `ACP`, and `A2A`
+
+### Companion packages
+
+| Package | Purpose |
+|---|---|
+| `@veridex/agents` | runtime core |
+| `@veridex/agents-react` | React hooks and provider |
+| `@veridex/agents-adapters` | adapters and live runtime bridges |
+| `@veridex/agents-openclaw` | OpenClaw / Pi compatibility |
+| `@veridex/agents-control-plane` | tenants, approvals, traces, and audit |
+
+### Why it matters
+
+This lets teams start with a normal agent and then add:
+
+- passkey identity
+- payment capabilities
+- approvals
+- policy packs
+- audit-ready trace retention
+- external runtime interop
+
+without changing framework families later.
+
+<Callout type="warning">
+  These framework surfaces are still maturing. Some APIs may still move and some integrations may still have rough edges. We are documenting the direction honestly and we welcome contributions.
+</Callout>
+
 ## Next Steps
 
 <Cards>
@@ -419,6 +475,9 @@ const stxPrice = await oracle.getPrice('STX');
   </Card>
   <Card title="Agent Payments" href="/guides/agent-payments">
     Build autonomous AI agent payments
+  </Card>
+  <Card title="Veridex Agents" href="/guides/veridex-agents">
+    Explore the framework package family
   </Card>
   <Card title="SDK Reference" href="/api-reference/sdk">
     Explore the SDK API

@@ -28,6 +28,7 @@ GitHub: https://github.com/veridex-protocol/
 - [React Hooks](/guides/react-hooks): @veridex/react hooks — usePasskey, useBalance, useTransfer
 - [Enterprise Manager](/guides/enterprise-manager): Batch vault operations for enterprises
 - [Agent Payments](/guides/agent-payments): AI agent payment system with session keys
+- [Veridex Agents](/guides/veridex-agents): Agent Fabric runtime, tools, hooks, memory, policy, adapters, control plane
 - [Agent Identity](/guides/agent-identity): On-chain agent identity (ERC-8004)
 - [Examples](/guides/examples): Runnable code examples for every feature
 - [Multisig Wallet](/guides/multisig-wallet): M-of-N multisig with off-chain and on-chain modes
@@ -63,6 +64,7 @@ GitHub: https://github.com/veridex-protocol/
 
 - [Core SDK](/api-reference/sdk): VeridexSDK class, factory functions, all methods
 - [Agent SDK](/api-reference/agent-sdk): @veridex/agentic-payments API
+- [Agents Framework](/api-reference/agents-framework): @veridex/agents package family — runtime, tools, hooks, memory, policy, transports, adapters, control plane
 - [Relayer API](/api-reference/relayer): Relayer endpoints, relay requests
 - [Types](/api-reference/types): TypeScript type definitions
 - [Errors](/api-reference/errors): Error codes, VeridexError class
@@ -81,6 +83,11 @@ GitHub: https://github.com/veridex-protocol/
 - `@veridex/sdk` — Core SDK: createSDK, passkey auth, transfers, bridging, sessions
 - `@veridex/react` — React hooks: VeridexProvider, usePasskey, useBalance, useTransfer, useMultiChainPortfolio
 - `@veridex/agentic-payments` — Agent SDK: createAgentWallet, session-key payments, x402
+- `@veridex/agents` — Agent runtime: createAgent, AgentRuntime, tool system, hooks, memory, checkpoints, policy engine, transports (MCP, ACP, A2A)
+- `@veridex/agents-react` — Agent React hooks: AgentProvider, useRun, useApprovals, useTrace, useMemory, useBudget, useAgentIdentity
+- `@veridex/agents-adapters` — Framework adapters: OpenAI Agents SDK, LangGraph, PydanticAI, OpenAPI live bridges
+- `@veridex/agents-openclaw` — OpenClaw/Pi bridge: context-file importer, skill importer, ACP agent cards, session translator
+- `@veridex/agents-control-plane` — Enterprise control plane: PolicyPackManager, TraceStore, ApprovalWorkflowEngine, AuditExporter, TenantManager
 
 ## Supported Chains (Testnet Wormhole IDs)
 

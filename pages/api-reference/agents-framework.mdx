@@ -1,0 +1,1887 @@
+---
+title: Agents Framework API Reference
+description: Complete API reference for the Veridex Agent Fabric — @veridex/agents, agents-react, agents-adapters, agents-openclaw, and agents-control-plane
+---
+
+import { Callout, Cards, Card } from "../../components/mdx"
+
+# Agents Framework API Reference
+
+This page documents every public API in the Veridex Agent Fabric package family.
+If you want a narrative guide instead, see [Veridex Agents](/guides/veridex-agents).
+
+<Callout type="warning">
+  The framework is implemented and tested. Some APIs may still evolve. If something is unclear or broken, please open an issue.
+</Callout>
+
+## Install
+
+```bash
+npm install @veridex/agents zod
+```
+
+Optional companion packages:
+
+```bash
+npm install @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+```
+
+---
+
+## `@veridex/agents` — Core Runtime
+
+### `createAgent(definition, options?)`
+
+Factory function that returns an `AgentRuntime`.
+
+```ts
+import { createAgent, tool, OpenAIProvider } from '@veridex/agents';
+import { z } from 'zod';
+
+const agent = createAgent(
+  {
+    id: 'my-agent',
+    name: 'My Agent',
+    model: { provider: 'openai', model: 'gpt-4o-mini' },
+    instructions: 'You are a helpful assistant.',
+    tools: [],
+    maxTurns: 10,
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+    enableTracing: true,
+    enableCheckpoints: true,
+  },
+);
+```
+
+**`AgentDefinition`**
+
+```ts
+interface AgentDefinition {
+  id: string;
+  name: string;
+  model: ModelConfig;
+  instructions: string;
+  tools?: ToolContract[];
+  maxTurns?: number;                     // default: 10
+  handoffs?: HandoffHandler[];
+  payment?: PaymentConfig;
+  metadata?: Record<string, unknown>;
+}
+
+interface ModelConfig {
+  provider: string;                      // 'openai' | 'anthropic' | custom
+  model: string;                         // e.g. 'gpt-4o', 'claude-sonnet-4-20250514'
+  fallback?: ModelConfig;
+  temperature?: number;
+}
+```
+
+**`RuntimeOptions`**
+
+```ts
+interface RuntimeOptions {
+  modelProviders?: Record<string, ModelProvider>;
+  veridexSDK?: unknown;                  // optional @veridex/sdk instance
+  agentWallet?: unknown;                 // optional @veridex/agentic-payments wallet
+  enableTracing?: boolean;
+  enableCheckpoints?: boolean;
+}
+```
+
+---
+
+### `AgentRuntime`
+
+The runtime instance returned by `createAgent`. Exposes every subsystem as a readonly property.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `definition` | `AgentDefinition` | The agent config passed at creation |
+| `events` | `EventBus` | Typed event emitter |
+| `eventLog` | `EventLog` | Immutable log of all emitted events |
+| `models` | `ModelRegistry` | Routes model calls to providers |
+| `tools` | `ToolRegistry` | Registers and looks up tool contracts |
+| `hooks` | `HookRegistry` | Lifecycle hook registry |
+| `context` | `ContextCompiler` | Token-bounded context builder |
+| `memory` | `MemoryManager` | Multi-tier memory (working, episodic, semantic, procedural) |
+| `checkpoints` | `CheckpointManager` | Run state snapshots |
+| `policyEngine` | `PolicyEngine` | Rule evaluation engine |
+| `approvals` | `ApprovalManager` | Approval routing and resolution |
+| `audit` | `AuditEmitter` | Audit bundle recording |
+
+**Key methods:**
+
+```ts
+// Start a run
+const result = await agent.run('What is the status of order ORD-1042?');
+
+// result shape
+interface RunResult {
+  output: string;
+  state: RunState;            // 'completed' | 'failed' | 'suspended'
+  turns: Turn[];
+  runId: string;
+}
+
+type RunState = 'pending' | 'running' | 'completed' | 'failed' | 'suspended' | 'cancelled';
+```
+
+---
+
+### `tool(options)`
+
+Creates a typed, validated tool contract. Every tool has a `safetyClass` that policies and approvals use to decide whether execution requires review.
+
+```ts
+import { tool } from '@veridex/agents';
+import { z } from 'zod';
+
+const searchOrders = tool({
+  name: 'search_orders',
+  description: 'Search orders by customer email.',
+  input: z.object({
+    email: z.string().email(),
+    limit: z.number().int().min(1).max(100).default(10),
+  }),
+  safetyClass: 'read',
+  timeoutMs: 5000,
+  retries: 2,
+  idempotent: true,
+  async execute({ input }) {
+    const orders = await db.orders.findByEmail(input.email, input.limit);
+    return {
+      success: true,
+      llmOutput: `Found ${orders.length} orders.`,
+      data: orders,
+    };
+  },
+});
+```
+
+**`ToolContract` interface:**
+
+```ts
+interface ToolContract<TInput = unknown, TOutput = unknown> {
+  name: string;
+  description: string;
+  input: z.ZodType<TInput> | Record<string, unknown>;
+  output?: z.ZodType<TOutput> | Record<string, unknown>;
+  safetyClass: ToolSafetyClass;
+  execute: (params: ToolExecuteParams<TInput>) => Promise<ToolResult>;
+  timeoutMs?: number;
+  retries?: number;
+  idempotent?: boolean;
+  permissions?: string[];
+  costEstimate?: (input: TInput) => CostEstimate;
+  metadata?: Record<string, unknown>;
+}
+
+type ToolSafetyClass = 'read' | 'write' | 'network' | 'financial' | 'destructive' | 'privileged';
+
+interface ToolResult {
+  success: boolean;
+  llmOutput: string;
+  data?: unknown;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Safety classes explained:**
+
+| Class | Meaning | Default policy |
+|-------|---------|----------------|
+| `read` | Side-effect-free lookups | Auto-allow |
+| `write` | Mutations to internal state | Allow with logging |
+| `network` | External HTTP/RPC calls | Allow with logging |
+| `financial` | Payments or balance changes | Require approval |
+| `destructive` | Deletes or irreversible actions | Require approval |
+| `privileged` | Admin-level operations | Block by default |
+
+---
+
+### `ToolRegistry`
+
+Registers, looks up, and enumerates tool contracts.
+
+```ts
+const registry = agent.tools;
+
+registry.register(searchOrders);
+registry.get('search_orders');           // ToolContract | undefined
+registry.has('search_orders');           // boolean
+registry.list();                         // ToolContract[]
+registry.remove('search_orders');        // boolean
+```
+
+### `ToolExecutor`
+
+Executes tool calls with validation, timeout, and retry logic.
+
+### `ToolValidator`
+
+Validates tool input against a Zod schema or JSON schema before execution.
+
+---
+
+### `PolicyEngine`
+
+Registers and evaluates policy rules against action proposals. Rules are evaluated in priority order and produce `allow`, `deny`, or `escalate` verdicts.
+
+```ts
+import {
+  PolicyEngine,
+  blockSafetyClasses,
+  requireApprovalFor,
+  maxRunSpendUSD,
+  maxTokenBudget,
+  allowChains,
+} from '@veridex/agents';
+
+const engine = agent.policyEngine;
+
+// Block all destructive and privileged tools
+engine.register(blockSafetyClasses(['destructive', 'privileged'], agent.tools.list()));
+
+// Require human approval for financial tools
+engine.register(requireApprovalFor(['financial'], agent.tools.list()));
+
+// Cap spend and token usage per run
+engine.register(maxRunSpendUSD(50));
+engine.register(maxTokenBudget(100_000));
+
+// Restrict to specific chains
+engine.register(allowChains(['base', 'optimism']));
+```
+
+**Custom rules:**
+
+```ts
+interface PolicyRule {
+  id: string;
+  name: string;
+  description: string;
+  priority?: number;                     // lower = evaluated first
+  evaluate(ctx: PolicyContext): PolicyCheckResult | Promise<PolicyCheckResult>;
+}
+
+interface PolicyCheckResult {
+  verdict: 'allow' | 'deny' | 'escalate';
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `register` | `(rule: PolicyRule) => void` | Add a rule |
+| `remove` | `(ruleId: string) => boolean` | Remove a rule by id |
+| `evaluate` | `(ctx: PolicyContext) => Promise<PolicyDecision>` | Evaluate all rules |
+
+---
+
+### `ApprovalManager`
+
+Routes proposals to the correct approval mode and manages pending requests.
+
+```ts
+const approvals = agent.approvals;
+
+// Add approval routes
+approvals.addRoute({
+  match: (proposal, policy) => policy.verdict === 'escalate',
+  mode: 'human_required',
+  timeoutMs: 300_000,                    // 5 minutes
+});
+
+// Register handlers
+approvals.registerHandler('human_required', async (request) => {
+  // send to Slack, email, or dashboard
+  return { approved: true, decidedBy: 'ops-team' };
+});
+
+// Inspect pending requests
+const pending = approvals.getPending();
+
+// Resolve a request programmatically
+approvals.resolve(requestId, true, 'admin@company.com', 'Looks safe.');
+```
+
+**Types:**
+
+```ts
+type ApprovalMode =
+  | 'auto_allow'
+  | 'auto_block'
+  | 'human_required'
+  | 'dual_approval'
+  | 'policy_pack';
+
+interface ApprovalRequest {
+  id: string;
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  proposal: ActionProposal;
+  policyDecision: PolicyDecision;
+  mode: ApprovalMode;
+  reason?: string;
+  createdAt: number;
+  expiresAt?: number;
+}
+
+interface ApprovalDecision {
+  requestId: string;
+  approved: boolean;
+  decidedBy: string;
+  reason?: string;
+  decidedAt: number;
+  conditions?: Record<string, unknown>;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `addRoute` | `(route: ApprovalRoute) => void` | Add a routing rule |
+| `registerHandler` | `(mode, handler) => void` | Register an approval handler |
+| `determineMode` | `(proposal, decision) => ApprovalMode` | Resolve the approval mode |
+| `requestApproval` | `(runId, agentId, turnIndex, proposal, decision) => Promise<ApprovalDecision>` | Request and wait for approval |
+| `startApproval` | `(runId, agentId, turnIndex, proposal, decision, options?) => Promise<ApprovalStartResult>` | Start without blocking |
+| `getPending` | `() => ApprovalRequest[]` | List all pending |
+| `getPendingById` | `(id) => ApprovalRequest \| undefined` | Get a specific request |
+| `resolve` | `(requestId, approved, decidedBy, reason?) => ApprovalDecision \| null` | Resolve a pending request |
+| `getDecisions` | `() => ApprovalDecision[]` | List all decisions |
+
+---
+
+### `MemoryManager` and `InMemoryStore`
+
+Multi-tier memory system. Tiers: `working` (run-scoped), `episodic` (session-scoped), `semantic` (global), `procedural` (tagged routines).
+
+```ts
+const memory = agent.memory;
+
+// Write a memory entry
+await memory.write({
+  tier: 'episodic',
+  content: 'User prefers email notifications over SMS.',
+  scope: 'session',
+  tags: ['preferences'],
+  confidence: 0.9,
+  ttlMs: 86_400_000,                    // 24 hours
+});
+
+// Search memory
+const results = await memory.search({
+  query: 'notification preference',
+  tiers: ['episodic', 'semantic'],
+  limit: 5,
+});
+
+// Compact old entries
+const { removedCount, retainedCount } = await memory.compact();
+```
+
+**Types:**
+
+```ts
+type MemoryTier = 'working' | 'episodic' | 'semantic' | 'procedural';
+type MemoryScope = 'run' | 'session' | 'global';
+
+interface MemoryEntry {
+  id: string;
+  tier: MemoryTier;
+  content: string;
+  scope?: MemoryScope;
+  confidence: number;
+  tags: string[];
+  ttlMs: number;
+  createdAt: number;
+  lastAccessedAt: number;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `read` | `(id) => Promise<MemoryEntry \| null>` | Read by id |
+| `write` | `(request) => Promise<MemoryEntry>` | Write an entry |
+| `search` | `(query) => Promise<MemoryEntry[]>` | Search by query and tier |
+| `delete` | `(id) => Promise<boolean>` | Delete by id |
+| `getWorkingMemory` | `(runId?) => Promise<MemoryEntry[]>` | Get working-tier entries |
+| `getEpisodicMemory` | `(limit?) => Promise<MemoryEntry[]>` | Get episodic entries |
+| `getSemanticMemory` | `(query?, limit?) => Promise<MemoryEntry[]>` | Get semantic entries |
+| `getProceduralMemory` | `(tags?) => Promise<MemoryEntry[]>` | Get routine entries |
+| `compact` | `() => Promise<CompactResult>` | Remove expired entries |
+| `clear` | `(scope?) => Promise<void>` | Clear entries by scope |
+
+---
+
+### `CheckpointManager`
+
+Saves and restores run state so agents can suspend (e.g., for approval) and resume later.
+
+```ts
+const cp = agent.checkpoints;
+
+// Save a checkpoint
+await cp.save(runId, agentId, turnIndex, stateObject, 'approval');
+
+// Restore the latest checkpoint
+const latest = await cp.loadLatest(runId);
+if (latest) {
+  const state = cp.parseState(latest);
+  // resume the run from this state
+}
+
+// List all checkpoints for a run
+const all = await cp.list(runId);
+```
+
+**Types:**
+
+```ts
+interface Checkpoint {
+  id: string;
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  state: string;                         // JSON-serialized run state
+  createdAt: number;
+  reason: 'suspend' | 'approval' | 'handoff' | 'periodic' | 'error';
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `save` | `(runId, agentId, turnIndex, state, reason?, metadata?) => Promise<Checkpoint>` | Create checkpoint |
+| `load` | `(id) => Promise<Checkpoint \| null>` | Load by id |
+| `loadLatest` | `(runId) => Promise<Checkpoint \| null>` | Load most recent for a run |
+| `list` | `(runId) => Promise<Checkpoint[]>` | List all for a run |
+| `delete` | `(id) => Promise<boolean>` | Remove a checkpoint |
+| `clear` | `(runId?) => Promise<void>` | Clear checkpoints |
+| `parseState` | `(checkpoint) => Record<string, unknown>` | Deserialize checkpoint state |
+
+---
+
+### `ContextCompiler`
+
+Builds token-bounded context plans. Sections are prioritized and truncated to fit within the model's context window.
+
+```ts
+const compiler = agent.context;
+
+const plan = compiler.compile({
+  maxTokens: 4096,
+  sections: [
+    { id: 'instructions', content: agent.definition.instructions, priority: 1 },
+    { id: 'memory', content: memoryText, priority: 2 },
+    { id: 'history', content: conversationHistory, priority: 3, truncation: 'tail' },
+  ],
+});
+
+// plan.totalTokens — actual tokens used
+// plan.hadTruncation — true if any section was truncated
+```
+
+**Types:**
+
+```ts
+interface ContextCompilerOptions {
+  maxTokens: number;
+  sections: ContextSectionInput[];
+}
+
+interface ContextSectionInput {
+  id: string;
+  content: string;
+  priority: number;                      // lower = more important
+  truncation?: TruncationStrategy;       // 'head' | 'tail' | 'middle' | 'none'
+}
+
+interface ContextPlan {
+  sections: ContextSection[];
+  totalTokens: number;
+  budgetTokens: number;
+  hadTruncation: boolean;
+  compiledAt: number;
+}
+```
+
+---
+
+### `EventBus` and `EventLog`
+
+Typed event emitter for runtime trace events. Every runtime action emits events that can be observed for logging, UI, or audit.
+
+```ts
+const bus = agent.events;
+
+// Listen for specific events
+const unsub = bus.on('tool_started', (event) => {
+  console.log(`Tool ${event.toolName} started at turn ${event.turnIndex}`);
+});
+
+// Listen for all events
+bus.onAny((event) => {
+  console.log(event.type, event.timestamp);
+});
+
+// One-shot listener
+bus.once('run_completed', (event) => {
+  console.log('Run finished:', event.runId);
+});
+
+// Access the full immutable log
+const log = agent.eventLog;
+const allEvents = log.getAll();
+const toolEvents = log.getByType('tool_completed');
+```
+
+**Event types:**
+
+```ts
+type TraceEventType =
+  | 'run_started' | 'run_completed' | 'run_failed' | 'run_suspended'
+  | 'turn_started' | 'turn_completed'
+  | 'tool_started' | 'tool_completed' | 'tool_failed'
+  | 'model_called' | 'model_responded'
+  | 'policy_evaluated' | 'approval_requested' | 'approval_resolved'
+  | 'memory_written' | 'checkpoint_saved'
+  | 'handoff_initiated' | 'handoff_completed';
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `on` | `(type, handler) => () => void` | Subscribe (returns unsubscribe fn) |
+| `onAny` | `(handler) => () => void` | Subscribe to all events |
+| `off` | `(type, handler) => void` | Unsubscribe |
+| `once` | `(type, handler) => () => void` | One-shot listener |
+| `emit` | `(event) => void` | Emit an event |
+| `clear` | `() => void` | Remove all listeners |
+| `listenerCount` | `(type?) => number` | Count active listeners |
+
+---
+
+### `HookRegistry` and `HookRunner`
+
+Lifecycle hooks run at specific phases of the runtime loop. Hooks can annotate context, override execution flow, or inject side effects.
+
+```ts
+import { HookRegistry, HookRunner } from '@veridex/agents';
+
+agent.hooks.register({
+  name: 'log-tool-calls',
+  phase: 'before_tool',
+  priority: 10,
+  async execute(context) {
+    console.log('About to call tool:', context.toolName);
+  },
+});
+
+agent.hooks.register({
+  name: 'block-after-hours',
+  phase: 'before_run',
+  async execute() {
+    const hour = new Date().getHours();
+    if (hour < 6 || hour > 22) {
+      return { override: 'deny', reason: 'Outside business hours' };
+    }
+  },
+});
+```
+
+**Types:**
+
+```ts
+type HookPhase =
+  | 'before_run' | 'after_run'
+  | 'before_turn' | 'after_turn'
+  | 'before_tool' | 'after_tool'
+  | 'on_error';
+
+interface RuntimeHook {
+  name: string;
+  phase: HookPhase;
+  priority?: number;                     // lower = runs first
+  timeoutMs?: number;
+  execute(context: unknown): Promise<HookResult | void> | HookResult | void;
+}
+
+interface HookResult {
+  annotations?: Record<string, unknown>;
+  override?: 'continue' | 'retry' | 'pause' | 'deny';
+  reason?: string;
+}
+```
+
+**HookRegistry methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `register` | `(hook: RuntimeHook) => void` | Add a hook |
+| `getForPhase` | `(phase) => RuntimeHook[]` | Get hooks for a phase |
+| `remove` | `(name) => boolean` | Remove by name |
+| `list` | `() => string[]` | List registered hook names |
+| `clear` | `() => void` | Remove all hooks |
+
+---
+
+### Model Providers
+
+#### `OpenAIProvider`
+
+```ts
+import { OpenAIProvider } from '@veridex/agents';
+
+const provider = new OpenAIProvider({
+  apiKey: process.env.OPENAI_API_KEY,
+  organization: 'org-xxx',              // optional
+  baseUrl: 'https://api.openai.com/v1', // optional
+});
+
+const response = await provider.complete(
+  [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'Hello!' },
+  ],
+  {
+    temperature: 0.7,
+    maxTokens: 1024,
+    tools: [searchOrders],               // optional tool contracts
+  },
+);
+```
+
+#### `AnthropicProvider`
+
+```ts
+import { AnthropicProvider } from '@veridex/agents';
+
+const provider = new AnthropicProvider({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+```
+
+Both providers implement:
+
+```ts
+interface ModelProvider {
+  complete(
+    messages: ModelMessage[],
+    options?: ModelCompletionOptions,
+  ): Promise<ModelResponse>;
+}
+
+interface ModelMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface ModelResponse {
+  content: string;
+  toolCalls?: Array<{ id: string; name: string; arguments: unknown }>;
+  usage: ModelUsage;
+  finishReason: string;
+}
+
+interface ModelUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+```
+
+#### `ModelRegistry`
+
+Routes model calls to the correct provider based on `ModelConfig.provider`.
+
+---
+
+### `AuditEmitter`
+
+Records tool executions, policy decisions, and approvals into audit bundles for compliance.
+
+```ts
+interface AuditBundle {
+  id: string;
+  runId: string;
+  agentId: string;
+  startedAt: number;
+  completedAt?: number;
+  toolExecutions: ToolExecutionSummary[];
+  policies: Record<string, unknown>;
+  approvals: Record<string, unknown>;
+}
+
+type AuditExportFormat = 'json' | 'jsonl' | 'csv';
+```
+
+---
+
+### Transports
+
+Three transport surfaces for inter-system communication:
+
+#### `MCPServerTransport` — Model Context Protocol
+
+Exposes agent tools as an MCP-compatible server so external LLM hosts can discover and call them.
+
+```ts
+import { MCPServerTransport } from '@veridex/agents';
+
+const mcp = new MCPServerTransport({
+  serverName: 'my-agent-mcp',
+  serverVersion: '1.0.0',
+  tools: agent.tools.list(),
+});
+
+await mcp.connect();
+```
+
+#### `ACPTransport` — Agent Communication Protocol
+
+Enables agent-to-agent task delegation via ACP.
+
+```ts
+import { ACPTransport } from '@veridex/agents';
+
+const acp = new ACPTransport({
+  agentCard: {
+    name: 'my-agent',
+    description: 'Handles order lookups',
+    capabilities: [
+      { name: 'lookup_order', description: 'Find orders', inputSchema: {} },
+    ],
+  },
+});
+
+await acp.connect();
+```
+
+#### `A2ATransport` — Agent-to-Agent
+
+Direct inter-agent calls with discovery via agent cards.
+
+```ts
+import { A2ATransport } from '@veridex/agents';
+
+const a2a = new A2ATransport({
+  agentCard: {
+    name: 'coordinator',
+    description: 'Coordinates between specialist agents',
+    capabilities: [],
+  },
+});
+
+await a2a.connect();
+```
+
+**Common transport interface:**
+
+```ts
+interface Transport {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  send(request: unknown): Promise<unknown>;
+}
+
+type TransportState = 'disconnected' | 'connecting' | 'connected' | 'error';
+```
+
+---
+
+### Testing utilities
+
+#### `ReplayProvider`
+
+Replays recorded model interactions for deterministic, offline tests.
+
+```ts
+import { ReplayProvider, TraceRecorder } from '@veridex/agents';
+
+// Record interactions during a live run
+const recorder = new TraceRecorder();
+// ... run agent with recorder attached ...
+const trace = recorder.getTrace();
+
+// Replay later
+const replay = new ReplayProvider(trace.interactions);
+const response = await replay.complete(messages);
+```
+
+#### `compareTraces(trace1, trace2)`
+
+Compares two golden traces and returns a similarity score and diffs.
+
+```ts
+import { compareTraces, serializeGoldenTrace, deserializeGoldenTrace } from '@veridex/agents';
+
+const result = compareTraces(baseline, current);
+console.log(result.identical);          // boolean
+console.log(result.similarityScore);    // 0..1
+console.log(result.diffs);             // EventDiff[]
+```
+
+---
+
+### Action proposals
+
+The runtime interprets every model response as a typed proposal:
+
+```ts
+type ActionProposal =
+  | { type: 'tool_call'; toolName: string; arguments: unknown }
+  | { type: 'handoff'; targetAgent: string; message: string }
+  | { type: 'memory_write'; tier: MemoryTier; content: string }
+  | { type: 'final_answer'; content: string }
+  | { type: 'approval_request'; reason: string };
+```
+
+---
+
+## `@veridex/agents-react`
+
+React bindings for the agent runtime. Provides a context provider and hooks that manage subscriptions, state, and lifecycle automatically.
+
+### `AgentProvider`
+
+Wraps your React tree and provides the runtime context to all hooks.
+
+```tsx
+import { AgentProvider } from '@veridex/agents-react';
+
+function App() {
+  return (
+    <AgentProvider runtime={agent}>
+      <ChatUI />
+    </AgentProvider>
+  );
+}
+```
+
+### Hooks
+
+#### `useAgent()`
+
+Returns the agent definition and current state.
+
+```ts
+const { definition, state } = useAgent();
+```
+
+#### `useRun()`
+
+Start runs and observe their state.
+
+```ts
+const { run, state, result, error, isLoading } = useRun();
+
+// Start a run
+await run('What is order ORD-1042?');
+
+// state: 'pending' | 'running' | 'completed' | 'failed' | 'suspended'
+```
+
+**Return type:**
+
+```ts
+interface UseRunReturn {
+  run: (input: string, options?: RunOptions) => Promise<RunResult>;
+  state: RunState;
+  result?: RunResult;
+  error?: Error;
+  isLoading: boolean;
+}
+```
+
+#### `useTurnStream()`
+
+Stream individual turns as they happen.
+
+```ts
+const { stream, cancel } = useTurnStream();
+```
+
+#### `useApprovals()`
+
+List pending approvals and resolve them from the UI.
+
+```tsx
+const { pending, resolve } = useApprovals();
+
+// Render approval inbox
+{pending.map(req => (
+  <div key={req.id}>
+    <p>{req.proposal.toolName} needs approval</p>
+    <button onClick={() => resolve(req.id, true)}>Approve</button>
+    <button onClick={() => resolve(req.id, false)}>Deny</button>
+  </div>
+))}
+```
+
+**Return type:**
+
+```ts
+interface UseApprovalsReturn {
+  pending: ApprovalRequest[];
+  resolve: (requestId: string, approved: boolean) => Promise<void>;
+}
+```
+
+#### `useTrace()`
+
+Observe runtime trace events in real time.
+
+```ts
+const { events, latest } = useTrace();
+```
+
+#### `useMemory()`
+
+Read and write agent memory from React components.
+
+```ts
+const { entries, write, search, clear } = useMemory();
+
+await write({
+  tier: 'episodic',
+  content: 'User prefers dark mode.',
+  tags: ['preferences'],
+});
+```
+
+#### `useBudget()`
+
+Track spend against the run budget.
+
+```ts
+const { snapshot, estimateSpend } = useBudget();
+// snapshot.spent, snapshot.budget, snapshot.percentUtilized
+```
+
+**Return type:**
+
+```ts
+interface BudgetSnapshot {
+  spent: number;
+  budget: number;
+  percentUtilized: number;
+}
+```
+
+#### `useContextPlan()`
+
+Inspect the current context plan (sections, tokens, truncation).
+
+```ts
+const { plan, recompile } = useContextPlan();
+```
+
+#### `useToolRegistry()`
+
+Register and inspect tools from React.
+
+```ts
+const { tools, register, remove } = useToolRegistry();
+```
+
+#### `usePayments()`
+
+Access `@veridex/agentic-payments` wallet functions when wired.
+
+```ts
+const { balance, send, history } = usePayments();
+```
+
+#### `useAgentIdentity()`
+
+Read the agent's on-chain identity (ERC-8004).
+
+```ts
+const { identity, isVerified } = useAgentIdentity();
+```
+
+#### `useAgentReputation()`
+
+Read the agent's on-chain reputation score.
+
+```ts
+const { score, history } = useAgentReputation();
+```
+
+#### `useOpenClawBridge()`
+
+Bridge to OpenClaw/Pi capabilities from React.
+
+```ts
+const { importSkills, translateSession } = useOpenClawBridge();
+```
+
+---
+
+## `@veridex/agents-adapters`
+
+Import, export, and live-bridge agents between Veridex and other frameworks.
+
+### Adapter interface
+
+All adapters implement:
+
+```ts
+interface FrameworkAdapter<TImport, TExport> {
+  readonly name: string;
+  readonly framework: string;
+  readonly frameworkVersion: string;
+  importAgent(config: TImport): ImportResult;
+  exportAgent(definition: AgentDefinition): ExportResult<TExport>;
+  importTool(toolDef: unknown): ToolContract;
+}
+```
+
+### `OpenAIAgentsAdapter`
+
+```ts
+import { OpenAIAgentsAdapter } from '@veridex/agents-adapters';
+
+const adapter = new OpenAIAgentsAdapter();
+
+// Import an OpenAI agent config into Veridex
+const { definition, warnings } = adapter.importAgent({
+  name: 'My OpenAI Agent',
+  instructions: 'Help users with billing.',
+  model: 'gpt-4o',
+  tools: [{ type: 'function', function: { name: 'lookup', ... } }],
+});
+
+// Export a Veridex definition back to OpenAI format
+const { config, warnings: exportWarnings } = adapter.exportAgent(myAgent.definition);
+```
+
+### `LangGraphAdapter`
+
+```ts
+import { LangGraphAdapter } from '@veridex/agents-adapters';
+
+const adapter = new LangGraphAdapter();
+const { definition } = adapter.importAgent(langGraphConfig);
+```
+
+### `PydanticAIAdapter`
+
+```ts
+import { PydanticAIAdapter } from '@veridex/agents-adapters';
+
+const adapter = new PydanticAIAdapter();
+const { definition } = adapter.importAgent(pydanticAIConfig);
+```
+
+### `OpenAPIImporter`
+
+Converts an OpenAPI spec into Veridex tool contracts, so you can expose REST APIs as agent tools.
+
+```ts
+import { OpenAPIImporter } from '@veridex/agents-adapters';
+
+const importer = new OpenAPIImporter();
+const tools = importer.importTools(openAPISpec, {
+  baseUrl: 'https://api.example.com',
+  auth: { type: 'bearer', value: process.env.API_TOKEN },
+});
+
+// Each path+method becomes a ToolContract
+```
+
+**Options:**
+
+```ts
+interface OpenAPIImportOptions {
+  baseUrl?: string;
+  auth?: { type: 'bearer' | 'api-key'; value: string };
+  toolNameTransform?: (path: string, method: string) => string;
+}
+```
+
+### Runtime bridges
+
+Runtime bridges invoke external agent runtimes live, wrapping them as Veridex tools or handoff targets.
+
+```ts
+import { OpenAIRuntimeBridge, LangGraphRuntimeBridge, PydanticAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new OpenAIRuntimeBridge({
+  name: 'billing-assistant',
+  endpoint: 'https://api.openai.com/v1/agents/asst_xxx',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Use as a Veridex tool
+const tool = bridge.asTool({ name: 'ask_billing_agent' });
+
+// Use as a handoff target
+const handoff = bridge.asHandoffHandler();
+
+// Or invoke directly
+const result = await bridge.invoke({
+  prompt: 'What is the refund policy?',
+  context: { customerId: 'C-123' },
+});
+```
+
+**Interface:**
+
+```ts
+interface ExecutableAgentBridge {
+  readonly name: string;
+  invoke(input: BridgeInvocation): Promise<BridgeInvocationResult>;
+  asTool(options?: BridgeToolOptions): ToolContract;
+  asHandoffHandler(): HandoffHandler;
+}
+
+interface BridgeInvocation {
+  prompt: string;
+  history?: unknown[];
+  context?: Record<string, unknown>;
+  threadId?: string;
+  signal?: AbortSignal;
+}
+
+interface BridgeInvocationResult {
+  success: boolean;
+  output: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+### Utilities
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `inferSafetyClass` | `(name, description?) => ToolSafetyClass` | Guess safety class from tool name/description |
+| `jsonSchemaToZod` | `(schema) => z.ZodType` | Convert JSON Schema to Zod |
+| `createStubExecutor` | `(framework, name) => ToolExecutor` | Create a placeholder executor |
+
+---
+
+## `@veridex/agents-openclaw`
+
+Bridge for OpenClaw / Pi agent ecosystems. Imports context files and skills into Veridex, translates sessions, and creates ACP-compatible agent cards.
+
+### Context file parsing
+
+Import OpenClaw workspace context files (`AGENTS.md`, `IDENTITY.md`, `TOOLS.md`, etc.) into structured Veridex context sections.
+
+```ts
+import { parseWorkspaceContextFiles, compileContextSections } from '@veridex/agents-openclaw';
+
+const files = {
+  'AGENTS.md': agentsMdContent,
+  'IDENTITY.md': identityMdContent,
+  'TOOLS.md': toolsMdContent,
+};
+
+const contextFiles = parseWorkspaceContextFiles(files);
+const compiled = compileContextSections(contextFiles);
+// compiled is Record<string, string> keyed by context type
+```
+
+**Individual functions:**
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `detectContextFileType` | `(filename) => ContextFileType \| undefined` | Detect type from filename |
+| `parseMarkdownSections` | `(content) => ContextSection[]` | Parse markdown into sections |
+| `parseContextFile` | `(filename, content) => ContextFile \| null` | Parse a single context file |
+| `parseWorkspaceContextFiles` | `(files) => ContextFile[]` | Parse a workspace directory |
+| `compileContextSections` | `(files) => Record<string, string>` | Compile into text blocks |
+
+**Recognized context types:**
+
+```ts
+type ContextFileType =
+  | 'AGENTS' | 'BOOTSTRAP' | 'HEARTBEAT' | 'IDENTITY'
+  | 'MEMORY' | 'USER' | 'SOUL' | 'TOOLS' | 'RULES' | 'KNOWLEDGE';
+```
+
+### Skill importer
+
+Import OpenClaw `SKILL.md` documents and skill manifests into Veridex tool contracts.
+
+```ts
+import { parseSkillDocument, importSkillDocument, importSkillManifest } from '@veridex/agents-openclaw';
+
+// Parse a SKILL.md file
+const doc = parseSkillDocument('web-search/SKILL.md', skillMdContent);
+// doc.frontmatter — parsed YAML frontmatter
+// doc.instructions — the markdown body
+// doc.frontmatter.tools — skill definitions
+
+// Import into a Veridex tool contract
+const { tool, warnings } = importSkillDocument(doc);
+
+// Import a full manifest of skills
+const { tools, warnings: allWarnings } = importSkillManifest(manifest);
+```
+
+**Types:**
+
+```ts
+interface OpenClawSkill {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  tags?: string[];
+  mutates?: boolean;
+  requiresNetwork?: boolean;
+  requiresApproval?: boolean;
+  timeoutSeconds?: number;
+}
+
+interface SkillImportResult {
+  tool: ToolContract;
+  warnings: string[];
+}
+```
+
+### ACP bridge
+
+Convert Veridex agent definitions to ACP agent cards, import ACP capabilities as tools, and create remote-agent tool contracts.
+
+```ts
+import { toACPAgentCard, fromACPCapabilities, createRemoteAgentTool } from '@veridex/agents-openclaw';
+
+// Export your agent as an ACP card
+const card = toACPAgentCard(agent.definition);
+
+// Import another agent's ACP capabilities as Veridex tools
+const tools = fromACPCapabilities(remoteCard.capabilities);
+
+// Create a tool that calls a remote ACP agent
+const remoteTool = createRemoteAgentTool({
+  name: 'research-agent',
+  description: 'Performs deep research',
+  endpoint: 'https://agents.example.com/research',
+  auth: { type: 'bearer', token: process.env.RESEARCH_AGENT_TOKEN },
+  timeoutMs: 30_000,
+});
+```
+
+**Types:**
+
+```ts
+interface ACPAgentCard {
+  name: string;
+  description: string;
+  version?: string;
+  capabilities: ACPCapability[];
+  endpoint?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface ACPCapability {
+  name: string;
+  description: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  tags?: string[];
+}
+
+interface RemoteAgentConfig {
+  name: string;
+  description: string;
+  endpoint: string;
+  auth?: { type: 'bearer' | 'api-key' | 'none'; token?: string; headerName?: string };
+  capabilities?: ACPCapability[];
+  timeoutMs?: number;
+  invoker?: ACPInvoker;
+}
+```
+
+### Session translator
+
+Translate OpenClaw session histories into Veridex trace events for migration and analysis.
+
+```ts
+import { translateSession, translateSessions, translateEvent } from '@veridex/agents-openclaw';
+
+const result = translateSession(openClawSession);
+// result.events — Veridex-format trace events
+// result.warnings — any translation issues
+
+// Batch translate
+const results = translateSessions(openClawSessions);
+```
+
+---
+
+## `@veridex/agents-control-plane`
+
+Enterprise-grade control plane for multi-tenant agent governance. Provides policy pack management, approval workflows, trace retention, audit export, tenant isolation, and deployable HTTP APIs.
+
+### `PolicyPackManager`
+
+Manages versioned policy packs. Policy packs are collections of rules that can be applied to agents at the tenant or system level.
+
+```ts
+import { PolicyPackManager } from '@veridex/agents-control-plane';
+
+const manager = new PolicyPackManager();
+
+// Create a policy pack
+const pack = manager.create({
+  name: 'production-safety',
+  description: 'Standard safety rules for production agents',
+  version: '1.0.0',
+  rules: [
+    { type: 'block_safety_class', params: { classes: ['destructive', 'privileged'] }, enabled: true },
+    { type: 'max_spend', params: { limitUSD: 100 }, enabled: true },
+    { type: 'require_approval', params: { classes: ['financial'] }, enabled: true },
+  ],
+  tags: ['production', 'safety'],
+});
+
+// List, update, delete
+const packs = manager.list(['production']);
+manager.update(pack.id, { version: '1.1.0' });
+manager.delete(pack.id);
+
+// System packs are immutable
+manager.registerSystemPack({ name: 'core-safety', ... });
+
+// Snapshot and restore
+const snapshot = manager.snapshot();
+manager.load(snapshot);
+```
+
+**Types:**
+
+```ts
+interface PolicyPack {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  rules: PolicyRuleDefinition[];
+  tags?: string[];
+  immutable?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface PolicyRuleDefinition {
+  type: string;
+  params: Record<string, unknown>;
+  enabled: boolean;
+  description?: string;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `create` | `(options) => PolicyPack` | Create a pack |
+| `get` | `(id) => PolicyPack \| undefined` | Get by id |
+| `list` | `(tags?) => PolicyPack[]` | List, optionally filter by tags |
+| `update` | `(id, updates) => PolicyPack \| undefined` | Update a pack |
+| `delete` | `(id) => boolean` | Delete a pack |
+| `registerSystemPack` | `(options) => PolicyPack` | Create an immutable system pack |
+| `count` | `() => number` | Count packs |
+| `snapshot` | `() => PolicyPack[]` | Export all packs |
+| `load` | `(packs) => void` | Import packs |
+
+---
+
+### `TraceStore`
+
+Ingests, queries, and manages run traces with content hashing for tamper detection.
+
+```ts
+import { TraceStore, InMemoryTraceStore } from '@veridex/agents-control-plane';
+
+const store = new TraceStore(new InMemoryTraceStore());
+
+// Ingest a trace
+const record = await store.ingest({
+  runId: 'run-001',
+  agentId: 'ops-agent',
+  tenantId: 'tenant-acme',
+  startedAt: Date.now() - 5000,
+  completedAt: Date.now(),
+  state: 'completed',
+  turnCount: 3,
+  totalTokens: 1500,
+  totalCostUSD: 0.02,
+  events: traceEvents,
+});
+
+// Query traces
+const traces = await store.query({
+  agentId: 'ops-agent',
+  state: 'completed',
+  startAfter: Date.now() - 86_400_000, // last 24h
+  limit: 50,
+});
+
+// Verify content hash (tamper detection)
+const valid = await store.verify(record.id);
+
+// Purge expired traces
+const purged = await store.purgeExpired();
+```
+
+**Types:**
+
+```ts
+interface TraceRecord {
+  id: string;
+  runId: string;
+  agentId: string;
+  tenantId?: string;
+  startedAt: number;
+  completedAt?: number;
+  state: 'completed' | 'failed' | 'cancelled';
+  turnCount: number;
+  totalTokens: number;
+  totalCostUSD?: number;
+  events: unknown[];
+  contentHash?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface TraceQuery {
+  runId?: string;
+  agentId?: string;
+  tenantId?: string;
+  state?: TraceRecord['state'];
+  startAfter?: number;
+  startBefore?: number;
+  limit?: number;
+  offset?: number;
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `ingest` | `(options) => Promise<TraceRecord>` | Store a trace |
+| `get` | `(id) => Promise<TraceRecord \| undefined>` | Get by id |
+| `query` | `(filters) => Promise<TraceRecord[]>` | Query with filters |
+| `delete` | `(id) => Promise<boolean>` | Delete a trace |
+| `count` | `() => Promise<number>` | Count traces |
+| `purgeExpired` | `() => Promise<number>` | Remove traces past retention |
+| `verify` | `(id) => Promise<boolean>` | Verify content hash |
+
+---
+
+### `ApprovalWorkflowEngine`
+
+Multi-step approval workflows with escalation chains, timeouts, and auto-approval.
+
+```ts
+import { ApprovalWorkflowEngine } from '@veridex/agents-control-plane';
+
+const engine = new ApprovalWorkflowEngine();
+
+// Register a workflow
+engine.registerWorkflow({
+  id: 'high-risk',
+  name: 'High Risk Approval',
+  description: 'Two-step escalation for high-risk actions',
+  escalationChain: [
+    { name: 'Team Lead', approvers: ['lead@company.com'], timeoutSeconds: 300, minApprovals: 1 },
+    { name: 'VP Engineering', approvers: ['vp@company.com'], timeoutSeconds: 600, minApprovals: 1 },
+  ],
+  defaultMode: 'block',
+});
+
+// Start an approval
+const approval = engine.startApproval('high-risk', 'run-001', 'agent-x', 'Transfer $10K', 0.9);
+
+// Vote
+engine.vote(approval.id, 'lead@company.com', true, 'Looks correct');
+
+// Process timeouts (call periodically)
+const timedOut = engine.processTimeouts();
+```
+
+**Types:**
+
+```ts
+interface ApprovalWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  escalationChain: ApprovalEscalationStep[];
+  autoApproveAfterSeconds?: number;
+  defaultMode: 'block' | 'flag' | 'auto-approve';
+}
+
+interface ApprovalEscalationStep {
+  name: string;
+  approvers: string[];
+  timeoutSeconds: number;
+  minApprovals: number;
+}
+
+interface ActiveApproval {
+  id: string;
+  workflowId: string;
+  currentStep: number;
+  runId: string;
+  agentId: string;
+  proposal: string;
+  riskScore: number;
+  approvals: ApprovalVote[];
+  createdAt: number;
+  currentStepDeadline: number;
+  resolution?: 'approved' | 'denied' | 'auto-approved' | 'escalated' | 'timed-out';
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `registerWorkflow` | `(workflow) => void` | Register a workflow |
+| `getWorkflow` | `(id) => ApprovalWorkflow \| undefined` | Get workflow by id |
+| `listWorkflows` | `() => ApprovalWorkflow[]` | List all workflows |
+| `startApproval` | `(workflowId, runId, agentId, proposal, riskScore) => ActiveApproval` | Start approval |
+| `vote` | `(approvalId, approver, approved, reason?) => ActiveApproval` | Cast a vote |
+| `processTimeouts` | `() => ActiveApproval[]` | Escalate or timeout stale approvals |
+| `getActive` | `(id) => ActiveApproval \| undefined` | Get active approval |
+| `listActive` | `(runId?) => ActiveApproval[]` | List active approvals |
+
+---
+
+### Audit export
+
+```ts
+import { exportTraces, generateEvidenceBundle } from '@veridex/agents-control-plane';
+
+// Export traces in JSON, JSONL, or CSV
+const result = await exportTraces(traces, 'jsonl', {
+  includeMetadata: true,
+  startTime: Date.now() - 86_400_000,
+  compress: false,
+});
+// result.data — the exported string
+// result.contentHash — SHA-256 hash for verification
+
+// Generate a tamper-evident evidence bundle
+const bundle = await generateEvidenceBundle(
+  traceId,
+  policyDecisions,
+  approvalDecisions,
+);
+// bundle.contentHash — combined hash of trace + policy + approvals
+```
+
+**Types:**
+
+```ts
+type ExportFormat = 'json' | 'jsonl' | 'csv';
+
+interface AuditExportResult {
+  format: ExportFormat;
+  data: string | Buffer;
+  contentHash: string;
+  exportedAt: number;
+}
+
+interface EvidenceBundle {
+  id: string;
+  runId: string;
+  version: string;
+  traceHash: string;
+  policyHash: string;
+  approvalHash: string;
+  contentHash: string;
+  generatedAt: number;
+  traceId: string;
+  policyDecisions: unknown[];
+  approvalDecisions: unknown[];
+}
+```
+
+---
+
+### `TenantManager`
+
+Multi-tenant isolation with per-tenant configuration.
+
+```ts
+import { TenantManager } from '@veridex/agents-control-plane';
+
+const tenants = new TenantManager();
+
+const tenant = tenants.create({
+  name: 'Acme Corp',
+  config: {
+    maxConcurrentRuns: 10,
+    dailySpendLimitUSD: 500,
+    allowedProviders: ['openai'],
+    auditEnabled: true,
+    traceRetentionDays: 90,
+    deploymentMode: 'managed',
+  },
+});
+
+// Update config
+tenants.update(tenant.id, { dailySpendLimitUSD: 1000 });
+
+// List all tenants
+const all = tenants.list();
+```
+
+**Types:**
+
+```ts
+interface Tenant {
+  id: string;
+  name: string;
+  status: 'active' | 'suspended' | 'pending';
+  config: TenantConfig;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+}
+
+interface TenantConfig {
+  maxConcurrentRuns?: number;
+  dailySpendLimitUSD?: number;
+  allowedProviders?: string[];
+  auditEnabled?: boolean;
+  traceRetentionDays?: number;
+  deploymentMode?: 'local' | 'self-hosted' | 'private-cloud' | 'managed';
+}
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `create` | `(options) => Tenant` | Create a tenant |
+| `get` | `(id) => Tenant \| undefined` | Get by id |
+| `list` | `() => Tenant[]` | List all tenants |
+| `update` | `(id, config) => Tenant \| undefined` | Update tenant config |
+| `delete` | `(id) => boolean` | Remove a tenant |
+
+---
+
+### `ControlPlaneService` and HTTP API
+
+Deploy the control plane as an HTTP service.
+
+```ts
+import { startControlPlaneServer } from '@veridex/agents-control-plane';
+
+const server = await startControlPlaneServer({
+  port: 4500,
+  storageBackend: 'postgres',
+  postgres: {
+    connectionString: process.env.DATABASE_URL,
+  },
+  authRequired: true,
+  bootstrapTokens: [
+    { token: process.env.ADMIN_TOKEN, role: 'admin' },
+  ],
+  traceRetentionDays: 90,
+});
+```
+
+### `RemoteControlPlaneClient`
+
+Connect to a running control plane server from agent runtimes.
+
+```ts
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: 'https://cp.example.com',
+  token: process.env.CP_TOKEN,
+  tenantId: 'tenant-acme',
+});
+```
+
+### Persistence backends
+
+| Backend | Class | Use case |
+|---------|-------|----------|
+| In-memory | `InMemoryTraceStore` | Tests, prototyping |
+| File-based | `JSONFileMetadataStore`, `FileTraceStoreBackend` | Single-node deploys |
+| Postgres | `PostgresMetadataStore`, `PostgresTraceStoreBackend` | Production multi-node |
+
+**Config:**
+
+```ts
+interface ControlPlaneServiceConfig {
+  storageBackend?: 'file' | 'postgres';
+  host?: string;
+  port?: number;
+  dataDir?: string;
+  authRequired?: boolean;
+  tenantHeader?: string;
+  bootstrapTokens?: Array<string | { token: string; role?: ControlPlaneRole; tenantIds?: string[] }>;
+  approvalSweepIntervalMs?: number;
+  tracePurgeIntervalMs?: number;
+  traceRetentionDays?: number;
+  postgres?: { connectionString: string; ssl?: boolean };
+}
+```
+
+---
+
+## Full working example
+
+This example shows how the packages fit together: an agent with tools, policy, approvals, memory, and a React UI.
+
+```ts
+// === 1. Define tools ===
+import { createAgent, tool, OpenAIProvider,
+         blockSafetyClasses, requireApprovalFor, maxRunSpendUSD } from '@veridex/agents';
+import { z } from 'zod';
+
+const getBalance = tool({
+  name: 'get_balance',
+  description: 'Check account balance',
+  input: z.object({ accountId: z.string() }),
+  safetyClass: 'read',
+  async execute({ input }) {
+    return { success: true, llmOutput: `Account ${input.accountId} has $1,234.56` };
+  },
+});
+
+const transferFunds = tool({
+  name: 'transfer_funds',
+  description: 'Transfer funds between accounts',
+  input: z.object({
+    from: z.string(),
+    to: z.string(),
+    amount: z.number().positive(),
+  }),
+  safetyClass: 'financial',
+  async execute({ input }) {
+    return { success: true, llmOutput: `Transferred $${input.amount} from ${input.from} to ${input.to}` };
+  },
+});
+
+// === 2. Create the agent with policy ===
+const agent = createAgent(
+  {
+    id: 'treasury-agent',
+    name: 'Treasury Agent',
+    model: { provider: 'openai', model: 'gpt-4o' },
+    instructions: 'Help the finance team manage treasury operations safely.',
+    tools: [getBalance, transferFunds],
+    maxTurns: 5,
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+    enableTracing: true,
+    enableCheckpoints: true,
+  },
+);
+
+// === 3. Configure policy ===
+const toolMap = new Map(agent.tools.list().map(t => [t.name, t]));
+agent.policyEngine.register(blockSafetyClasses(['destructive', 'privileged'], toolMap));
+agent.policyEngine.register(requireApprovalFor(['financial'], toolMap));
+agent.policyEngine.register(maxRunSpendUSD(100));
+
+// === 4. Set up approval handler ===
+agent.approvals.addRoute({
+  match: (proposal, policy) => policy.verdict === 'escalate',
+  mode: 'human_required',
+  timeoutMs: 300_000,
+});
+
+// === 5. Listen for events ===
+agent.events.on('tool_started', (e) => console.log(`Tool: ${e.toolName}`));
+agent.events.on('approval_requested', (e) => console.log(`Approval needed: ${e.requestId}`));
+
+// === 6. Run ===
+const result = await agent.run('Transfer $500 from ACCT-A to ACCT-B');
+console.log(result.output);
+console.log(result.state); // 'completed' or 'suspended' if approval needed
+```
+
+```tsx
+// === 7. React UI ===
+import { AgentProvider, useRun, useApprovals, useBudget } from '@veridex/agents-react';
+
+function TreasuryApp() {
+  return (
+    <AgentProvider runtime={agent}>
+      <AgentChat />
+      <ApprovalInbox />
+      <BudgetBar />
+    </AgentProvider>
+  );
+}
+
+function AgentChat() {
+  const { run, result, isLoading } = useRun();
+  return (
+    <div>
+      <button onClick={() => run('Check balance for ACCT-A')} disabled={isLoading}>
+        Ask Agent
+      </button>
+      {result && <p>{result.output}</p>}
+    </div>
+  );
+}
+
+function ApprovalInbox() {
+  const { pending, resolve } = useApprovals();
+  return (
+    <ul>
+      {pending.map(req => (
+        <li key={req.id}>
+          {req.proposal.toolName}: {JSON.stringify(req.proposal.arguments)}
+          <button onClick={() => resolve(req.id, true)}>Approve</button>
+          <button onClick={() => resolve(req.id, false)}>Deny</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BudgetBar() {
+  const { snapshot } = useBudget();
+  return <progress value={snapshot.percentUtilized} max={100} />;
+}
+```
+
+---
+
+<Cards>
+  <Card title="Veridex Agents Guide" href="/guides/veridex-agents">
+    Narrative walkthrough with architecture and examples
+  </Card>
+  <Card title="Agent SDK Reference" href="/api-reference/agent-sdk">
+    Payment, identity, trust, and protocol-routing primitives
+  </Card>
+  <Card title="Architecture Decisions" href="/resources/architecture-decisions">
+    ADRs explaining the design rationale
+  </Card>
+</Cards>

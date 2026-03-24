@@ -168,11 +168,28 @@ await sdk.multisig.configurePolicy({
 });
 ```
 
+### ADR-0042: Veridex Agent Fabric as a General-Purpose Runtime
+**Status:** Proposed
+
+This decision expands Veridex from "agent commerce infrastructure" into a broader
+agent-runtime thesis:
+
+- `@veridex/agents` should be usable for general-purpose agents, not only commerce agents
+- payments remain a native advantage, but not a mandatory starting point
+- the framework must compete on orchestration maturity, TypeScript DX, and governance
+- React hooks, adapters, OpenClaw interop, and the control plane are part of the framework story
+
+The goal is to combine:
+
+- serious runtime primitives
+- strong TypeScript ergonomics
+- governance, approvals, traces, payments, and enterprise control by default
+
 ---
 
 ## Full ADR Index
 
-The complete set of 37+ ADRs is maintained in the source repository under
+The complete set of 42+ ADRs is maintained in the source repository under
 `docs/architecture/decisions/`. Each ADR follows a consistent template with
 Context, Decision, Status, and Consequences sections.
 
@@ -196,3 +213,4 @@ Context, Decision, Status, and Consequences sections.
 | 0034 | Decentralized Relayer Network | Accepted |
 | 0035 | Enterprise Treasury AI Trust | Accepted |
 | 0037 | Threshold Multisig | Proposed |
+| 0042 | Veridex Agent Fabric as a General-Purpose Runtime | Proposed |

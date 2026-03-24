@@ -4,12 +4,14 @@
   "description": "Veridex Protocol documentation — powered by Nextra",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-next.mjs dev",
     "dev": "next dev",
     "generate:llms": "node scripts/generate-llms-full.mjs",
-    "prebuild": "node scripts/generate-llms-full.mjs",
+    "prebuild": "node scripts/prepare-next.mjs build",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean": "node scripts/prepare-next.mjs all"
   },
   "keywords": ["veridex", "documentation", "nextra"],
   "author": "Veridex Protocol",

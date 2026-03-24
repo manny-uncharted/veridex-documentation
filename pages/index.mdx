@@ -1,6 +1,6 @@
 ---
 title: Veridex Protocol
-description: Cross-chain passkey authentication, autonomous agent payments, and on-chain identity for the multi-chain web
+description: Cross-chain passkey authentication, general-purpose agent runtimes, autonomous agent payments, and on-chain identity for the multi-chain web
 ---
 
 import Link from "next/link"
@@ -9,7 +9,7 @@ import Link from "next/link"
 <section className="vdx-hero">
   <div className="vdx-hero-badge">Open-source protocol</div>
   <h1 className="vdx-hero-title">{"One passkey. Any chain."}<br/>{"Fully self-custodial."}</h1>
-  <p className="vdx-hero-subtitle">{"Cross-chain passkey wallets, autonomous agent payments, and on-chain identity — integrate in minutes."}</p>
+  <p className="vdx-hero-subtitle">{"Cross-chain passkey wallets, general-purpose agent runtimes, autonomous payments, and on-chain identity — integrate in minutes."}</p>
   <div className="vdx-hero-actions">
     <Link href="/getting-started/quick-start" className="vdx-btn vdx-btn-primary">{"Get Started"}</Link>
     <Link href="/api-reference/sdk" className="vdx-btn vdx-btn-secondary">{"API Reference"}</Link>
@@ -30,14 +30,14 @@ import Link from "next/link"
     <span className="vdx-nav-icon">{"📖"}</span>
     <span className="vdx-nav-card-text">
       <span className="vdx-nav-card-title">{"Guides"}</span>
-      <span className="vdx-nav-card-desc">{"Step-by-step walkthroughs for wallets, transfers, sessions, and agents."}</span>
+      <span className="vdx-nav-card-desc">{"Step-by-step walkthroughs for wallets, transfers, sessions, agent runtimes, and payments."}</span>
     </span>
   </Link>
   <Link href="/api-reference/sdk" className="vdx-nav-card">
     <span className="vdx-nav-icon">{"⚡"}</span>
     <span className="vdx-nav-card-text">
       <span className="vdx-nav-card-title">{"API Reference"}</span>
-      <span className="vdx-nav-card-desc">{"Complete SDK, Agent SDK, and Relayer API documentation."}</span>
+      <span className="vdx-nav-card-desc">{"Complete SDK, agents framework, Agent SDK, and Relayer API documentation."}</span>
     </span>
   </Link>
   <Link href="/chains/evm" className="vdx-nav-card">
@@ -63,7 +63,7 @@ import Link from "next/link"
   </Link>
 </nav>
 <section className="vdx-packages">
-  <h2 className="vdx-section-title">{"Two packages, one protocol"}</h2>
+  <h2 className="vdx-section-title">{"Protocol and runtime packages"}</h2>
   <div className="vdx-package-grid">
     <div className="vdx-package-card">
       <div className="vdx-package-name">{"@veridex/sdk"}</div>
@@ -76,6 +76,18 @@ import Link from "next/link"
       <div className="vdx-package-desc">{"Autonomous payments, on-chain identity, reputation scoring, trust gates, and MCP tools for AI agents."}</div>
       <code className="vdx-package-install">{"npm install @veridex/agentic-payments"}</code>
       <Link href="/api-reference/agent-sdk" className="vdx-package-link">{"View Agent docs →"}</Link>
+    </div>
+    <div className="vdx-package-card">
+      <div className="vdx-package-name">{"@veridex/agents"}</div>
+      <div className="vdx-package-desc">{"General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, transports, and policy-aware execution."}</div>
+      <code className="vdx-package-install">{"npm install @veridex/agents zod"}</code>
+      <Link href="/api-reference/agents-framework" className="vdx-package-link">{"View framework docs →"}</Link>
+    </div>
+    <div className="vdx-package-card">
+      <div className="vdx-package-name">{"@veridex/agents-control-plane"}</div>
+      <div className="vdx-package-desc">{"Remote governance layer for approvals, policy packs, traces, audit export, and Postgres-backed managed deployments."}</div>
+      <code className="vdx-package-install">{"npm install @veridex/agents-control-plane"}</code>
+      <Link href="/guides/veridex-agents" className="vdx-package-link">{"View runtime guide →"}</Link>
     </div>
   </div>
 </section>
@@ -109,12 +121,14 @@ const prepared = await sdk.prepareTransfer({
     <Link href="/guides/session-keys" className="vdx-explore-item">{"Session Keys →"}</Link>
     <Link href="/guides/spending-limits" className="vdx-explore-item">{"Spending Limits →"}</Link>
     <Link href="/guides/agent-payments" className="vdx-explore-item">{"Agent Payments →"}</Link>
+    <Link href="/guides/veridex-agents" className="vdx-explore-item">{"Veridex Agents →"}</Link>
     <Link href="/guides/agent-identity" className="vdx-explore-item">{"Agent Identity (ERC-8004) →"}</Link>
     <Link href="/guides/enterprise-manager" className="vdx-explore-item">{"Enterprise Manager →"}</Link>
     <Link href="/guides/multisig-wallet" className="vdx-explore-item">{"Multisig Wallets →"}</Link>
     <Link href="/guides/balance-watching" className="vdx-explore-item">{"Balance Watching →"}</Link>
     <Link href="/guides/error-handling" className="vdx-explore-item">{"Error Handling →"}</Link>
     <Link href="/resources/architecture-decisions" className="vdx-explore-item">{"Architecture Decisions →"}</Link>
+    <Link href="/resources/contributing" className="vdx-explore-item">{"Contributing →"}</Link>
     <Link href="/resources/glossary" className="vdx-explore-item">{"Glossary →"}</Link>
   </div>
 </section>

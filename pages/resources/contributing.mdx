@@ -1,0 +1,92 @@
+---
+title: Contributing
+description: How to contribute to the Veridex docs and agent framework, plus the standards we try to hold across the runtime and protocol layers
+---
+
+import { Callout } from "../../components/mdx"
+
+# Contributing
+
+We want contributions across:
+
+- docs corrections
+- examples
+- tests
+- runtime improvements
+- interop bridges
+- control-plane hardening
+
+<Callout type="warning">
+  Some of the newer agent-framework surfaces are still evolving and parts of the docs may still be incomplete or slightly behind the code. If you notice a mismatch, please tell us or send a fix. Those reports are useful, not annoying.
+</Callout>
+
+## What to read first
+
+- The root repository guide: [`CONTRIBUTING.md`](https://github.com/Veridex-Protocol/demo/blob/main/CONTRIBUTING.md)
+- Internal ADRs under `docs/architecture/decisions/`
+- The framework overview at `/guides/veridex-agents`
+
+## Contribution standards
+
+### Product standards
+
+- Keep `@veridex/agents` useful for general-purpose agents, not only commerce agents.
+- Keep payments, identity, and trust **native but optional**.
+- Prefer explicit typed surfaces over magic or hidden runtime behavior.
+- Preserve interoperability where possible instead of introducing closed abstractions.
+
+### Runtime standards
+
+- Keep the core runtime small and inspectable.
+- New tools, hooks, and transports should be typed and documented.
+- Changes that affect runtime semantics should include tests.
+- New enterprise or control-plane behavior should explain tenancy, persistence, and failure behavior clearly.
+
+### Documentation standards
+
+- Update docs when public APIs or package boundaries change.
+- If a change alters framework direction, add or update an ADR.
+- Be honest about maturity. If something is still rough, say so plainly.
+- Prefer examples that show real use, not only idealized demos.
+
+## Where to contribute
+
+| Area | Good for |
+|---|---|
+| `docs/` | ADRs, internal architecture notes, package and implementation docs |
+| `documentation/` | Public docs site pages, navigation, onboarding, examples |
+| `packages/agents` | Core runtime, tools, hooks, memory, transports, policies |
+| `packages/agents-react` | React provider and hooks |
+| `packages/agents-adapters` | Imports, exports, and live bridges |
+| `packages/agents-openclaw` | OpenClaw / Pi interop |
+| `packages/agents-control-plane` | Control-plane service, clients, and persistence |
+| `packages/agent-sdk` | Payment protocols, trust, identity, and commerce primitives |
+| `packages/sdk` | Passkeys, sessions, wallets, and chain integrations |
+
+## Pull request expectations
+
+- explain what changed
+- explain why it changed
+- include tests when behavior changed
+- update docs when public behavior changed
+- avoid weakening existing safety or control boundaries without an ADR
+
+## Especially useful contributions right now
+
+- better examples for general-purpose agents
+- migration examples from LangGraph, OpenAI Agents, and OpenClaw
+- docs clarifying package boundaries
+- more transport and interop tests
+- control-plane operational hardening and deployment feedback
+
+## If you find something broken
+
+Please report:
+
+- the package
+- the version or commit
+- what you expected
+- what actually happened
+- a small repro if possible
+
+That helps much more than a generic “it doesn’t work.”

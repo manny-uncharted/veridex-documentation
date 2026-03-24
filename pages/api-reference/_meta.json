@@ -1,6 +1,7 @@
 {
   "sdk": "Core SDK",
   "agent-sdk": "Agent SDK",
+  "agents-framework": "Agents Framework",
   "relayer": "Relayer API",
   "types": "Types",
   "errors": "Errors"

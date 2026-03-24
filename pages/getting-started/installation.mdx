@@ -1,16 +1,21 @@
 ---
 title: Installation
-description: Install the Veridex SDK and Agent SDK for your development environment
+description: Install the Veridex protocol SDKs and the Veridex agent framework package family
 ---
 
 import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../../components/mdx"
 
 # Installation
 
-Veridex provides two packages depending on your use case:
+Veridex now provides a protocol layer and a runtime layer:
 
 - **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, and cross-chain transfers
 - **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools
+- **`@veridex/agents`** — General-purpose TypeScript agent runtime
+- **`@veridex/agents-react`** — React hooks and provider for the runtime
+- **`@veridex/agents-adapters`** — Adapters and live bridges for external runtimes
+- **`@veridex/agents-openclaw`** — OpenClaw / Pi compatibility bridge
+- **`@veridex/agents-control-plane`** — Control-plane service and client for approvals, traces, policy, and audit
 
 ## Prerequisites
 
@@ -86,6 +91,41 @@ For building autonomous AI agents that can make payments:
   The Agent SDK (`@veridex/agentic-payments`) includes `@veridex/sdk` as a dependency and re-exports core functions like `createSDK` and `generateSecp256k1KeyPair` for convenience.
 </Callout>
 
+## Install the Agents Framework
+
+For general-purpose agents, workflow-style orchestration, interop, and enterprise control:
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @veridex/agents zod
+    npm install @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @veridex/agents zod
+    yarn add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @veridex/agents zod
+    pnpm add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @veridex/agents zod
+    bun add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="warning">
+  The new framework packages are implemented and usable, but still evolving. Some APIs may still change and parts of the docs may still be catching up. We welcome fixes and feedback.
+</Callout>
+
 ## Package Comparison
 
 | Feature | `@veridex/sdk` | `@veridex/agentic-payments` |
@@ -107,6 +147,16 @@ For building autonomous AI agents that can make payments:
 | Audit logging & compliance | — | ✅ `AuditLogger`, `ComplianceExporter` |
 | Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks, Monad | All + `MonadChainClient`, `StacksChainClient` |
 | Pyth price oracle | — | ✅ `PythOracle` |
+
+## Agent Fabric Package Comparison
+
+| Package | Main job | Best for |
+|---------|----------|----------|
+| `@veridex/agents` | Runtime core | Tools, hooks, memory, checkpoints, transports, policy-aware runs |
+| `@veridex/agents-react` | UI integration | React chat, approvals, trace views, budget and identity dashboards |
+| `@veridex/agents-adapters` | Import/export and bridges | LangGraph, OpenAI Agents, PydanticAI, OpenAPI migration |
+| `@veridex/agents-openclaw` | OpenClaw / Pi interop | Skill import, context-file import, ACP collaboration |
+| `@veridex/agents-control-plane` | Governance plane | Tenants, approvals, policy packs, traces, audit export, remote service |
 
 ## TypeScript Configuration
 
@@ -175,6 +225,34 @@ const agent = await createAgentWallet({
 });
 ```
 
+### General-purpose runtime (`@veridex/agents`)
+
+```typescript
+import { createAgent, tool } from '@veridex/agents';
+import { z } from 'zod';
+
+const searchDocs = tool({
+  name: 'search_docs',
+  description: 'Search internal documentation by keyword',
+  input: z.object({ query: z.string() }),
+  safetyClass: 'read',
+  async execute({ input }) {
+    return {
+      success: true,
+      llmOutput: `Would search docs for ${input.query}`,
+    };
+  },
+});
+
+const agent = createAgent({
+  id: 'docs-agent',
+  name: 'Docs Agent',
+  model: { provider: 'openai', model: 'gpt-4o-mini' },
+  instructions: 'Help users find accurate documentation quickly.',
+  tools: [searchDocs],
+});
+```
+
 ### Stacks Integration
 
 ```typescript
@@ -233,5 +311,8 @@ npx tsx test-sdk.ts
   </Card>
   <Card title="Agent SDK Guide" href="/guides/agent-payments">
     Build autonomous agent payments
+  </Card>
+  <Card title="Veridex Agents" href="/guides/veridex-agents">
+    Build general-purpose and payment-capable agents
   </Card>
 </Cards>

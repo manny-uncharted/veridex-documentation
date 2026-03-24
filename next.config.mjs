@@ -1,4 +1,5 @@
 import nextra from 'nextra';
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js';
 
 const withNextra = nextra({
   theme: 'nextra-theme-docs',
@@ -7,7 +8,11 @@ const withNextra = nextra({
   latex: false,
 });
 
-export default withNextra({
+export default (phase) => withNextra({
+  // Keep dev and production build artifacts isolated.
+  // Use the official Next phase API rather than NODE_ENV so every load phase
+  // resolves the same output directory consistently.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
   reactStrictMode: true,
   images: {
     unoptimized: true,

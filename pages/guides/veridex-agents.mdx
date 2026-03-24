@@ -1,0 +1,1266 @@
+---
+title: Veridex Agents — Guide
+description: Build, deploy, and govern AI agents with the Veridex Agent Fabric. Architecture walkthrough, step-by-step tutorials, and production patterns.
+---
+
+import { Callout, Cards, Card, Steps, Tabs } from "../../components/mdx"
+
+# Veridex Agents Guide
+
+This guide walks you through the Veridex Agent Fabric from first install to production deployment. For detailed API signatures see the [API Reference](/api-reference/agents-framework).
+
+---
+
+## What is the Agent Fabric?
+
+The Veridex Agent Fabric is a modular TypeScript framework for building AI agents that are **safe**, **observable**, and **interoperable**. It is split into five packages so you only install what you need:
+
+| Package | Purpose |
+|---------|---------|
+| `@veridex/agents` | Core runtime — agent loop, tools, policy, memory, checkpoints, events, transports |
+| `@veridex/agents-react` | React hooks and provider for agent-powered UIs |
+| `@veridex/agents-adapters` | Import/export agents between Veridex, OpenAI, LangGraph, PydanticAI |
+| `@veridex/agents-openclaw` | Bridge for OpenClaw / Pi agent ecosystems — context files, skills, ACP |
+| `@veridex/agents-control-plane` | Enterprise governance — tenants, policy packs, trace storage, approval workflows |
+
+---
+
+## Architecture overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Your Application                        │
+│  ┌──────────────┐  ┌──────────────────┐  ┌───────────────────┐ │
+│  │  React UI    │  │  REST / WebSocket│  │  CLI / Script     │ │
+│  │  (agents-    │  │  Server          │  │                   │ │
+│  │   react)     │  │                  │  │                   │ │
+│  └──────┬───────┘  └────────┬─────────┘  └────────┬──────────┘ │
+│         │                   │                      │            │
+│         └───────────────────┼──────────────────────┘            │
+│                             ▼                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    AgentRuntime                           │   │
+│  │  ┌─────────┐ ┌────────────┐ ┌────────────┐ ┌─────────┐  │   │
+│  │  │  Tools  │ │   Policy   │ │  Approvals │ │  Memory │  │   │
+│  │  │ Registry│ │   Engine   │ │  Manager   │ │ Manager │  │   │
+│  │  └─────────┘ └────────────┘ └────────────┘ └─────────┘  │   │
+│  │  ┌─────────┐ ┌────────────┐ ┌────────────┐ ┌─────────┐  │   │
+│  │  │ Context │ │ Checkpoint │ │   Event    │ │  Audit  │  │   │
+│  │  │Compiler │ │  Manager   │ │   Bus      │ │ Emitter │  │   │
+│  │  └─────────┘ └────────────┘ └────────────┘ └─────────┘  │   │
+│  │  ┌─────────┐ ┌────────────┐ ┌────────────┐              │   │
+│  │  │  Hook   │ │   Model    │ │ Transports │              │   │
+│  │  │Registry │ │  Registry  │ │ MCP/ACP/A2A│              │   │
+│  │  └─────────┘ └────────────┘ └────────────┘              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                             ▼                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Control Plane (optional)                     │   │
+│  │  PolicyPacks │ Tenants │ TraceStore │ ApprovalWorkflows   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Runtime loop
+
+Every call to `agent.run(input)` executes a deterministic loop:
+
+1. **Context compilation** — instructions, memory, conversation history are assembled within the token budget.
+2. **Model call** — the compiled context is sent to the configured LLM provider.
+3. **Proposal extraction** — the model response is parsed into one or more `ActionProposal` objects (tool calls, final answers, handoffs, memory writes).
+4. **Policy evaluation** — every proposal is checked against registered policy rules. Verdicts: `allow`, `deny`, or `escalate`.
+5. **Approval routing** — escalated proposals are routed to the appropriate approval mode (auto, human, dual, policy pack).
+6. **Execution** — allowed proposals are executed (tool calls run, memory written, handoffs initiated).
+7. **Event emission** — every step emits typed trace events on the `EventBus`.
+8. **Turn boundary** — the loop repeats from step 1 until a final answer is produced, the max turn count is reached, or the run is suspended for approval.
+
+<Callout type="info">
+  The runtime never executes a tool without first checking policy. There is no bypass.
+</Callout>
+
+---
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 18+ or Bun 1.0+
+- An OpenAI or Anthropic API key (or any compatible provider)
+
+### Install
+
+<Steps>
+### Install the core package
+
+```bash
+npm install @veridex/agents zod
+```
+
+### (Optional) Install companion packages
+
+```bash
+# React hooks
+npm install @veridex/agents-react
+
+# Framework adapters
+npm install @veridex/agents-adapters
+
+# OpenClaw bridge
+npm install @veridex/agents-openclaw
+
+# Enterprise control plane
+npm install @veridex/agents-control-plane
+```
+</Steps>
+
+---
+
+## Tutorial: Your first agent
+
+This section builds a working agent step by step. Each step adds one capability so you can see how the pieces connect.
+
+### Step 1 — Minimal agent
+
+The simplest possible agent: no tools, just a model and instructions.
+
+```ts
+import { createAgent, OpenAIProvider } from '@veridex/agents';
+
+const agent = createAgent(
+  {
+    id: 'greeter',
+    name: 'Greeter',
+    model: { provider: 'openai', model: 'gpt-4o-mini' },
+    instructions: 'You are a friendly greeter. Say hello and ask how you can help.',
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+  },
+);
+
+const result = await agent.run('Hi there!');
+console.log(result.output);
+// → "Hello! How can I help you today?"
+console.log(result.state);
+// → "completed"
+```
+
+**What happened:**
+- `createAgent` built an `AgentRuntime` with all subsystems initialized.
+- `agent.run()` compiled context (instructions only), called the model, got a final answer, and returned.
+- No tools were involved, so the loop completed in one turn.
+
+### Step 2 — Add tools
+
+Tools give the agent the ability to take actions. Every tool has a Zod-validated input schema and a `safetyClass` that the policy engine uses.
+
+```ts
+import { createAgent, tool, OpenAIProvider } from '@veridex/agents';
+import { z } from 'zod';
+
+const lookupOrder = tool({
+  name: 'lookup_order',
+  description: 'Look up an order by its ID.',
+  input: z.object({
+    orderId: z.string().regex(/^ORD-\d+$/),
+  }),
+  safetyClass: 'read',
+  async execute({ input }) {
+    // In production, this would query your database
+    return {
+      success: true,
+      llmOutput: `Order ${input.orderId}: 2x Widget, shipped, arriving Thursday.`,
+      data: { orderId: input.orderId, status: 'shipped', eta: 'Thursday' },
+    };
+  },
+});
+
+const agent = createAgent(
+  {
+    id: 'order-agent',
+    name: 'Order Agent',
+    model: { provider: 'openai', model: 'gpt-4o-mini' },
+    instructions: 'Help customers check their order status.',
+    tools: [lookupOrder],
+    maxTurns: 5,
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+  },
+);
+
+const result = await agent.run('Where is my order ORD-1042?');
+console.log(result.output);
+// → "Your order ORD-1042 contains 2x Widget. It has been shipped and is arriving Thursday."
+console.log(result.turns.length);
+// → 2 (first turn: tool call, second turn: final answer)
+```
+
+**What happened:**
+- The model decided to call `lookup_order` with `{ orderId: "ORD-1042" }`.
+- The runtime validated the input against the Zod schema.
+- Since `safetyClass` is `read`, the default policy auto-allowed execution.
+- The tool returned `llmOutput` which the model used to compose the final answer.
+
+### Step 3 — Add policy rules
+
+Policy rules control what the agent can and cannot do. Rules are evaluated in priority order and produce verdicts.
+
+```ts
+import {
+  blockSafetyClasses,
+  requireApprovalFor,
+  maxRunSpendUSD,
+  maxTokenBudget,
+} from '@veridex/agents';
+
+// Block destructive and privileged tools entirely
+agent.policyEngine.register(
+  blockSafetyClasses(['destructive', 'privileged'], agent.tools.list())
+);
+
+// Financial tools require human approval
+agent.policyEngine.register(
+  requireApprovalFor(['financial'], agent.tools.list())
+);
+
+// Cap spend per run
+agent.policyEngine.register(maxRunSpendUSD(50));
+
+// Cap token usage per run
+agent.policyEngine.register(maxTokenBudget(100_000));
+```
+
+You can also write custom rules:
+
+```ts
+agent.policyEngine.register({
+  id: 'business-hours-only',
+  name: 'Business Hours Only',
+  description: 'Block tool executions outside business hours.',
+  priority: 5,
+  evaluate(ctx) {
+    const hour = new Date().getHours();
+    if (hour < 9 || hour >= 17) {
+      return { verdict: 'deny', reason: 'Outside business hours (9am–5pm).' };
+    }
+    return { verdict: 'allow' };
+  },
+});
+```
+
+### Step 4 — Set up approvals
+
+When a policy rule returns `escalate`, the approval manager routes the request to the right handler.
+
+```ts
+// Route escalated proposals to human approval with a 5-minute timeout
+agent.approvals.addRoute({
+  match: (proposal, policy) => policy.verdict === 'escalate',
+  mode: 'human_required',
+  timeoutMs: 300_000,
+});
+
+// Register a handler that gets called when approval is needed
+agent.approvals.registerHandler('human_required', async (request) => {
+  // In production: send to Slack, email, or a dashboard
+  console.log(`Approval needed for: ${request.proposal.toolName}`);
+  console.log(`Arguments: ${JSON.stringify(request.proposal.arguments)}`);
+
+  // For this example, auto-approve
+  return { approved: true, decidedBy: 'auto-test' };
+});
+```
+
+When the agent tries to call a `financial` tool, the run will suspend, emit an `approval_requested` event, and wait for `resolve()` or timeout.
+
+### Step 5 — Use memory
+
+The memory manager stores context across turns and sessions. Four tiers serve different scopes:
+
+| Tier | Scope | Use case |
+|------|-------|----------|
+| `working` | Current run | Scratch notes the agent uses within a single run |
+| `episodic` | Session | Facts learned during a conversation session |
+| `semantic` | Global | Long-term knowledge that persists across sessions |
+| `procedural` | Global | Tagged routines and procedures the agent can recall |
+
+```ts
+// Write a memory
+await agent.memory.write({
+  tier: 'episodic',
+  content: 'Customer prefers email notifications over SMS.',
+  scope: 'session',
+  tags: ['preferences', 'notifications'],
+  confidence: 0.95,
+  ttlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
+
+// Search memory
+const prefs = await agent.memory.search({
+  query: 'notification preference',
+  tiers: ['episodic', 'semantic'],
+  limit: 5,
+});
+
+// The context compiler automatically includes relevant memory in the prompt
+```
+
+### Step 6 — Listen to events
+
+The event bus emits typed events for every runtime action. Use it for logging, metrics, UI updates, or audit.
+
+```ts
+// Specific event types
+agent.events.on('run_started', (e) => {
+  console.log(`Run ${e.runId} started`);
+});
+
+agent.events.on('tool_completed', (e) => {
+  console.log(`Tool ${e.toolName} completed in ${e.durationMs}ms`);
+});
+
+agent.events.on('policy_evaluated', (e) => {
+  console.log(`Policy verdict: ${e.verdict} for ${e.toolName}`);
+});
+
+// Or listen to everything
+agent.events.onAny((e) => {
+  metrics.increment(`agent.event.${e.type}`);
+});
+
+// Access the full immutable event log after a run
+const log = agent.eventLog;
+const toolEvents = log.getByType('tool_completed');
+const allEvents = log.getAll();
+```
+
+**Available event types:**
+`run_started`, `run_completed`, `run_failed`, `run_suspended`, `turn_started`, `turn_completed`, `tool_started`, `tool_completed`, `tool_failed`, `model_called`, `model_responded`, `policy_evaluated`, `approval_requested`, `approval_resolved`, `memory_written`, `checkpoint_saved`, `handoff_initiated`, `handoff_completed`
+
+### Step 7 — Enable checkpoints
+
+Checkpoints let the agent suspend (e.g., while waiting for approval) and resume later without losing state.
+
+```ts
+const agent = createAgent(
+  { /* ... */ },
+  {
+    modelProviders: { /* ... */ },
+    enableCheckpoints: true,
+  },
+);
+
+// After a run suspends:
+const result = await agent.run('Transfer $500 to ACCT-B');
+if (result.state === 'suspended') {
+  // State was automatically checkpointed
+  const checkpoint = await agent.checkpoints.loadLatest(result.runId);
+  console.log(`Checkpoint saved at turn ${checkpoint.turnIndex}`);
+
+  // Later, after approval is granted, resume from the checkpoint
+  const state = agent.checkpoints.parseState(checkpoint);
+  // ... restore and continue the run
+}
+```
+
+---
+
+## Using hooks
+
+Hooks run at specific phases of the runtime loop. They can annotate context, override execution flow, or inject side effects. Hooks are useful for cross-cutting concerns like logging, rate limiting, or feature flags.
+
+```ts
+// Log every tool call
+agent.hooks.register({
+  name: 'log-tool-calls',
+  phase: 'before_tool',
+  priority: 10,
+  async execute(context) {
+    console.log(`Calling tool: ${context.toolName}`);
+    console.log(`Arguments: ${JSON.stringify(context.arguments)}`);
+  },
+});
+
+// Add metadata to every run
+agent.hooks.register({
+  name: 'add-request-id',
+  phase: 'before_run',
+  priority: 1,
+  async execute(context) {
+    return {
+      annotations: { requestId: crypto.randomUUID() },
+    };
+  },
+});
+
+// Block runs during maintenance
+agent.hooks.register({
+  name: 'maintenance-window',
+  phase: 'before_run',
+  async execute() {
+    if (isMaintenanceWindow()) {
+      return { override: 'deny', reason: 'System is in maintenance mode.' };
+    }
+  },
+});
+```
+
+**Hook phases** (in execution order):
+`before_run` → `before_turn` → `before_tool` → `after_tool` → `after_turn` → `after_run` / `on_error`
+
+**Override values:**
+- `continue` — proceed normally
+- `retry` — re-attempt the current step
+- `pause` — suspend the run (creates a checkpoint)
+- `deny` — abort the run with the given reason
+
+---
+
+## Using transports
+
+Transports expose the agent to external systems via standard protocols.
+
+### MCP (Model Context Protocol)
+
+Expose your agent's tools to any MCP-compatible LLM host (Claude Desktop, Cursor, etc.).
+
+```ts
+import { MCPServerTransport } from '@veridex/agents';
+
+const mcp = new MCPServerTransport({
+  serverName: 'my-agent-mcp',
+  serverVersion: '1.0.0',
+  tools: agent.tools.list(),
+});
+
+await mcp.connect();
+// External LLM hosts can now discover and call your tools via MCP
+```
+
+### ACP (Agent Communication Protocol)
+
+Enable agent-to-agent task delegation via ACP.
+
+```ts
+import { ACPTransport } from '@veridex/agents';
+
+const acp = new ACPTransport({
+  agentCard: {
+    name: 'research-agent',
+    description: 'Performs deep research on topics',
+    capabilities: [
+      { name: 'research_topic', description: 'Research a topic', inputSchema: {} },
+    ],
+  },
+});
+
+await acp.connect();
+```
+
+### A2A (Agent-to-Agent)
+
+Direct inter-agent communication with discovery via agent cards.
+
+```ts
+import { A2ATransport } from '@veridex/agents';
+
+const a2a = new A2ATransport({
+  agentCard: {
+    name: 'coordinator',
+    description: 'Coordinates specialist agents',
+    capabilities: [],
+  },
+});
+
+await a2a.connect();
+```
+
+---
+
+## React integration
+
+`@veridex/agents-react` provides a context provider and hooks that wire your React UI to the agent runtime.
+
+### Setup
+
+```tsx
+import { AgentProvider } from '@veridex/agents-react';
+
+function App() {
+  return (
+    <AgentProvider runtime={agent}>
+      <YourAgentUI />
+    </AgentProvider>
+  );
+}
+```
+
+### Build a chat UI with approvals
+
+```tsx
+import {
+  useAgent, useRun, useApprovals, useBudget,
+  useTrace, useMemory, useToolRegistry,
+} from '@veridex/agents-react';
+
+function ChatPanel() {
+  const { definition } = useAgent();
+  const { run, result, state, isLoading, error } = useRun();
+  const [input, setInput] = React.useState('');
+
+  return (
+    <div>
+      <h2>{definition.name}</h2>
+
+      <form onSubmit={(e) => { e.preventDefault(); run(input); }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} />
+        <button type="submit" disabled={isLoading}>Send</button>
+      </form>
+
+      {isLoading && <p>Thinking...</p>}
+      {error && <p style={{ color: 'red' }}>{error.message}</p>}
+      {result && <p>{result.output}</p>}
+      <p>State: {state}</p>
+    </div>
+  );
+}
+
+function ApprovalInbox() {
+  const { pending, resolve } = useApprovals();
+
+  if (pending.length === 0) return <p>No pending approvals.</p>;
+
+  return (
+    <ul>
+      {pending.map((req) => (
+        <li key={req.id}>
+          <strong>{req.proposal.toolName}</strong>
+          <pre>{JSON.stringify(req.proposal.arguments, null, 2)}</pre>
+          <button onClick={() => resolve(req.id, true)}>Approve</button>
+          <button onClick={() => resolve(req.id, false)}>Deny</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BudgetDisplay() {
+  const { snapshot } = useBudget();
+  return (
+    <div>
+      <p>Spent: ${snapshot.spent.toFixed(2)} / ${snapshot.budget.toFixed(2)}</p>
+      <progress value={snapshot.percentUtilized} max={100} />
+    </div>
+  );
+}
+
+function EventLog() {
+  const { events } = useTrace();
+  return (
+    <ul>
+      {events.slice(-10).map((e, i) => (
+        <li key={i}>{e.type} — {new Date(e.timestamp).toLocaleTimeString()}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Available hooks
+
+| Hook | Returns | Purpose |
+|------|---------|---------|
+| `useAgent()` | `{ definition, state }` | Agent config and current state |
+| `useRun()` | `{ run, state, result, error, isLoading }` | Start and observe runs |
+| `useTurnStream()` | `{ stream, cancel }` | Stream individual turns |
+| `useApprovals()` | `{ pending, resolve }` | Manage pending approvals |
+| `useTrace()` | `{ events, latest }` | Observe trace events in real time |
+| `useMemory()` | `{ entries, write, search, clear }` | Read/write agent memory |
+| `useBudget()` | `{ snapshot, estimateSpend }` | Track spend against budget |
+| `useContextPlan()` | `{ plan, recompile }` | Inspect context compilation |
+| `useToolRegistry()` | `{ tools, register, remove }` | Manage tools from React |
+| `usePayments()` | `{ balance, send, history }` | Agentic payments wallet |
+| `useAgentIdentity()` | `{ identity, isVerified }` | On-chain identity (ERC-8004) |
+| `useAgentReputation()` | `{ score, history }` | On-chain reputation |
+| `useOpenClawBridge()` | `{ importSkills, translateSession }` | OpenClaw/Pi bridge |
+
+---
+
+## Framework adapters
+
+`@veridex/agents-adapters` lets you import agents from other frameworks into Veridex, export Veridex agents to other formats, and bridge live runtimes.
+
+### Import/export
+
+```ts
+import {
+  OpenAIAgentsAdapter,
+  LangGraphAdapter,
+  PydanticAIAdapter,
+} from '@veridex/agents-adapters';
+
+// Import from OpenAI
+const openaiAdapter = new OpenAIAgentsAdapter();
+const { definition, warnings } = openaiAdapter.importAgent({
+  name: 'Billing Agent',
+  instructions: 'Help with billing questions.',
+  model: 'gpt-4o',
+  tools: [{ type: 'function', function: { name: 'lookup', description: 'Look up account', parameters: {} } }],
+});
+
+// Export back to OpenAI format
+const { config } = openaiAdapter.exportAgent(definition);
+
+// Import from LangGraph
+const langAdapter = new LangGraphAdapter();
+const { definition: lgDef } = langAdapter.importAgent(langGraphConfig);
+
+// Import from PydanticAI
+const pyAdapter = new PydanticAIAdapter();
+const { definition: pyDef } = pyAdapter.importAgent(pydanticAIConfig);
+```
+
+### OpenAPI tool import
+
+Convert any OpenAPI spec directly into Veridex tool contracts:
+
+```ts
+import { OpenAPIImporter } from '@veridex/agents-adapters';
+
+const importer = new OpenAPIImporter();
+const tools = importer.importTools(openAPISpec, {
+  baseUrl: 'https://api.example.com',
+  auth: { type: 'bearer', value: process.env.API_TOKEN },
+});
+
+// Each path+method becomes a validated ToolContract
+// Register them with your agent
+tools.forEach(t => agent.tools.register(t));
+```
+
+### Runtime bridges
+
+Invoke external agent runtimes live — wrap them as Veridex tools or handoff targets:
+
+```ts
+import { OpenAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new OpenAIRuntimeBridge({
+  name: 'billing-assistant',
+  endpoint: 'https://api.openai.com/v1/agents/asst_xxx',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Use as a tool
+const billingTool = bridge.asTool({ name: 'ask_billing_agent' });
+agent.tools.register(billingTool);
+
+// Or use as a handoff target
+const handoff = bridge.asHandoffHandler();
+```
+
+---
+
+## OpenClaw bridge
+
+`@veridex/agents-openclaw` bridges the OpenClaw / Pi agent ecosystem into Veridex.
+
+### Import context files
+
+OpenClaw workspaces use markdown context files (`AGENTS.md`, `IDENTITY.md`, `TOOLS.md`, etc.) to configure agents. The bridge parses these into structured Veridex context sections.
+
+```ts
+import {
+  parseWorkspaceContextFiles,
+  compileContextSections,
+} from '@veridex/agents-openclaw';
+
+const files = {
+  'AGENTS.md': fs.readFileSync('workspace/AGENTS.md', 'utf8'),
+  'IDENTITY.md': fs.readFileSync('workspace/IDENTITY.md', 'utf8'),
+  'TOOLS.md': fs.readFileSync('workspace/TOOLS.md', 'utf8'),
+};
+
+const contextFiles = parseWorkspaceContextFiles(files);
+const compiled = compileContextSections(contextFiles);
+// compiled['AGENTS'] → text block for agent definitions
+// compiled['IDENTITY'] → text block for identity config
+// compiled['TOOLS'] → text block for tool definitions
+```
+
+### Import skills
+
+OpenClaw skills are defined in `SKILL.md` documents with YAML frontmatter. The bridge converts them into Veridex `ToolContract` objects.
+
+```ts
+import {
+  parseSkillDocument,
+  importSkillDocument,
+  importSkillManifest,
+} from '@veridex/agents-openclaw';
+
+// Parse a single skill
+const doc = parseSkillDocument('web-search/SKILL.md', skillContent);
+const { tool, warnings } = importSkillDocument(doc);
+
+// Import a full manifest of skills
+const { tools, warnings: allWarnings } = importSkillManifest(manifest);
+```
+
+### ACP agent cards
+
+Export Veridex agents as ACP-compatible agent cards, import remote capabilities, and create tools that call remote ACP agents.
+
+```ts
+import {
+  toACPAgentCard,
+  fromACPCapabilities,
+  createRemoteAgentTool,
+} from '@veridex/agents-openclaw';
+
+// Export your agent as an ACP card
+const card = toACPAgentCard(agent.definition);
+
+// Import another agent's capabilities as tools
+const remoteTools = fromACPCapabilities(remoteCard.capabilities);
+
+// Create a tool that calls a remote ACP agent
+const remoteTool = createRemoteAgentTool({
+  name: 'research-agent',
+  description: 'Performs deep research',
+  endpoint: 'https://agents.example.com/research',
+  auth: { type: 'bearer', token: process.env.RESEARCH_TOKEN },
+  timeoutMs: 30_000,
+});
+```
+
+### Session translation
+
+Migrate from OpenClaw to Veridex by translating session histories into Veridex trace events.
+
+```ts
+import { translateSession, translateSessions } from '@veridex/agents-openclaw';
+
+const result = translateSession(openClawSession);
+// result.events → Veridex trace events
+// result.warnings → any translation issues
+```
+
+---
+
+## Enterprise control plane
+
+`@veridex/agents-control-plane` provides multi-tenant agent governance for production deployments.
+
+### Policy packs
+
+Policy packs are versioned collections of rules that can be applied to agents at the tenant or system level.
+
+```ts
+import { PolicyPackManager } from '@veridex/agents-control-plane';
+
+const manager = new PolicyPackManager();
+
+// Create a versioned policy pack
+const pack = manager.create({
+  name: 'production-safety',
+  description: 'Standard safety rules for production agents',
+  version: '1.0.0',
+  rules: [
+    { type: 'block_safety_class', params: { classes: ['destructive', 'privileged'] }, enabled: true },
+    { type: 'max_spend', params: { limitUSD: 100 }, enabled: true },
+    { type: 'require_approval', params: { classes: ['financial'] }, enabled: true },
+  ],
+  tags: ['production', 'safety'],
+});
+
+// System packs are immutable
+manager.registerSystemPack({
+  name: 'core-safety',
+  description: 'Core safety rules that cannot be modified',
+  version: '1.0.0',
+  rules: [
+    { type: 'block_safety_class', params: { classes: ['privileged'] }, enabled: true },
+  ],
+});
+```
+
+### Trace storage
+
+Ingest, query, and verify run traces with content hashing for tamper detection.
+
+```ts
+import { TraceStore, InMemoryTraceStore } from '@veridex/agents-control-plane';
+
+const store = new TraceStore(new InMemoryTraceStore());
+
+// Ingest a trace
+const record = await store.ingest({
+  runId: 'run-001',
+  agentId: 'ops-agent',
+  tenantId: 'tenant-acme',
+  startedAt: Date.now() - 5000,
+  completedAt: Date.now(),
+  state: 'completed',
+  turnCount: 3,
+  totalTokens: 1500,
+  totalCostUSD: 0.02,
+  events: traceEvents,
+});
+
+// Query traces
+const traces = await store.query({
+  agentId: 'ops-agent',
+  state: 'completed',
+  startAfter: Date.now() - 86_400_000,
+  limit: 50,
+});
+
+// Verify content hash for tamper detection
+const valid = await store.verify(record.id);
+```
+
+### Approval workflows
+
+Multi-step approval workflows with escalation chains, timeouts, and auto-approval.
+
+```ts
+import { ApprovalWorkflowEngine } from '@veridex/agents-control-plane';
+
+const engine = new ApprovalWorkflowEngine();
+
+engine.registerWorkflow({
+  id: 'high-risk',
+  name: 'High Risk Approval',
+  description: 'Two-step escalation for high-risk actions',
+  escalationChain: [
+    { name: 'Team Lead', approvers: ['lead@company.com'], timeoutSeconds: 300, minApprovals: 1 },
+    { name: 'VP Engineering', approvers: ['vp@company.com'], timeoutSeconds: 600, minApprovals: 1 },
+  ],
+  defaultMode: 'block',
+});
+
+// Start an approval process
+const approval = engine.startApproval('high-risk', 'run-001', 'agent-x', 'Transfer $10K', 0.9);
+
+// Cast votes
+engine.vote(approval.id, 'lead@company.com', true, 'Amount within limits');
+
+// Process timeouts periodically
+const timedOut = engine.processTimeouts();
+```
+
+### Multi-tenancy
+
+Isolate agents by tenant with per-tenant configuration.
+
+```ts
+import { TenantManager } from '@veridex/agents-control-plane';
+
+const tenants = new TenantManager();
+
+const tenant = tenants.create({
+  name: 'Acme Corp',
+  config: {
+    maxConcurrentRuns: 10,
+    dailySpendLimitUSD: 500,
+    allowedProviders: ['openai'],
+    auditEnabled: true,
+    traceRetentionDays: 90,
+    deploymentMode: 'managed',
+  },
+});
+```
+
+### Deploy as HTTP service
+
+```ts
+import { startControlPlaneServer } from '@veridex/agents-control-plane';
+
+const server = await startControlPlaneServer({
+  port: 4500,
+  storageBackend: 'postgres',
+  postgres: { connectionString: process.env.DATABASE_URL },
+  authRequired: true,
+  bootstrapTokens: [
+    { token: process.env.ADMIN_TOKEN, role: 'admin' },
+  ],
+  traceRetentionDays: 90,
+});
+```
+
+Connect from agent runtimes:
+
+```ts
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: 'https://cp.example.com',
+  token: process.env.CP_TOKEN,
+  tenantId: 'tenant-acme',
+});
+```
+
+### Audit export
+
+Export traces for compliance in JSON, JSONL, or CSV format with tamper-evident hashing.
+
+```ts
+import { exportTraces, generateEvidenceBundle } from '@veridex/agents-control-plane';
+
+const result = await exportTraces(traces, 'jsonl', {
+  includeMetadata: true,
+  startTime: Date.now() - 86_400_000,
+});
+// result.data — exported string
+// result.contentHash — SHA-256 hash for verification
+
+const bundle = await generateEvidenceBundle(traceId, policyDecisions, approvalDecisions);
+// bundle.contentHash — combined hash for tamper detection
+```
+
+---
+
+## Testing agents
+
+The core package includes utilities for deterministic, offline testing.
+
+### Replay provider
+
+Record model interactions during a live run and replay them in tests.
+
+```ts
+import { ReplayProvider, TraceRecorder } from '@veridex/agents';
+
+// Record during a live run
+const recorder = new TraceRecorder();
+// ... attach recorder to agent, run the agent ...
+const trace = recorder.getTrace();
+
+// Replay in tests — no API calls needed
+const replay = new ReplayProvider(trace.interactions);
+const response = await replay.complete(messages);
+```
+
+### Trace comparison
+
+Compare golden traces to detect regressions.
+
+```ts
+import {
+  compareTraces,
+  serializeGoldenTrace,
+  deserializeGoldenTrace,
+} from '@veridex/agents';
+
+// Save a baseline
+const baseline = serializeGoldenTrace(trace);
+fs.writeFileSync('golden/order-lookup.json', baseline);
+
+// Compare against baseline
+const saved = deserializeGoldenTrace(fs.readFileSync('golden/order-lookup.json', 'utf8'));
+const result = compareTraces(saved, currentTrace);
+console.log(result.identical);         // boolean
+console.log(result.similarityScore);   // 0..1
+console.log(result.diffs);            // EventDiff[]
+```
+
+---
+
+## End-to-end example: Treasury Agent
+
+This complete example shows all packages working together — tools with policy, approval workflows, memory, events, checkpoints, and a React UI.
+
+```ts
+// treasury-agent.ts
+import {
+  createAgent, tool, OpenAIProvider,
+  blockSafetyClasses, requireApprovalFor, maxRunSpendUSD,
+} from '@veridex/agents';
+import { z } from 'zod';
+
+// --- Tools ---
+const getBalance = tool({
+  name: 'get_balance',
+  description: 'Check account balance',
+  input: z.object({ accountId: z.string() }),
+  safetyClass: 'read',
+  async execute({ input }) {
+    return { success: true, llmOutput: `Account ${input.accountId}: $12,345.67` };
+  },
+});
+
+const transferFunds = tool({
+  name: 'transfer_funds',
+  description: 'Transfer funds between accounts',
+  input: z.object({
+    from: z.string(),
+    to: z.string(),
+    amount: z.number().positive(),
+  }),
+  safetyClass: 'financial',
+  async execute({ input }) {
+    return { success: true, llmOutput: `Transferred $${input.amount} from ${input.from} to ${input.to}` };
+  },
+});
+
+// --- Agent ---
+const agent = createAgent(
+  {
+    id: 'treasury-agent',
+    name: 'Treasury Agent',
+    model: { provider: 'openai', model: 'gpt-4o' },
+    instructions: 'Help the finance team manage treasury operations safely.',
+    tools: [getBalance, transferFunds],
+    maxTurns: 5,
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+    enableTracing: true,
+    enableCheckpoints: true,
+  },
+);
+
+// --- Policy ---
+agent.policyEngine.register(blockSafetyClasses(['destructive', 'privileged'], agent.tools.list()));
+agent.policyEngine.register(requireApprovalFor(['financial'], agent.tools.list()));
+agent.policyEngine.register(maxRunSpendUSD(100));
+
+// --- Approvals ---
+agent.approvals.addRoute({
+  match: (proposal, policy) => policy.verdict === 'escalate',
+  mode: 'human_required',
+  timeoutMs: 300_000,
+});
+
+// --- Memory ---
+await agent.memory.write({
+  tier: 'semantic',
+  content: 'Company policy: transfers over $5,000 require VP approval.',
+  scope: 'global',
+  tags: ['policy', 'transfers'],
+  confidence: 1.0,
+  ttlMs: Infinity,
+});
+
+// --- Events ---
+agent.events.on('tool_started', (e) => console.log(`→ ${e.toolName}`));
+agent.events.on('approval_requested', (e) => console.log(`⏳ Approval: ${e.requestId}`));
+
+// --- Run ---
+const result = await agent.run('Check balance for ACCT-MAIN, then transfer $500 to ACCT-OPS');
+console.log(result.output);
+console.log(`State: ${result.state}`);
+console.log(`Turns: ${result.turns.length}`);
+```
+
+```tsx
+// treasury-ui.tsx
+import React from 'react';
+import { AgentProvider, useRun, useApprovals, useBudget, useTrace } from '@veridex/agents-react';
+
+function TreasuryApp() {
+  return (
+    <AgentProvider runtime={agent}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <Chat />
+        <Sidebar />
+      </div>
+    </AgentProvider>
+  );
+}
+
+function Chat() {
+  const { run, result, isLoading } = useRun();
+  const [input, setInput] = React.useState('');
+
+  return (
+    <div>
+      <h2>Treasury Agent</h2>
+      <form onSubmit={(e) => { e.preventDefault(); run(input); setInput(''); }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask the agent..." />
+        <button disabled={isLoading}>Send</button>
+      </form>
+      {isLoading && <p>Processing...</p>}
+      {result && <div><strong>Agent:</strong> {result.output}</div>}
+    </div>
+  );
+}
+
+function Sidebar() {
+  return (
+    <div>
+      <ApprovalInbox />
+      <BudgetBar />
+      <EventLog />
+    </div>
+  );
+}
+
+function ApprovalInbox() {
+  const { pending, resolve } = useApprovals();
+  return (
+    <div>
+      <h3>Approvals ({pending.length})</h3>
+      {pending.map((req) => (
+        <div key={req.id} style={{ border: '1px solid #ccc', padding: '0.5rem', marginBottom: '0.5rem' }}>
+          <p><strong>{req.proposal.toolName}</strong></p>
+          <pre>{JSON.stringify(req.proposal.arguments, null, 2)}</pre>
+          <button onClick={() => resolve(req.id, true)}>✓ Approve</button>
+          <button onClick={() => resolve(req.id, false)}>✗ Deny</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BudgetBar() {
+  const { snapshot } = useBudget();
+  return (
+    <div>
+      <h3>Budget</h3>
+      <p>${snapshot.spent.toFixed(2)} / ${snapshot.budget.toFixed(2)}</p>
+      <progress value={snapshot.percentUtilized} max={100} />
+    </div>
+  );
+}
+
+function EventLog() {
+  const { events } = useTrace();
+  return (
+    <div>
+      <h3>Events</h3>
+      <ul style={{ fontSize: '0.85rem', maxHeight: '200px', overflow: 'auto' }}>
+        {events.slice(-10).map((e, i) => (
+          <li key={i}>{e.type} — {new Date(e.timestamp).toLocaleTimeString()}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+---
+
+## Package selection guide
+
+| I want to... | Install |
+|--------------|---------|
+| Build an agent with tools and policy | `@veridex/agents` |
+| Add a React chat UI with approvals | `+ @veridex/agents-react` |
+| Import agents from OpenAI / LangGraph / PydanticAI | `+ @veridex/agents-adapters` |
+| Bridge OpenClaw / Pi agents into Veridex | `+ @veridex/agents-openclaw` |
+| Run multi-tenant governance in production | `+ @veridex/agents-control-plane` |
+| Just prototype quickly | `@veridex/agents` alone is enough |
+
+---
+
+## Common patterns
+
+### Pattern: Rate-limited tool execution
+
+```ts
+agent.hooks.register({
+  name: 'rate-limit',
+  phase: 'before_tool',
+  async execute(context) {
+    const count = agent.eventLog.getByType('tool_started')
+      .filter(e => e.toolName === context.toolName).length;
+    if (count >= 10) {
+      return { override: 'deny', reason: `Tool ${context.toolName} exceeded 10 calls.` };
+    }
+  },
+});
+```
+
+### Pattern: Conditional tool registration
+
+```ts
+if (user.role === 'admin') {
+  agent.tools.register(deleteAccountTool);
+} else {
+  // Non-admins only get read tools
+  agent.tools.register(lookupAccountTool);
+}
+```
+
+### Pattern: Multi-agent coordination with adapters
+
+```ts
+import { OpenAIRuntimeBridge } from '@veridex/agents-adapters';
+
+// Wrap an external OpenAI agent as a tool
+const researchBridge = new OpenAIRuntimeBridge({
+  name: 'research-agent',
+  endpoint: 'https://api.openai.com/v1/agents/asst_xxx',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const coordinatorAgent = createAgent({
+  id: 'coordinator',
+  name: 'Coordinator',
+  model: { provider: 'openai', model: 'gpt-4o' },
+  instructions: 'Coordinate between specialist agents to answer complex questions.',
+  tools: [
+    researchBridge.asTool({ name: 'ask_researcher' }),
+    lookupOrder,
+  ],
+});
+```
+
+### Pattern: Audit everything
+
+```ts
+import { TraceStore, InMemoryTraceStore, exportTraces } from '@veridex/agents-control-plane';
+
+const traceStore = new TraceStore(new InMemoryTraceStore());
+
+agent.events.onAny(async (event) => {
+  // Collect and store all events per run
+});
+
+// After each run, ingest the trace
+agent.events.on('run_completed', async (e) => {
+  await traceStore.ingest({
+    runId: e.runId,
+    agentId: agent.definition.id,
+    startedAt: e.startedAt,
+    completedAt: e.completedAt,
+    state: 'completed',
+    turnCount: e.turnCount,
+    totalTokens: e.totalTokens,
+    totalCostUSD: e.totalCostUSD,
+    events: agent.eventLog.getAll(),
+  });
+});
+
+// Export for compliance
+const allTraces = await traceStore.query({});
+const exported = await exportTraces(allTraces, 'jsonl', { includeMetadata: true });
+```
+
+---
+
+## Next steps
+
+<Cards>
+  <Card title="API Reference" href="/api-reference/agents-framework">
+    Complete API signatures, types, and method tables
+  </Card>
+  <Card title="Agent SDK" href="/api-reference/agent-sdk">
+    Payment, identity, trust, and protocol-routing primitives
+  </Card>
+  <Card title="Architecture Decisions" href="/resources/architecture-decisions">
+    ADRs explaining the design rationale
+  </Card>
+  <Card title="Quickstart" href="/quickstart">
+    Get the SDK running in 5 minutes
+  </Card>
+</Cards>

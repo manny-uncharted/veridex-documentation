@@ -11,6 +11,7 @@
   "react-hooks": "React Hooks",
   "enterprise-manager": "Enterprise Manager",
   "agent-payments": "Agent Payments",
+  "veridex-agents": "Veridex Agents",
   "agent-identity": "Agent Identity",
   "examples": "Examples",
   "multisig-wallet": "Multisig Wallet",
