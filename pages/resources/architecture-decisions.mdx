@@ -185,11 +185,31 @@ The goal is to combine:
 - strong TypeScript ergonomics
 - governance, approvals, traces, payments, and enterprise control by default
 
+### ADR-0043: Veridex Workforce OS Layer Above Agent Fabric
+**Status:** Proposed
+
+This follow-up decision says the runtime is necessary but not sufficient.
+Veridex should also define the operating layer that lets teams manage an
+entire fleet of agents as one governed system:
+
+- fleet registry and versioned discovery for deployed agents
+- task routing, inboxes, retries, scheduling, priorities, and SLAs
+- shared workspace resources such as tools, knowledge, secrets, and policies
+- deployment lifecycle management including drafts, canaries, rollback, and hot updates
+- incident controls, governance, and fleet-level evaluations over time
+- a command-center experience backed by typed APIs and manifests, not natural language alone
+
+The core distinction is:
+
+- `@veridex/agents` stays the runtime kernel
+- `@veridex/agents-control-plane` becomes the system-services backbone
+- the Workforce OS sits above both as the operator-facing management layer
+
 ---
 
 ## Full ADR Index
 
-The complete set of 42+ ADRs is maintained in the source repository under
+The complete set of 43+ ADRs is maintained in the source repository under
 `docs/architecture/decisions/`. Each ADR follows a consistent template with
 Context, Decision, Status, and Consequences sections.
 
@@ -214,3 +234,4 @@ Context, Decision, Status, and Consequences sections.
 | 0035 | Enterprise Treasury AI Trust | Accepted |
 | 0037 | Threshold Multisig | Proposed |
 | 0042 | Veridex Agent Fabric as a General-Purpose Runtime | Proposed |
+| 0043 | Veridex Workforce OS Layer Above Agent Fabric | Proposed |
