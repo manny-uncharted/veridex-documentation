@@ -1,0 +1,198 @@
+---
+title: Multi-Session Management
+description: Create, list, label, and manage multiple concurrent sessions for apps and agents
+---
+
+# Multi-Session Management
+
+Veridex supports multiple concurrent sessions per app and per agent. This guide covers when to use multiple sessions, how to manage them with both the Core SDK and Agent SDK, and patterns for production use.
+
+## When to Use Multiple Sessions
+
+| Scenario | Sessions | Example |
+|----------|----------|---------|
+| Single-purpose integration | 1 | A payment widget that processes one flow |
+| Multi-chain app | 1 per chain | Base session + Solana session |
+| Role-based agents | 1 per role | Treasury agent, swapper agent, monitor agent |
+| Time-windowed budgets | 1 per window | Daily budget session, refreshed each morning |
+| Isolated workloads | 1 per workload | Production session + staging session |
+
+## Core SDK: Multiple Sessions
+
+### Create Multiple Sessions
+
+```typescript
+import { VeridexClient } from '@veridex/sdk';
+
+const client = new VeridexClient({
+  apiKey: process.env.VERIDEX_API_KEY,
+  chain: 'base',
+  rpcUrl: 'https://...',
+});
+
+// Create sessions with distinct labels and limits
+const treasury = await client.createSession({
+  label: 'treasury-ops',
+  spendingLimit: '10000',
+  validUntil: Date.now() + 86400_000,
+});
+
+const swaps = await client.createSession({
+  label: 'swap-engine',
+  spendingLimit: '5000',
+  validUntil: Date.now() + 3600_000,
+});
+```
+
+### List Active Sessions
+
+```typescript
+const sessions = await client.listSessions();
+for (const s of sessions) {
+  console.log(`${s.label}: ${s.status} — ${s.remainingLimit} remaining`);
+}
+```
+
+### Execute with a Specific Session
+
+```typescript
+const result = await client.execute({
+  session: treasury.sessionKeyHash,
+  action: {
+    type: 'transfer',
+    to: '0x...',
+    amount: '500',
+    token: 'USDC',
+  },
+});
+```
+
+### Revoke a Session
+
+```typescript
+await client.revokeSession(swaps.sessionKeyHash);
+```
+
+## Agent SDK: Agent Sessions
+
+The Agent SDK (`@veridex/agentic-payments`) manages sessions through the `SessionKeyManager`.
+
+### Session Inventory
+
+```typescript
+import { SessionKeyManager } from '@veridex/agentic-payments';
+
+const manager = new SessionKeyManager(signer, contractAddress, {
+  chain: 'base',
+  rpcUrl: 'https://...',
+});
+
+// Create labeled sessions
+const session1 = await manager.createSession({
+  label: 'defi-ops',
+  spendingLimit: '5000',
+  allowedTokens: ['USDC', 'ETH'],
+  validUntil: Date.now() + 86400_000,
+});
+
+const session2 = await manager.createSession({
+  label: 'monitoring',
+  spendingLimit: '100',
+  validUntil: Date.now() + 86400_000,
+});
+```
+
+### List and Filter Sessions
+
+```typescript
+const all = manager.listSessions();
+const active = manager.listSessions({ status: 'active' });
+const defi = manager.listSessions({ label: 'defi-ops' });
+```
+
+### Session Restoration
+
+On restart, the agent can restore sessions from storage:
+
+```typescript
+const restored = await manager.restoreSession(sessionKeyHash);
+console.log(`Restored: ${restored.label} — ${restored.status}`);
+```
+
+### MCP Tool: Session Inventory
+
+If using the MCP server, agents can query sessions via the `check_session_inventory` tool:
+
+```json
+{
+  "tool": "check_session_inventory",
+  "parameters": {}
+}
+```
+
+Returns all sessions with label, status, remaining limit, and expiry.
+
+## Patterns
+
+### Pattern: Daily Budget Refresh
+
+Create a new session each day with a fresh spending limit. Revoke the previous day's session.
+
+```typescript
+async function refreshDailyBudget(client: VeridexClient, dailyLimit: string) {
+  // Revoke yesterday's session
+  const sessions = await client.listSessions();
+  const expired = sessions.filter(s => s.label === 'daily-budget' && s.status === 'active');
+  for (const s of expired) {
+    await client.revokeSession(s.sessionKeyHash);
+  }
+
+  // Create today's session
+  return client.createSession({
+    label: 'daily-budget',
+    spendingLimit: dailyLimit,
+    validUntil: Date.now() + 86400_000,
+  });
+}
+```
+
+### Pattern: Chain-Specific Sessions
+
+Create one session per chain to isolate cross-chain risk.
+
+```typescript
+const baseSession = await client.createSession({
+  label: 'base-ops',
+  spendingLimit: '5000',
+  chainId: '8453',
+  validUntil: Date.now() + 86400_000,
+});
+
+const ethSession = await client.createSession({
+  label: 'eth-ops',
+  spendingLimit: '10000',
+  chainId: '1',
+  validUntil: Date.now() + 86400_000,
+});
+```
+
+### Pattern: Graceful Session Rotation
+
+Rotate sessions without downtime by creating the new session before revoking the old one.
+
+```typescript
+async function rotateSession(client: VeridexClient, oldHash: string, config: SessionConfig) {
+  const newSession = await client.createSession(config);
+  // New session is active — switch traffic
+  await client.revokeSession(oldHash);
+  return newSession;
+}
+```
+
+## Session Studio Integration
+
+The [Session Studio](/platform/session-studio) in the Developer Platform provides a visual interface for multi-session management:
+- View all active, expired, and revoked sessions
+- Filter by label, chain, or agent
+- Health indicators show remaining limits and expiry
+- Create new sessions with the provisioning wizard

@@ -1,0 +1,73 @@
+---
+title: Operator Quickstart
+description: Review spend posture, configure policies, and approve your first action
+---
+
+# Operator Quickstart
+
+Get operational visibility and control over agent activity in four steps.
+
+## Prerequisites
+
+- Access to a Veridex Developer Platform workspace (as operator)
+- At least one registered app with active sessions
+
+## Step 1: Review Spend Posture
+
+Navigate to **Operate → Overview** to see:
+- Active sessions and their remaining spend allowances
+- Recent approvals and their outcomes
+- Open incidents by severity
+- Session health indicators
+
+This gives you an immediate read on your workspace's risk posture.
+
+## Step 2: Configure Policies
+
+Navigate to **Operate → Policies** and set your governance rules:
+
+| Policy | Default | Recommended |
+|--------|---------|-------------|
+| Per-transaction limit | $500 | Set based on expected transaction sizes |
+| Daily spending limit | $5,000 | Set based on operational budget |
+| Approval threshold | $1,000 | Actions above this require manual approval |
+| Chain restrictions | All chains | Restrict to chains you operate on |
+| Token whitelist | All tokens | Restrict to assets you manage |
+
+Policies apply immediately to all future actions.
+
+## Step 3: Approve or Reject
+
+When an agent or session exceeds a policy threshold, the action appears in **Operate → Approvals**.
+
+For each pending approval, you see:
+- What the agent wants to do
+- How much it wants to spend
+- Which policy triggered the approval
+- The risk score
+
+**Approve** to let the action execute. **Reject** to block it. If you don't decide before the TTL expires, the action is auto-expired.
+
+## Step 4: Inspect a Trace
+
+Navigate to **Operate → Traces** and select any execution to see:
+- The agent's reasoning (what it decided and why)
+- The proposed action (transfer, swap, etc.)
+- Policy verdicts (which rules passed, which blocked)
+- Signatures and transaction hash
+- Duration and risk score
+
+This is your audit trail — every action has a complete provenance chain.
+
+## Ongoing Operations
+
+- **Incidents**: Review policy violations in **Operate → Incidents**, organized by severity
+- **Evidence**: Export audit bundles from **Operate → Evidence Export** for compliance review
+- **Activity**: Cross-reference with **Build → Activity** for the full event stream
+
+## What's Next
+
+- [Approvals](/governance/approvals) — deep dive into the approval system
+- [Policies](/governance/policies) — advanced policy configuration
+- [Evidence Export](/governance/evidence) — generating audit bundles
+- [Traces](/governance/traces) — understanding execution traces

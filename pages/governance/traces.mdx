@@ -1,0 +1,88 @@
+---
+title: Traces
+description: Per-execution audit trail with reasoning, policy verdicts, and signatures
+---
+
+# Traces
+
+Every execution produces a trace record — a complete audit trail of what happened, why, and how it was validated.
+
+## Trace Structure
+
+| Field | Description |
+|-------|-------------|
+| `traceHash` | Unique hash identifying this execution |
+| `reasoning` | Agent's reasoning or LLM output that led to the action |
+| `proposedAction` | The action the agent intended to execute |
+| `validationResult` | Overall validation outcome (allowed/blocked) |
+| `policyVerdicts` | Per-rule verdict (which policies passed, which blocked) |
+| `signatures` | Cryptographic signatures applied to the execution |
+| `txHash` | On-chain transaction hash (if executed) |
+| `status` | executed, blocked, or pending_approval |
+| `riskScore` | Computed risk score (0-100) |
+| `blockedBy` | Which policy blocked the action (if blocked) |
+| `durationMs` | Execution duration in milliseconds |
+
+## Trace Lifecycle
+
+```
+Agent reasons → Proposes action → Policy evaluation
+                                      │
+                      ┌────────────────┼────────────────┐
+                      ▼                ▼                ▼
+                  Executed       Pending Approval     Blocked
+                  (trace +       (trace + approval    (trace +
+                   txHash)        record created)      blockedBy)
+```
+
+## Reading a Trace
+
+### Reasoning
+The agent's full reasoning output. For LLM-powered agents, this is the model's chain-of-thought. For rule-based agents, this is the decision logic.
+
+### Policy Verdicts
+An array of per-rule results showing which policies were evaluated and their outcomes:
+- Rule name
+- Passed/failed
+- Additional info (e.g., "Amount $500 within $1,000 daily limit")
+
+### Validation Result
+The overall verdict combining all policy verdicts. If any critical policy fails, the action is blocked.
+
+## API
+
+### List Traces
+
+```bash
+GET /apps/{appId}/traces?status=blocked&limit=50
+Authorization: Bearer {apiKey}
+```
+
+### Get Trace by Hash
+
+```bash
+GET /apps/{appId}/traces/{traceHash}
+Authorization: Bearer {apiKey}
+```
+
+### Record a Trace
+
+```bash
+POST /apps/{appId}/traces
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "traceHash": "0xabc123...",
+  "reasoning": "User requested transfer of 100 USDC to known recipient...",
+  "proposedAction": "{\"type\":\"transfer\",\"amount\":100000000,\"token\":\"USDC\"}",
+  "validationResult": "{\"allowed\":true,\"riskScore\":15}",
+  "policyVerdicts": ["spending_limits:passed", "chain_whitelist:passed"],
+  "status": "executed",
+  "txHash": "0xdef456...",
+  "riskScore": 15,
+  "durationMs": 1250,
+  "agentId": "agt_abc123",
+  "sessionKeyHash": "0x..."
+}
+```

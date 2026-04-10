@@ -1,0 +1,80 @@
+---
+title: Evidence Export
+description: JSON and CSV audit bundles for compliance review
+---
+
+# Evidence Export
+
+Evidence export generates downloadable bundles containing traces, incidents, approvals, and activity for audit and compliance review.
+
+## Export Formats
+
+### JSON
+Full-fidelity export with all fields, nested objects, and metadata. Suitable for:
+- Programmatic analysis
+- Integration with compliance tools
+- Long-term archival
+
+### CSV
+Flattened export with summary fields per record. Suitable for:
+- Spreadsheet analysis
+- Quick filtering and sorting
+- Non-technical stakeholder review
+
+## Bundle Contents
+
+Each evidence bundle includes:
+
+| Section | Contents |
+|---------|----------|
+| **Traces** | All execution traces within the export window |
+| **Incidents** | All incidents with status and resolution |
+| **Approvals** | All approval requests with decisions |
+| **Activity** | Full activity feed |
+
+## API
+
+### Export Evidence Bundle
+
+```bash
+GET /apps/{appId}/evidence?format=json&limit=100
+Authorization: Bearer {apiKey}
+```
+
+Response (JSON):
+```json
+{
+  "exportedAt": 1712534400000,
+  "appId": "app_abc123",
+  "traces": [...],
+  "incidents": [...],
+  "approvals": [...],
+  "activity": [...]
+}
+```
+
+### Export as CSV
+
+```bash
+GET /apps/{appId}/evidence?format=csv&limit=100
+Authorization: Bearer {apiKey}
+```
+
+Returns a CSV file with columns: `type, id, status, timestamp, summary`
+
+## Dashboard Export
+
+From the Operate dashboard:
+
+1. Navigate to **Operate → Evidence Export** (or use the evidence shortcut from Operations Overview)
+2. Select format (JSON or CSV)
+3. Optionally filter by date range, agent, or session
+4. Click **Export**
+5. The bundle downloads immediately
+
+## Use Cases
+
+- **Quarterly audit**: Export all traces for a period to demonstrate policy compliance
+- **Incident review**: Export traces and incidents related to a specific agent or session
+- **Regulatory reporting**: Provide evidence bundles showing governance controls are active
+- **Post-incident analysis**: Combine trace reasoning with incident timeline for root cause analysis

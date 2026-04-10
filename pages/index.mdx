@@ -1,6 +1,6 @@
 ---
 title: Veridex Protocol
-description: Cross-chain passkey authentication, general-purpose agent runtimes, autonomous agent payments, and on-chain identity for the multi-chain web
+description: Bounded authority for apps and agents — session-scoped execution, governance, and audit evidence across chains
 ---
 
 import Link from "next/link"
@@ -8,36 +8,75 @@ import Link from "next/link"
 <div className="vdx-home">
 <section className="vdx-hero">
   <div className="vdx-hero-badge">Open-source protocol</div>
-  <h1 className="vdx-hero-title">{"One passkey. Any chain."}<br/>{"Fully self-custodial."}</h1>
-  <p className="vdx-hero-subtitle">{"Cross-chain passkey wallets, general-purpose agent runtimes, autonomous payments, and on-chain identity — integrate in minutes."}</p>
+  <h1 className="vdx-hero-title">{"Bounded authority."}<br/>{"For apps & agents."}</h1>
+  <p className="vdx-hero-subtitle">{"API keys identify applications. Session keys delegate bounded authority to software. Operators decide how much autonomy is acceptable. Developers decide how to implement it."}</p>
   <div className="vdx-hero-actions">
-    <Link href="/getting-started/quick-start" className="vdx-btn vdx-btn-primary">{"Get Started"}</Link>
-    <Link href="/api-reference/sdk" className="vdx-btn vdx-btn-secondary">{"API Reference"}</Link>
+    <Link href="/quickstarts/developer" className="vdx-btn vdx-btn-primary">{"Developer Quickstart"}</Link>
+    <Link href="/quickstarts/operator" className="vdx-btn vdx-btn-secondary">{"Operator Quickstart"}</Link>
   </div>
   <div className="vdx-hero-install">
     <code>{"npm install @veridex/sdk"}</code>
   </div>
 </section>
+<section className="vdx-model">
+  <h2 className="vdx-section-title">{"How it works"}</h2>
+  <div className="vdx-model-grid">
+    <div className="vdx-model-step">
+      <span className="vdx-model-num">{"1"}</span>
+      <span className="vdx-model-label">{"API Keys"}</span>
+      <span className="vdx-model-desc">{"Register your app and get an API key. This identifies your application to the platform."}</span>
+    </div>
+    <div className="vdx-model-step">
+      <span className="vdx-model-num">{"2"}</span>
+      <span className="vdx-model-label">{"Session Keys"}</span>
+      <span className="vdx-model-desc">{"Create bounded session keys with limits, chains, expiry, and permissions. Multiple concurrent sessions per identity."}</span>
+    </div>
+    <div className="vdx-model-step">
+      <span className="vdx-model-num">{"3"}</span>
+      <span className="vdx-model-label">{"Governed Execution"}</span>
+      <span className="vdx-model-desc">{"Every action runs through policy evaluation. Spending limits, chain restrictions, approval thresholds, and counterparty rules."}</span>
+    </div>
+    <div className="vdx-model-step">
+      <span className="vdx-model-num">{"4"}</span>
+      <span className="vdx-model-label">{"Audit Evidence"}</span>
+      <span className="vdx-model-desc">{"Every execution produces a trace with reasoning, policy verdicts, signatures, and an exportable evidence bundle."}</span>
+    </div>
+  </div>
+</section>
 <nav className="vdx-nav-grid">
-  <Link href="/getting-started/quick-start" className="vdx-nav-card">
+  <Link href="/quickstarts/developer" className="vdx-nav-card">
     <span className="vdx-nav-icon">{"🚀"}</span>
     <span className="vdx-nav-card-text">
-      <span className="vdx-nav-card-title">{"Get Started"}</span>
-      <span className="vdx-nav-card-desc">{"Install the SDK and create your first passkey wallet in 5 minutes."}</span>
+      <span className="vdx-nav-card-title">{"Developer Quickstart"}</span>
+      <span className="vdx-nav-card-desc">{"Register an app, create a session, execute your first governed request in under 10 minutes."}</span>
     </span>
   </Link>
-  <Link href="/guides/create-wallet" className="vdx-nav-card">
-    <span className="vdx-nav-icon">{"📖"}</span>
+  <Link href="/quickstarts/operator" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🛡️"}</span>
     <span className="vdx-nav-card-text">
-      <span className="vdx-nav-card-title">{"Guides"}</span>
-      <span className="vdx-nav-card-desc">{"Step-by-step walkthroughs for wallets, transfers, sessions, agent runtimes, and payments."}</span>
+      <span className="vdx-nav-card-title">{"Operator Quickstart"}</span>
+      <span className="vdx-nav-card-desc">{"Review posture, configure policies, approve actions, inspect traces and evidence bundles."}</span>
     </span>
   </Link>
-  <Link href="/api-reference/sdk" className="vdx-nav-card">
+  <Link href="/sdks/core" className="vdx-nav-card">
     <span className="vdx-nav-icon">{"⚡"}</span>
     <span className="vdx-nav-card-text">
-      <span className="vdx-nav-card-title">{"API Reference"}</span>
-      <span className="vdx-nav-card-desc">{"Complete SDK, agents framework, Agent SDK, and Relayer API documentation."}</span>
+      <span className="vdx-nav-card-title">{"SDKs"}</span>
+      <span className="vdx-nav-card-desc">{"Core SDK for wallets and sessions. Agent SDK for autonomous payments, identity, and MCP tools."}</span>
+    </span>
+  </Link>
+  <Link href="/platform/session-studio" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"🎛️"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Session Studio"}</span>
+      <span className="vdx-nav-card-desc">{"Create, list, select, rotate, and revoke sessions. App sessions, agent sessions, multi-session inventory."}</span>
+    </span>
+  </Link>
+  <Link href="/governance/approvals" className="vdx-nav-card">
+    <span className="vdx-nav-icon">{"📋"}</span>
+    <span className="vdx-nav-card-text">
+      <span className="vdx-nav-card-title">{"Governance"}</span>
+      <span className="vdx-nav-card-desc">{"Approvals, policies, incidents, traces, and evidence exports for operator oversight."}</span>
     </span>
   </Link>
   <Link href="/chains/evm" className="vdx-nav-card">
@@ -47,66 +86,58 @@ import Link from "next/link"
       <span className="vdx-nav-card-desc">{"Base, Optimism, Arbitrum, Solana, Aptos, Sui, Starknet, and Stacks."}</span>
     </span>
   </Link>
-  <Link href="/integrations/react" className="vdx-nav-card">
-    <span className="vdx-nav-icon">{"🧩"}</span>
-    <span className="vdx-nav-card-text">
-      <span className="vdx-nav-card-title">{"Integrations"}</span>
-      <span className="vdx-nav-card-desc">{"React hooks, Next.js, payment gateways, DeFi, and gaming."}</span>
-    </span>
-  </Link>
-  <Link href="/security/best-practices" className="vdx-nav-card">
-    <span className="vdx-nav-icon">{"🔒"}</span>
-    <span className="vdx-nav-card-text">
-      <span className="vdx-nav-card-title">{"Security"}</span>
-      <span className="vdx-nav-card-desc">{"Audit reports, best practices, and recovery mechanisms."}</span>
-    </span>
-  </Link>
 </nav>
 <section className="vdx-packages">
-  <h2 className="vdx-section-title">{"Protocol and runtime packages"}</h2>
+  <h2 className="vdx-section-title">{"Packages"}</h2>
   <div className="vdx-package-grid">
     <div className="vdx-package-card">
       <div className="vdx-package-name">{"@veridex/sdk"}</div>
-      <div className="vdx-package-desc">{"Passkey wallets, vaults, sessions, cross-chain transfers, spending limits, and ERC-8004 utilities."}</div>
+      <div className="vdx-package-desc">{"Passkey wallets, multi-session keys, cross-chain transfers, spending limits, and ERC-8004 utilities."}</div>
       <code className="vdx-package-install">{"npm install @veridex/sdk"}</code>
-      <Link href="/api-reference/sdk" className="vdx-package-link">{"View SDK docs →"}</Link>
+      <Link href="/sdks/core" className="vdx-package-link">{"View SDK docs →"}</Link>
     </div>
     <div className="vdx-package-card">
       <div className="vdx-package-name">{"@veridex/agentic-payments"}</div>
-      <div className="vdx-package-desc">{"Autonomous payments, on-chain identity, reputation scoring, trust gates, and MCP tools for AI agents."}</div>
+      <div className="vdx-package-desc">{"Autonomous payments, on-chain identity, session inventory, trust gates, and MCP tools for AI agents."}</div>
       <code className="vdx-package-install">{"npm install @veridex/agentic-payments"}</code>
-      <Link href="/api-reference/agent-sdk" className="vdx-package-link">{"View Agent docs →"}</Link>
+      <Link href="/sdks/agent" className="vdx-package-link">{"View Agent SDK docs →"}</Link>
     </div>
     <div className="vdx-package-card">
       <div className="vdx-package-name">{"@veridex/agents"}</div>
-      <div className="vdx-package-desc">{"General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, transports, and policy-aware execution."}</div>
+      <div className="vdx-package-desc">{"General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, and policy-aware execution."}</div>
       <code className="vdx-package-install">{"npm install @veridex/agents zod"}</code>
-      <Link href="/api-reference/agents-framework" className="vdx-package-link">{"View framework docs →"}</Link>
-    </div>
-    <div className="vdx-package-card">
-      <div className="vdx-package-name">{"@veridex/agents-control-plane"}</div>
-      <div className="vdx-package-desc">{"Remote governance layer for approvals, policy packs, traces, audit export, and Postgres-backed managed deployments."}</div>
-      <code className="vdx-package-install">{"npm install @veridex/agents-control-plane"}</code>
-      <Link href="/guides/veridex-agents" className="vdx-package-link">{"View runtime guide →"}</Link>
+      <Link href="/sdks/agents-framework" className="vdx-package-link">{"View framework docs →"}</Link>
     </div>
   </div>
 </section>
 </div>
 
-## Start building in minutes
+## Bounded Authority in 30 seconds
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
 const sdk = createSDK('base', { network: 'testnet' });
 
-// Register a passkey (prompts biometric)
+// Register a passkey
 const credential = await sdk.passkey.register('alice', 'My Wallet');
 
-// Prepare and execute a cross-chain transfer
+// Create a bounded session (one of many)
+const session = await sdk.sessions.createSession({
+  permissions: ['transfer'],
+  chainScopes: [8453],
+  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
+  duration: 3600,
+  label: 'payment-agent-001',
+});
+
+// List all active sessions
+const sessions = await sdk.sessions.listSessions();
+
+// Execute a governed transfer with the active session
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  targetChain: 8453,
+  token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
   amount: 1000000n,
 });
@@ -116,19 +147,19 @@ const prepared = await sdk.prepareTransfer({
 <section className="vdx-explore">
   <h2 className="vdx-section-title">{"Explore the docs"}</h2>
   <div className="vdx-explore-grid">
-    <Link href="/guides/react-hooks" className="vdx-explore-item">{"React Hooks →"}</Link>
-    <Link href="/guides/cross-chain" className="vdx-explore-item">{"Cross-Chain Transfers →"}</Link>
+    <Link href="/guides/multi-session" className="vdx-explore-item">{"Multi-Session Management →"}</Link>
     <Link href="/guides/session-keys" className="vdx-explore-item">{"Session Keys →"}</Link>
-    <Link href="/guides/spending-limits" className="vdx-explore-item">{"Spending Limits →"}</Link>
     <Link href="/guides/agent-payments" className="vdx-explore-item">{"Agent Payments →"}</Link>
     <Link href="/guides/veridex-agents" className="vdx-explore-item">{"Veridex Agents →"}</Link>
     <Link href="/guides/agent-identity" className="vdx-explore-item">{"Agent Identity (ERC-8004) →"}</Link>
+    <Link href="/guides/cross-chain" className="vdx-explore-item">{"Cross-Chain Transfers →"}</Link>
+    <Link href="/guides/spending-limits" className="vdx-explore-item">{"Spending Limits →"}</Link>
+    <Link href="/guides/react-hooks" className="vdx-explore-item">{"React Hooks →"}</Link>
+    <Link href="/governance/approvals" className="vdx-explore-item">{"Approval Inbox →"}</Link>
+    <Link href="/governance/traces" className="vdx-explore-item">{"Trace Explorer →"}</Link>
+    <Link href="/governance/evidence" className="vdx-explore-item">{"Evidence Export →"}</Link>
     <Link href="/guides/enterprise-manager" className="vdx-explore-item">{"Enterprise Manager →"}</Link>
-    <Link href="/guides/multisig-wallet" className="vdx-explore-item">{"Multisig Wallets →"}</Link>
-    <Link href="/guides/balance-watching" className="vdx-explore-item">{"Balance Watching →"}</Link>
-    <Link href="/guides/error-handling" className="vdx-explore-item">{"Error Handling →"}</Link>
     <Link href="/resources/architecture-decisions" className="vdx-explore-item">{"Architecture Decisions →"}</Link>
-    <Link href="/resources/contributing" className="vdx-explore-item">{"Contributing →"}</Link>
     <Link href="/resources/glossary" className="vdx-explore-item">{"Glossary →"}</Link>
   </div>
 </section>

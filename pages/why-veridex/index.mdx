@@ -1,0 +1,73 @@
+---
+title: Why Veridex
+description: Bounded authority for apps and agents across chains
+---
+
+# Why Veridex
+
+Veridex is the platform for **bounded financial authority**. It provides the infrastructure for applications and AI agents to execute on-chain actions within explicit limits, with full governance and audit trails.
+
+## The Problem
+
+Modern applications — especially those powered by AI agents — need to execute financial transactions autonomously. But unrestricted autonomy is unacceptable for real-world deployments:
+
+- **Developers** need fast integration, clear session management, and predictable execution.
+- **Operators** need policy controls, approval workflows, incident response, and evidence for audit.
+- **Neither** is well-served by existing wallet infrastructure that assumes a single human signer.
+
+## The Veridex Model
+
+Veridex introduces a **layered authority model** that separates identification, delegation, governance, and evidence:
+
+| Layer | What It Does | Who Uses It |
+|-------|-------------|-------------|
+| **API Keys** | Identify applications to the platform | Developers |
+| **Session Keys** | Delegate bounded authority to software | Developers & Agents |
+| **Governed Execution** | Enforce policies on every action | Operators |
+| **Audit Evidence** | Produce verifiable traces per execution | Operators & Compliance |
+
+## Key Capabilities
+
+### For Developers (Build)
+- **Multi-session keys**: Create, list, select, rotate, and revoke multiple concurrent sessions per identity
+- **Cross-chain execution**: Base, Optimism, Arbitrum, Solana, Aptos, Sui, Starknet, Stacks
+- **Agent SDKs**: First-class support for AI agents with session inventory and MCP tools
+- **Session Studio**: Visual management of app sessions and agent sessions
+
+### For Operators (Operate)
+- **Approval Inbox**: Review and decide on pending actions before execution
+- **Policy Packs**: Configure spending limits, chain restrictions, approval thresholds, counterparty rules
+- **Incident Log**: Track and investigate security or policy violations
+- **Trace Explorer**: Step-by-step execution history with reasoning, verdicts, and signatures
+- **Evidence Export**: JSON and CSV bundles for audit and compliance review
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│            Developer Platform               │
+│  ┌─────────────┐  ┌──────────────────────┐  │
+│  │    Build     │  │      Operate         │  │
+│  │  • API Keys  │  │  • Approvals         │  │
+│  │  • Sessions  │  │  • Policies          │  │
+│  │  • Agents    │  │  • Incidents          │  │
+│  │  • Activity  │  │  • Traces            │  │
+│  └─────────────┘  │  • Evidence           │  │
+│                    └──────────────────────┘  │
+├─────────────────────────────────────────────┤
+│             Relayer + Governance             │
+│  API key auth • Session lifecycle            │
+│  Approval queue • Trace storage              │
+│  Incident recording • Evidence export        │
+├─────────────────────────────────────────────┤
+│           On-Chain Contracts                 │
+│  VeridexHub • Session[] per identity         │
+│  Multi-chain deployment                      │
+└─────────────────────────────────────────────┘
+```
+
+## Next Steps
+
+- [Developer Quickstart](/quickstarts/developer) — First governed request in 10 minutes
+- [Operator Quickstart](/quickstarts/operator) — Review posture, configure policies, inspect traces
+- [Session Studio](/platform/session-studio) — Manage sessions visually

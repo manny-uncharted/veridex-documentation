@@ -4,11 +4,14 @@
     "type": "page",
     "display": "hidden"
   },
-  "getting-started": "Get Started",
+  "why-veridex": "Why Veridex",
+  "quickstarts": "Quickstarts",
+  "sdks": "SDKs",
+  "platform": "Developer Platform",
+  "governance": "Governance",
   "guides": "Guides",
   "chains": "Chains",
-  "integrations": "Integrations",
   "security": "Security",
-  "resources": "Resources",
-  "api-reference": "API Reference"
+  "api-reference": "API Reference",
+  "resources": "Resources"
 }

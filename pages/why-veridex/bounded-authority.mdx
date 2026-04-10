@@ -1,0 +1,72 @@
+---
+title: Bounded Authority
+description: How Veridex's layered authority model works
+---
+
+# Bounded Authority
+
+Bounded authority is the core design principle of Veridex. Instead of granting unrestricted access to wallets and funds, Veridex decomposes authority into explicit, auditable layers.
+
+## The Four Layers
+
+### 1. API Keys — Application Identity
+
+Every application starts by registering and receiving an API key. This key:
+
+- Identifies the application to the platform
+- Scopes all downstream sessions and activity to one namespace
+- Supports rotation with one-time reveal
+- Creates an audit trail for every action taken under the key
+
+### 2. Session Keys — Delegated Authority
+
+Session keys are the primary execution primitive. A session key delegates bounded authority from a passkey-authenticated identity to software:
+
+- **Permissions**: Which actions are allowed (read, transfer, swap, approve)
+- **Chain scopes**: Which chains the session can operate on
+- **Spending limits**: Maximum amount per transaction and per day
+- **Time bounds**: Explicit expiration
+- **Labels**: Human-readable purpose for each session
+
+A single identity can hold multiple concurrent sessions. This supports:
+
+- One long-lived developer session for a web app
+- Multiple task-specific agent sessions with different limits
+- Operator-driven rotation and revocation of risky sessions
+
+### 3. Governed Execution — Policy Enforcement
+
+Every action executed through a session key passes through policy evaluation:
+
+- **Spending limits**: Per-transaction and daily caps
+- **Chain restrictions**: Allowlisted chains only
+- **Token whitelists**: Only approved assets
+- **Approval thresholds**: Actions above a threshold require human approval
+- **Counterparty rules**: Only approved recipients
+
+If a policy blocks an action, the trace records the reason and the session stays active for future actions that comply.
+
+### 4. Audit Evidence — Verifiable Traces
+
+Every execution produces a trace record containing:
+
+- The agent's reasoning (LLM output or intent)
+- The proposed action
+- Policy verdicts for each rule evaluated
+- Signatures
+- Transaction hash (if executed)
+- Evidence bundle exportable as JSON or CSV
+
+## Comparison to Traditional Models
+
+| Model | Authority | Governance | Evidence |
+|-------|----------|-----------|---------|
+| Hot wallet | Unlimited | None | Transaction logs only |
+| Multisig | Threshold-based | Manual approval | Signature set |
+| **Veridex** | Session-scoped | Automated + human hybrid | Full execution trace |
+
+## Next Steps
+
+- [Multi-Session Management](/guides/multi-session) — Create and manage multiple sessions
+- [Session Studio](/platform/session-studio) — Visual session management
+- [Governance](/governance/approvals) — Approval and policy workflows

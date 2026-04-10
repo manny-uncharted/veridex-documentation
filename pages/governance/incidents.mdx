@@ -1,0 +1,80 @@
+---
+title: Incidents
+description: Severity-based incident tracking for policy violations and security events
+---
+
+# Incidents
+
+The incident system records security events, policy violations, and anomalous behavior for investigation and resolution.
+
+## Severity Levels
+
+| Severity | Description | Example |
+|----------|-------------|---------|
+| **Critical** | Immediate action required | Prompt injection detected, unauthorized fund movement |
+| **High** | Rapid investigation needed | Spending limit breach, blocked counterparty attempt |
+| **Medium** | Review within business day | Intent deviation from mandate, unusual token swap |
+| **Low** | Informational | Session approaching expiry, high-volume activity |
+
+## Incident Record
+
+Each incident contains:
+
+| Field | Description |
+|-------|-------------|
+| `severity` | Critical, High, Medium, or Low |
+| `title` | Summary of the incident |
+| `description` | Detailed description |
+| `affectedEntity` | Type of entity affected (agent, session, app) |
+| `affectedEntityId` | ID of the affected entity |
+| `sessionKeyHash` | Session involved |
+| `traceHash` | Related execution trace |
+| `policyId` | Policy that detected the violation |
+| `status` | Open, Investigating, Resolved, Dismissed |
+
+## Incident Lifecycle
+
+1. **Open** — Incident detected and recorded
+2. **Investigating** — Operator has begun review
+3. **Resolved** — Root cause identified and addressed
+4. **Dismissed** — False positive or non-actionable
+
+## API
+
+### List Incidents
+
+```bash
+GET /apps/{appId}/incidents?severity=critical&status=open
+Authorization: Bearer {apiKey}
+```
+
+### Create Incident
+
+```bash
+POST /apps/{appId}/incidents
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "severity": "high",
+  "title": "Spending limit exceeded by agent-001",
+  "description": "Agent attempted transfer of $2,500 USDC, exceeding daily limit of $1,000",
+  "affectedEntity": "agent",
+  "affectedEntityId": "agt_abc123",
+  "sessionKeyHash": "0x...",
+  "policyId": "spending_limits"
+}
+```
+
+### Update Status
+
+```bash
+PATCH /apps/{appId}/incidents/{incidentId}
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "status": "resolved",
+  "resolvedBy": "security@company.com"
+}
+```

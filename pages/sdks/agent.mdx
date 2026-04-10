@@ -1,0 +1,84 @@
+---
+title: Agent SDK
+description: "@veridex/agentic-payments — autonomous payments, session inventory, MCP tools"
+---
+
+# Agent SDK (`@veridex/agentic-payments`)
+
+The Agent SDK extends the core SDK for AI agent use cases: autonomous payments, session inventory management, on-chain identity (ERC-8004), trust gates, and Model Context Protocol (MCP) tools.
+
+## Installation
+
+```bash
+npm install @veridex/agentic-payments
+```
+
+## Quick Start
+
+```typescript
+import { AgentWallet } from '@veridex/agentic-payments';
+
+const wallet = new AgentWallet({
+  chain: 'base',
+  network: 'testnet',
+  sessionConfig: {
+    permissions: ['transfer'],
+    chainScopes: [8453],
+    spendingLimit: { amount: 50_000_000n, token: 'USDC' },
+    duration: 1800,
+    label: 'trading-agent-001',
+  },
+});
+
+await wallet.init();
+```
+
+## Multi-Session Inventory
+
+The Agent SDK manages a full session inventory for each agent:
+
+```typescript
+// List all sessions for this agent
+const sessions = await wallet.listSessions();
+
+// Get status of all sessions
+const statuses = await wallet.getSessionStatuses();
+
+// Select a specific session for execution
+wallet.selectSession(keyHash);
+
+// Revoke a risky session
+await wallet.revokeSession(keyHash);
+```
+
+## MCP Tools
+
+The Agent SDK ships with Model Context Protocol tools that AI runtimes can invoke:
+
+| Tool | Description |
+|------|-------------|
+| `veridex_create_session` | Create a new bounded session |
+| `veridex_list_sessions` | List active sessions |
+| `veridex_revoke_session` | Revoke a specific session |
+| `veridex_transfer` | Execute a governed transfer |
+| `veridex_balance` | Check wallet balance |
+| `veridex_status` | Get agent identity and status |
+
+## Session Restoration
+
+On init, the agent wallet attempts to restore a valid session before creating a new one:
+
+```typescript
+const wallet = new AgentWallet({ /* config */ });
+await wallet.init();
+
+// If a valid session exists from a previous run, it's restored automatically.
+// Otherwise, a new session is created with the configured limits.
+```
+
+## Related
+
+- [API Reference](/api-reference/agent-sdk) — Full method signatures and types
+- [Agent Payments Guide](/guides/agent-payments) — Autonomous payment workflows
+- [Agent Identity Guide](/guides/agent-identity) — ERC-8004 on-chain identity
+- [Multi-Session Guide](/guides/multi-session) — Session management patterns

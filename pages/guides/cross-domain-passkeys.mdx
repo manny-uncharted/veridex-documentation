@@ -30,9 +30,9 @@ Two methods are supported, and the SDK handles both automatically:
 
 Every third-party origin must be registered before it can use Veridex cross-domain passkeys. Registration is free and instant.
 
-**Option A: Developer Portal (UI)**
+**Option A: Developer Platform (UI)**
 
-1. Go to the [Developer Portal](https://developers.veridex.network).
+1. Go to the [Developer Platform](https://developers.veridex.network).
 2. Enter your **Application Name**, **Origin** (e.g., `https://myapp.com`), and optionally a **Contact Email**.
 3. You'll receive an **App ID** and **API Key**. Save the API key — it's shown only once.
 
@@ -382,7 +382,7 @@ export async function GET() {
 ```
 
 <Callout type="info">
-  The canonical `.well-known/webauthn` file at `veridex.network` is managed by the Veridex team. Your origin is automatically added when you register via the Developer Portal. You only need to host this file on **your own domain** if you want ROR to work in both directions.
+  The canonical `.well-known/webauthn` file at `veridex.network` is managed by the Veridex team. Your origin is automatically added when you register via the Developer Platform. You only need to host this file on **your own domain** if you want ROR to work in both directions.
 </Callout>
 
 ---

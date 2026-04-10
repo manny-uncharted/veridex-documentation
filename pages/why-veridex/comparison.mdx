@@ -1,0 +1,45 @@
+---
+title: Veridex vs Ampersend
+description: How Veridex and Ampersend differ in scope and approach
+---
+
+# Veridex vs Ampersend
+
+Both Veridex and Ampersend address governance of autonomous financial execution. They differ in scope, execution model, and target audience.
+
+## Positioning
+
+| Dimension | Veridex | Ampersend |
+|-----------|---------|-----------|
+| **Core model** | Bounded authority across sessioned agent execution | Transaction governance software with narrower execution posture |
+| **Session keys** | First-class primitive. Multiple concurrent sessions per identity with limits, chains, expiry | Not a primary primitive |
+| **Agent support** | Native. Agent SDK with session inventory, MCP tools, identity | Limited or no native agent primitives |
+| **Multi-chain** | 8+ chains (EVM, Solana, Aptos, Sui, Starknet, Stacks) | Typically EVM-focused |
+| **Governance** | Full: approvals, policies, incidents, traces, evidence export | Transaction monitoring and rules |
+| **Developer focus** | Session Studio, quickstarts, SDK-first onboarding | Dashboard-first approach |
+| **Operator focus** | Dedicated Operate mode with approval inbox, trace explorer, evidence bundles | Alerting and monitoring |
+| **Evidence model** | Per-execution trace with reasoning, verdicts, signatures, exportable bundles | Transaction-level alerting |
+| **Open source** | Yes | Varies |
+
+## When to Choose Veridex
+
+- You are building applications or agents that need **bounded financial authority**
+- You need **multiple concurrent sessions** with different limits per identity
+- You need **full execution traces** with reasoning, policy verdicts, and evidence export
+- You are deploying across **more than one chain family**
+- You have both **developer and operator** stakeholders
+
+## When to Consider Ampersend
+
+- You primarily need **transaction monitoring and alerting** without session key delegation
+- Your execution model is already decided and you just need governance on top
+- You are operating exclusively on EVM chains with simpler policy needs
+
+## Not a Zero-Sum Choice
+
+For some organizations, both tools may apply to different parts of the stack:
+
+- **Veridex** for agent execution, session management, and developer tooling
+- **Ampersend** for additional transaction-level monitoring on existing wallet infrastructure
+
+The key distinction: Veridex owns the execution boundary (session keys → governed execution → audit evidence). Ampersend observes and governs transactions after the fact.

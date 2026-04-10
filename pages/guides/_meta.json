@@ -4,6 +4,7 @@
   "cross-domain-passkeys": "Cross-Domain Passkeys",
   "gasless-transactions": "Gasless Transactions",
   "session-keys": "Session Keys",
+  "multi-session": "Multi-Session Management",
   "spending-limits": "Spending Limits",
   "balance-watching": "Balance Watching",
   "cross-chain": "Cross-Chain",

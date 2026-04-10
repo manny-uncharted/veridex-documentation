@@ -1,0 +1,63 @@
+---
+title: Policies
+description: Spending limits, chain restrictions, approval thresholds, and counterparty rules
+---
+
+# Policies
+
+Policies define the rules that govern what actions are allowed, what actions require approval, and what actions are blocked.
+
+## Policy Types
+
+### Spending Limits
+Control maximum spend per transaction and per day:
+- **Per-transaction limit**: Maximum USD value for a single action
+- **Daily limit**: Maximum cumulative USD spend in a 24-hour window
+- Actions exceeding limits are either blocked or routed to the approval inbox
+
+### Chain Restrictions
+Control which chains agents and sessions can operate on:
+- **Allowlisted chains**: Only specified chains are permitted
+- Actions targeting non-allowed chains are blocked immediately
+
+### Approval Thresholds
+Define when human approval is required:
+- **Amount threshold**: Actions above N USD require operator approval
+- **Risk threshold**: Actions with risk score above N require approval
+- Thresholds can be set per-agent, per-session, or workspace-wide
+
+### Counterparty Rules
+Control who agents can transact with:
+- **Approved recipients**: Only addresses on the allowlist
+- **Approved protocols**: Only verified DeFi protocols
+- **Token whitelists**: Only approved assets
+
+## Policy Application Order
+
+1. **Session-level limits** (set during session creation)
+2. **Agent-level policies** (assigned to an agent)
+3. **App-level policies** (workspace-wide defaults)
+
+More specific policies override broader ones. If a session has a $100 daily limit and the app has a $1,000 limit, the session's $100 limit applies.
+
+## Configuration
+
+Policies are configured through the Operate dashboard or via the relayer API. The current beta supports configuration through the dashboard interface with API support for programmatic management.
+
+### Setting Policies via Dashboard
+
+1. Navigate to **Operate → Policies**
+2. Select a policy category
+3. Configure the rules
+4. Save — policies apply immediately to all future actions
+
+## Default Policies
+
+New workspaces start with sensible defaults:
+- Per-transaction limit: $500 USD
+- Daily limit: $5,000 USD
+- Approval threshold: $1,000 USD
+- Chain restrictions: All supported chains allowed
+- Token restrictions: None (all tokens allowed)
+
+Operators should review and tighten defaults based on their risk posture.

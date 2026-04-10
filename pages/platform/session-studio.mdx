@@ -1,0 +1,132 @@
+---
+title: Session Studio
+description: Visual management for app sessions, agent sessions, and multi-session inventory
+---
+
+# Session Studio
+
+Session Studio is the visual interface for creating, managing, rotating, and revoking sessions within the Developer Platform.
+
+## App Sessions
+
+App sessions are created by browser-based or server-side applications using passkey authentication.
+
+**Capabilities:**
+- Create sessions with custom permissions, chain scopes, spending limits, and expiry
+- View all active sessions for the current identity
+- Inspect session usage (last used, request count)
+- Revoke individual sessions without affecting others
+- Copy session artifacts for backend integration
+
+### Creating an App Session
+
+1. Navigate to **Build → Sessions**
+2. Click **New Session** under the App Sessions tab
+3. Configure:
+   - **Label**: Human-readable purpose (e.g., "web-checkout")
+   - **Permissions**: Select allowed actions
+   - **Chain scopes**: Select allowed chains
+   - **Spending limit**: Set per-transaction and daily caps
+   - **Expiry**: Set session duration
+4. Authenticate with passkey
+5. Copy the provisioning artifact or SDK snippet
+
+## Agent Sessions
+
+Agent sessions are bounded spend sessions provisioned for AI agents.
+
+**Capabilities:**
+- Create sessions with limits, chains, expiry, labels
+- Assign sessions to registered agents
+- Export session configuration for agent runtime initialization
+- Monitor agent session utilization
+- Revoke or rotate agent sessions
+
+### Creating an Agent Session
+
+1. Navigate to **Build → Sessions**
+2. Switch to the **Agent Sessions** tab
+3. Select the target agent from the registry
+4. Configure:
+   - **Label**: Purpose (e.g., "trading-agent-001-daily")
+   - **Daily limit**: Maximum USD spend per day
+   - **Per-transaction limit**: Maximum per action
+   - **Allowed chains**: Which chains this agent can operate on
+   - **Allowed tokens**: Which assets are permitted
+   - **Expiry**: Session lifetime
+5. Create the session
+6. Export the configuration for the agent's `AgentWallet` initialization
+
+## Multi-Session Inventory
+
+The Session Studio displays all active sessions for the current workspace, across both app and agent types.
+
+**Inventory view:**
+- Filter by type (app/agent), status (active/revoked/expired), chain, agent
+- Sort by creation date, last used, expiry
+- Bulk revoke sessions matching a filter
+- Session health indicators (approaching expiry, near spending limits)
+
+## SDK Integration
+
+### Core SDK
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+// Create a session programmatically
+const session = await sdk.sessions.createSession({
+  permissions: ['transfer'],
+  chainScopes: [8453],
+  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
+  duration: 3600,
+  label: 'my-webapp',
+});
+
+// List all sessions
+const allSessions = await sdk.sessions.listSessions();
+
+// Select a session by its key hash
+sdk.sessions.selectSession(session.keyHash);
+
+// Revoke a specific session
+await sdk.sessions.revokeSession(session.keyHash);
+```
+
+### Agent SDK
+
+```typescript
+import { AgentWallet } from '@veridex/agentic-payments';
+
+const wallet = new AgentWallet({
+  chain: 'base',
+  network: 'testnet',
+  sessionConfig: {
+    permissions: ['transfer'],
+    spendingLimit: { amount: 50_000_000n, token: 'USDC' },
+    duration: 1800,
+    label: 'payment-agent',
+  },
+});
+
+await wallet.init();
+
+// Agent session inventory
+const sessions = await wallet.listSessions();
+const statuses = await wallet.getSessionStatuses();
+
+// Rotate to a new session
+await wallet.revokeSession(oldKeyHash);
+// init() on next call will create a fresh session
+```
+
+## When to Use Multiple Sessions
+
+| Pattern | When | Example |
+|---------|------|---------|
+| One long-lived session | Web app with consistent needs | Checkout flow lasting a user session |
+| Multiple task sessions | Agent with varied operations | One session for swaps, another for transfers |
+| Operator-driven rotation | Security hygiene | Rotate all agent sessions weekly |
+| Limit-scoped sessions | Risk management | Low-limit session for recurring payments |

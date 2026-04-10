@@ -1,0 +1,77 @@
+---
+title: Approvals
+description: Approval inbox for pending agent actions
+---
+
+# Approvals
+
+The approval system gates high-risk or threshold-exceeding actions before execution. When an agent or session attempts an action that triggers an approval policy, the action is held in the Approval Inbox until an operator decides.
+
+## How Approvals Work
+
+1. An agent proposes an action (e.g., transfer $5,000 USDC)
+2. Policy evaluation identifies the action exceeds the approval threshold
+3. A `PendingApproval` record is created with action details, risk score, and the triggering policy
+4. The action is **held** — not executed — until decided
+5. An operator reviews the approval in the Operate dashboard or via API
+6. The operator approves (execution proceeds) or rejects (action blocked)
+7. An activity event records the decision
+
+## Approval Record
+
+Each pending approval contains:
+
+| Field | Description |
+|-------|-------------|
+| `actionType` | Type of action (transfer, swap, approval) |
+| `actionSummary` | Human-readable description |
+| `amountUsd` | Requested amount in USD |
+| `fromToken` / `toToken` | The assets involved |
+| `chainId` | Target chain |
+| `riskScore` | Computed risk score (0-100) |
+| `policyId` | The policy rule that triggered the approval |
+| `sessionKeyHash` | The session attempting the action |
+| `traceHash` | Link to the full execution trace |
+| `expiresAt` | Approval TTL — auto-expires if not decided |
+
+## API
+
+### List Approvals
+
+```bash
+GET /apps/{appId}/approvals?status=pending&limit=50
+Authorization: Bearer {apiKey}
+```
+
+### Create Approval
+
+```bash
+POST /apps/{appId}/approvals
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "sessionKeyHash": "0x...",
+  "actionType": "transfer",
+  "actionSummary": "Transfer 5000 USDC to 0x742d...",
+  "amountUsd": 5000,
+  "fromToken": "USDC",
+  "chainId": "8453",
+  "riskScore": 45,
+  "policyId": "spending_limits",
+  "expiresAt": 1712534400000
+}
+```
+
+### Decide on Approval
+
+```bash
+POST /apps/{appId}/approvals/{approvalId}/decide
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "decision": "approved",
+  "decidedBy": "operator@company.com"
+}
+```

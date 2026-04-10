@@ -1,0 +1,80 @@
+---
+title: Core SDK
+description: "@veridex/sdk — passkey wallets, multi-session keys, cross-chain transfers"
+---
+
+# Core SDK (`@veridex/sdk`)
+
+The core SDK provides passkey-based wallet creation, multi-session key management, cross-chain transfers, spending limits, and ERC-8004 utilities.
+
+## Installation
+
+```bash
+npm install @veridex/sdk
+```
+
+## Quick Start
+
+```typescript
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+// Register a passkey (prompts biometric)
+const credential = await sdk.passkey.register('alice', 'My Wallet');
+
+// Create a bounded session
+const session = await sdk.sessions.createSession({
+  permissions: ['transfer'],
+  chainScopes: [8453],
+  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
+  duration: 3600,
+  label: 'web-app-session',
+});
+```
+
+## Multi-Session Management
+
+The SDK supports multiple concurrent sessions per identity. See the [Multi-Session Guide](/guides/multi-session) for full details.
+
+```typescript
+// Create multiple sessions
+const webSession = await sdk.sessions.createSession({
+  label: 'web-app',
+  duration: 3600,
+});
+
+const agentSession = await sdk.sessions.createSession({
+  label: 'payment-agent',
+  spendingLimit: { amount: 50_000_000n, token: 'USDC' },
+  duration: 1800,
+});
+
+// List all active sessions
+const sessions = await sdk.sessions.listSessions();
+
+// Select a specific session
+sdk.sessions.selectSession(agentSession.keyHash);
+
+// Revoke a specific session without affecting others
+await sdk.sessions.revokeSession(webSession.keyHash);
+```
+
+## Key APIs
+
+| Method | Description |
+|--------|-------------|
+| `sdk.passkey.register()` | Register a new passkey credential |
+| `sdk.passkey.authenticate()` | Authenticate with existing passkey |
+| `sdk.sessions.createSession()` | Create a bounded session key |
+| `sdk.sessions.listSessions()` | List all valid sessions |
+| `sdk.sessions.selectSession()` | Set the active session |
+| `sdk.sessions.revokeSession()` | Revoke a specific session |
+| `sdk.sessions.loadSession()` | Load a session by key hash |
+| `sdk.prepareTransfer()` | Prepare a cross-chain transfer |
+
+## Related
+
+- [API Reference](/api-reference/sdk) — Full method signatures and types
+- [Session Keys Guide](/guides/session-keys) — Deep dive into session key concepts
+- [Multi-Session Guide](/guides/multi-session) — Managing multiple concurrent sessions

@@ -1,0 +1,72 @@
+---
+title: Operate Mode
+description: Operator-facing workspace for approvals, policies, incidents, traces, and evidence
+---
+
+# Operate Mode
+
+Operate mode is the operator-facing half of the Developer Platform. It serves treasury leads, risk leads, security leads, and platform owners who need to control and audit autonomous agent execution.
+
+## Operate Navigation
+
+| Page | Purpose | Status |
+|------|---------|--------|
+| **Operations Overview** | Spend posture, pending approvals, incidents, session health | Public Beta |
+| **Approval Inbox** | Queue actions for review, approve or reject with reasoning | Public Beta |
+| **Policies** | Configure spending limits, chain restrictions, approval thresholds, counterparty rules | Public Beta |
+| **Incidents** | Severity-based incident log with affected agent, session, and timeline | Public Beta |
+| **Traces** | Step-by-step execution log with reasoning, verdicts, signatures | Public Beta |
+| **Evidence Export** | JSON and CSV audit bundles for compliance | Public Beta |
+
+## Operator Workflow
+
+1. **Join or create workspace** with operator role
+2. **Review spend posture** — active sessions, recent spend, policy defaults
+3. **Configure policies** — set limits, chains, approval thresholds, counterparty rules
+4. **Monitor approvals** — approve, reject, or let expire with reasoning
+5. **Investigate incidents** — review severity, affected entities, related traces
+6. **Inspect traces** — step-by-step execution with reasoning hash and signatures
+7. **Export evidence** — JSON or CSV bundles for audit
+
+## Governance Surfaces
+
+### Approval Inbox
+Pending actions that exceed policy thresholds appear in the approval queue. Each entry shows:
+- Action type and summary
+- Amount, tokens, and chain
+- Risk score
+- Policy that triggered the approval
+- Agent and session responsible
+
+### Policy Packs
+Reusable policy configurations that apply across agents and sessions:
+- **Spending limits** — Per-transaction and daily caps
+- **Chain restrictions** — Allowlisted chains only
+- **Approval thresholds** — Actions above N USD require approval
+- **Counterparty rules** — Approved recipients and protocols
+
+### Incident Log
+Security and policy violations organized by severity (Critical, High, Medium, Low):
+- Title and description
+- Affected entity and session
+- Related trace hash
+- Status (Open, Investigating, Resolved, Dismissed)
+
+### Trace Explorer
+Per-execution audit trail:
+- Agent reasoning (LLM output or intent description)
+- Proposed action
+- Policy verdicts for each rule evaluated
+- Signatures
+- Transaction hash (if executed)
+- Duration and risk score
+
+### Evidence Export
+Downloadable evidence bundles for audit and compliance:
+- JSON format with full trace, incident, and approval data
+- CSV format for spreadsheet analysis
+- Filtered by date range, agent, or session
+
+## Success Metric
+
+An operator can answer **who authorized an action**, **what policy applied**, and **which session executed it** in under 2 minutes.

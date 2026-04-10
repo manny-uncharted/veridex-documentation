@@ -1,0 +1,38 @@
+---
+title: Build Mode
+description: Developer-facing workspace for app registration, sessions, agents, and activity
+---
+
+# Build Mode
+
+Build mode is the developer-facing half of the Developer Platform. It optimizes for the journey from first registration to first governed execution.
+
+## Build Navigation
+
+| Page | Purpose | Status |
+|------|---------|--------|
+| **Overview** | App health, recent activity, quick actions | Live Today |
+| **API Keys** | Key management, rotation, usage stats, integration snippet | Live Today |
+| **Session Studio** | App sessions and agent sessions with multi-session inventory | Live Today |
+| **Agents** | Agent registry with labels, status, last active | Live Today |
+| **Activity** | Event stream with type filters and timestamps | Live Today |
+
+## Developer Workflow
+
+1. **Sign in** with passkey
+2. **Register app** and receive API key (one-time reveal)
+3. **Create sessions** — choose app session or agent session with bounded parameters
+4. **Copy provisioning artifact** or SDK snippet
+5. **Make first request** through the SDK or directly via relayer API
+6. **Inspect activity** to verify execution and debug failures
+
+## UX Principles
+
+- Every primary action has a **copy-paste example** or downloadable artifact
+- Session creation supports **labels, limits, chains, expiry**, and multiple concurrent sessions
+- Activity feed explains failures in **product language** rather than contract error codes
+- Documentation and dashboard **terminology match exactly**
+
+## Success Metric
+
+A new developer reaches their first successful session-backed request in under 10 minutes.

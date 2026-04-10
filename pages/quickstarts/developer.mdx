@@ -1,0 +1,82 @@
+---
+title: Developer Quickstart
+description: Register an app, create a session, and make your first governed request in under 10 minutes
+---
+
+# Developer Quickstart
+
+Get from zero to a working session-backed request in five steps.
+
+## Prerequisites
+
+- Node.js 18+ or Bun
+- A Veridex Developer Platform account
+
+## Step 1: Install the SDK
+
+```bash
+npm install @veridex/sdk
+```
+
+## Step 2: Register Your App
+
+Sign in to the [Developer Platform](/platform) and register a new app. You'll receive an **API key** — copy it immediately (it's shown only once).
+
+Set it as an environment variable:
+```bash
+export VERIDEX_API_KEY=vdx_...
+```
+
+## Step 3: Initialize the Client
+
+```typescript
+import { VeridexClient } from '@veridex/sdk';
+
+const client = new VeridexClient({
+  apiKey: process.env.VERIDEX_API_KEY,
+  chain: 'base',          // or 'solana', 'ethereum'
+  rpcUrl: 'https://...',  // your chain RPC
+});
+```
+
+## Step 4: Create a Session
+
+Sessions are the core primitive. Each session is a scoped, time-limited authorization.
+
+```typescript
+const session = await client.createSession({
+  label: 'my-first-session',
+  spendingLimit: '100',        // 100 USDC max
+  validUntil: Date.now() + 3600_000, // 1 hour
+});
+
+console.log('Session created:', session.sessionKeyHash);
+```
+
+## Step 5: Execute a Request
+
+```typescript
+const result = await client.execute({
+  session: session.sessionKeyHash,
+  action: {
+    type: 'transfer',
+    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
+    amount: '10',
+    token: 'USDC',
+  },
+});
+
+console.log('Transaction:', result.txHash);
+```
+
+## Verify in the Dashboard
+
+Open the Developer Platform and check:
+1. **Sessions** — your session appears with label and status
+2. **Activity** — the execution appears with transaction hash and timestamp
+
+## What's Next
+
+- [Multi-Session Management](/guides/multi-session) — manage multiple concurrent sessions
+- [Agent SDK](/sdks/agent) — build autonomous agents with session keys
+- [Session Studio](/platform/session-studio) — visual session management
