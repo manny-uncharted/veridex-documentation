@@ -1,0 +1,314 @@
+---
+title: Wallet Backup & Recovery
+description: Back up your wallet credentials and recover them on a new device
+---
+
+import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup } from "../../components/mdx"
+
+# Wallet Backup & Recovery
+
+Lost your phone? Switched devices? This guide shows you how to back up your Veridex wallet so you can recover it anywhere — even if your original device is gone.
+
+<Callout type="info">
+  **What gets backed up?** Your passkey *credentials* (public keys, key hashes, credential IDs) — the information needed to identify your wallet. The actual passkey private keys live in your device's secure enclave and are never extracted. Recovery works because your passkey syncs via your platform (iCloud Keychain, Google Password Manager) or because you've added backup devices.
+</Callout>
+
+---
+
+## How It Works (Plain English)
+
+Think of it like this:
+
+1. **Your passkey** = the key to your house. It lives on your device (phone, laptop).
+2. **Your credentials** = a list of all the locks that key can open (wallet addresses, key hashes).
+3. **Backup** = you write down that list, put it in a locked box (encrypted), and store the box in the cloud (relayer).
+4. **The lock on the box** = your passkey's PRF output (a secret your authenticator generates deterministically). Only your passkey can open it.
+5. **Recovery** = you use your passkey on a new device to open the box and get the list back.
+
+```
+┌─────────┐     encrypt      ┌──────────┐     store      ┌──────────┐
+│ Device  │ ──────────────→  │ Encrypted │ ────────────→  │ Relayer  │
+│ Creds   │   (PRF key)      │  Archive  │               │ (cloud)  │
+└─────────┘                  └──────────┘               └──────────┘
+
+          ┌──────────┐     fetch       ┌──────────┐     decrypt
+          │ New      │ ←────────────  │ Relayer  │ ←────────────
+          │ Device   │   (PRF key)    │ (cloud)  │   restore!
+          └──────────┘               └──────────┘
+```
+
+---
+
+## Prerequisites
+
+- `@veridex/sdk` installed (`npm install @veridex/sdk ethers`)
+- An active passkey (you've already registered — see [Create Wallet](/guides/create-wallet))
+- A browser that supports WebAuthn (Chrome, Safari, Firefox, Edge)
+
+---
+
+## Step 1: Check Platform Support
+
+Before backing up, check if your device supports PRF (the strongest encryption method):
+
+```typescript
+import { WalletBackupManager } from '@veridex/sdk';
+
+const support = await WalletBackupManager.checkPlatformSupport();
+
+if (!support.webauthnSupported) {
+  console.log('WebAuthn not supported — backup not available');
+} else if (support.prfSupported) {
+  console.log('Full PRF support — your backup will be strongly encrypted');
+} else {
+  console.log('PRF not supported — backup will use a weaker fallback');
+  // Still works! Just less secure.
+}
+```
+
+<Callout type="warning">
+  **What is PRF?** PRF (Pseudo-Random Function) is a WebAuthn extension that lets your authenticator generate a deterministic secret. This secret becomes the encryption key for your backup. Without PRF, the SDK falls back to using your credential ID as the key source — this works but is less secure because credential IDs are not secret.
+</Callout>
+
+### Which Browsers Support PRF?
+
+| Browser | PRF Support |
+|---------|------------|
+| Chrome 116+ | Yes |
+| Safari 17+ | Yes |
+| Firefox | Not yet |
+| Edge 116+ | Yes |
+
+---
+
+## Step 2: Create a Backup
+
+```typescript
+import { WalletBackupManager } from '@veridex/sdk';
+import { createSDK } from '@veridex/sdk';
+
+// Initialize
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Authenticate first (you need an active credential)
+const { credential } = await sdk.passkey.authenticate();
+
+// Create the backup manager
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+
+// Back up your credentials
+const result = await backup.backupCredentials(credential.keyHash);
+console.log('Backup complete!');
+console.log('Archive ID:', result.archiveId);
+console.log('Credentials backed up:', result.credentialCount);
+```
+
+**What happens when you press the button:**
+1. Your browser asks for biometric verification (FaceID/TouchID)
+2. The passkey generates a PRF seed (a deterministic secret)
+3. The SDK derives an AES-256-GCM encryption key from that seed
+4. All your stored credentials are encrypted
+5. The encrypted blob is uploaded to the Veridex relayer
+
+<Callout type="info">
+  The relayer **cannot read your credentials** — they're encrypted with a key only your passkey can produce. Even if the relayer is compromised, your data is safe.
+</Callout>
+
+---
+
+## Step 3: Recover on a New Device
+
+Got a new phone or laptop? Here's how to get your wallet back:
+
+```typescript
+import { WalletBackupManager, createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+
+// Recover — uses your passkey to decrypt the backup
+const recovered = await backup.recoverCredentials(keyHash);
+console.log('Recovered', recovered.credentials.length, 'credentials!');
+
+// Your credentials are now in localStorage — you can use the SDK normally
+const vault = sdk.getVaultAddress();
+console.log('Welcome back! Your vault:', vault);
+```
+
+<Callout type="warning">
+  **You need your passkey!** Recovery requires the same passkey (or a synced copy). If you've lost ALL devices with your passkey and it wasn't synced, you'll need social recovery via guardians (a future feature).
+</Callout>
+
+---
+
+## Step 4: Check Backup Status
+
+See if a backup exists and how fresh it is:
+
+```typescript
+const status = await backup.getBackupStatus(keyHash);
+
+if (status.hasArchive) {
+  console.log('Backup exists');
+  console.log('Last updated:', new Date(status.archiveUpdatedAt));
+  console.log('PRF supported:', status.prfSupported);
+  console.log('Guardians:', status.guardianCount);
+} else {
+  console.log('No backup found — create one!');
+}
+```
+
+---
+
+## Adding Extra Devices (Best Practice)
+
+The **best protection** is having your passkey on multiple devices. If your phone breaks, your laptop still has access.
+
+### How to Add a Device
+
+1. Go to your account page at `auth.veridex.network/account`
+2. Click **"Add Another Device"**
+3. Your browser will show a QR code — scan it with your other device
+4. The new device creates a passkey linked to the same identity
+
+<Callout type="tip">
+  **Cross-ecosystem tip:** Passkeys sync automatically within the same ecosystem (Apple→Apple, Google→Google). To bridge across ecosystems (e.g., iPhone to Windows PC), use the "Add Another Device" flow — it uses QR/Bluetooth to set up the passkey on the other device.
+</Callout>
+
+### How Passkey Sync Works
+
+```
+┌──────────────────────────────────────────────────────┐
+│              Apple Ecosystem                          │
+│  iPhone ←──→ iPad ←──→ MacBook                       │
+│         (iCloud Keychain syncs passkeys)              │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│              Google Ecosystem                         │
+│  Android ←──→ Chrome (Windows) ←──→ Chromebook       │
+│         (Google Password Manager syncs passkeys)      │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│              Cross-Ecosystem (via Add Device)         │
+│  iPhone ──QR/BLE──→ Windows PC                       │
+│  Android ──QR/BLE──→ MacBook                         │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## Complete React Example
+
+```tsx
+import { useState, useEffect } from 'react';
+import { createSDK, WalletBackupManager } from '@veridex/sdk';
+
+export function BackupManager() {
+  const [status, setStatus] = useState<'idle' | 'backing-up' | 'recovering' | 'done'>('idle');
+  const [backupExists, setBackupExists] = useState(false);
+
+  const sdk = createSDK('base', {
+    network: 'testnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  const backup = new WalletBackupManager({
+    passkey: sdk.passkey,
+    relayerUrl: 'https://relayer.veridex.network/api/v1',
+  });
+
+  // Check backup status on mount
+  useEffect(() => {
+    const cred = sdk.passkey.getCredential();
+    if (cred?.keyHash) {
+      backup.getBackupStatus(cred.keyHash).then((s) => {
+        setBackupExists(s.hasArchive);
+      });
+    }
+  }, []);
+
+  const handleBackup = async () => {
+    setStatus('backing-up');
+    const cred = sdk.passkey.getCredential();
+    if (!cred) return;
+    await backup.backupCredentials(cred.keyHash);
+    setBackupExists(true);
+    setStatus('done');
+  };
+
+  const handleRecover = async () => {
+    setStatus('recovering');
+    const cred = sdk.passkey.getCredential();
+    if (!cred) return;
+    await backup.recoverCredentials(cred.keyHash);
+    setStatus('done');
+  };
+
+  return (
+    <div>
+      <h2>Wallet Backup</h2>
+      {backupExists ? (
+        <p>✅ Backup exists on the Veridex relayer</p>
+      ) : (
+        <p>⚠️ No backup found</p>
+      )}
+      <button onClick={handleBackup} disabled={status === 'backing-up'}>
+        {status === 'backing-up' ? 'Backing up...' : 'Create Backup'}
+      </button>
+      <button onClick={handleRecover} disabled={status === 'recovering'}>
+        {status === 'recovering' ? 'Recovering...' : 'Recover Wallet'}
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## What Happens if I Lose Everything?
+
+| Scenario | Solution |
+|----------|----------|
+| Lost one device, but passkey synced to another | Use the other device — everything works |
+| Lost device, have backup on relayer | Use any synced passkey to recover |
+| Lost all devices, passkey synced via iCloud/Google | Sign in on a new device to restore passkey, then recover |
+| Lost all devices, passkey was NOT synced | Social recovery via guardians (coming soon) |
+
+---
+
+## FAQ
+
+<Accordion title="Can the Veridex team read my backup?">
+  No. Your backup is encrypted with a key derived from your passkey's PRF output. The relayer stores the encrypted blob but cannot decrypt it. Even if the relayer database is compromised, your credentials are safe.
+</Accordion>
+
+<Accordion title="How often should I back up?">
+  Back up whenever you add a new device or register a new passkey. The backup is a snapshot of your credential list at that moment.
+</Accordion>
+
+<Accordion title="What if PRF is not supported on my device?">
+  The SDK falls back to a credential-ID-based encryption key. This still works but is less secure since credential IDs are not secret. You'll see a warning in the account page. Consider adding a device that supports PRF (Chrome 116+, Safari 17+) for stronger encryption.
+</Accordion>
+
+<Accordion title="Is the backup stored on-chain?">
+  No. Encrypted backups are stored on the Veridex relayer (a server), not on any blockchain. This is intentional — on-chain storage would be expensive and the encrypted blobs can be large.
+</Accordion>
+
+<Accordion title="What about social recovery with guardians?">
+  Guardian-based social recovery is a Phase 2 feature. The database models for guardians are already in place. When ready, you'll be able to designate trusted contacts who can help you recover your wallet even if you've lost all devices and your passkey wasn't synced.
+</Accordion>

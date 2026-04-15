@@ -1,0 +1,49 @@
+---
+title: Response Integrity
+description: Cryptographic tamper-evidence for LLM responses via HMAC chain-of-custody seals
+---
+
+# Response Integrity
+
+Every LLM response in the Veridex agent runtime is sealed with an HMAC chain-of-custody signature. This provides cryptographic proof that model outputs haven't been modified between the provider and your application.
+
+## Threat Model
+
+| Threat | Mitigation |
+|--------|-----------|
+| Man-in-the-middle modifying LLM responses | HMAC seal verification detects tampering |
+| Proxy or middleware injecting content | Raw response hash comparison reveals modifications |
+| Disputed agent behavior | Sealed response envelopes provide non-repudiable evidence |
+| Audit trail integrity | Content-hashed traces with embedded seals |
+
+## Seal Algorithm
+
+1. **Key Derivation**: HKDF-SHA256 with API key as IKM, salt `"veridex-response-seal-v1"`, info `"hmac-signing-key"`
+2. **Signing**: HMAC-SHA256 over the raw response bytes
+3. **Hashing**: SHA-256 of raw response bytes for fingerprinting
+
+## Verification
+
+```typescript
+import { verifyResponseSeal } from '@veridex/agents';
+
+const isValid = verifyResponseSeal(
+  envelope.chainOfCustodySeal,
+  rawResponseBytes,
+  apiKeyBytes,
+);
+```
+
+## Limitations
+
+- Seals verify integrity from the Veridex runtime, not from the model provider's infrastructure
+- API key rotation requires re-deriving signing keys
+- Streaming responses are sealed after assembly (not per-chunk)
+
+The [Provider Response Signing Initiative](/guides/agent-integrity) proposes a future where model providers cryptographically sign responses at origin.
+
+## Related
+
+- [Guide: Agent Integrity](/guides/agent-integrity) — Full walkthrough
+- [Agents Framework](/sdks/agents-framework#response-integrity-responseseal) — ResponseSeal API
+- [Governance: Traces](/governance/traces) — Audit trail with seals

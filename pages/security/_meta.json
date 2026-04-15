@@ -1,5 +1,8 @@
 {
   "audits": "Audits",
   "best-practices": "Best Practices",
-  "recovery": "Recovery"
+  "recovery": "Recovery",
+  "agent-security": "Agent Security Gateway",
+  "response-integrity": "Response Integrity",
+  "data-sovereignty": "Data Sovereignty"
 }

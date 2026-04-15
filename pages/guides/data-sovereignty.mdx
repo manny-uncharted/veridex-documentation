@@ -1,0 +1,173 @@
+---
+title: Data Sovereignty
+description: Jurisdictional compliance for PII in agent tool calls
+---
+
+import { Callout, Steps, Step } from '../../components/mdx'
+
+# Data Sovereignty
+
+The Veridex agent framework detects PII in tool arguments and enforces jurisdictional transfer rules, ensuring compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+
+## Overview
+
+Data sovereignty enforcement works at two levels:
+
+1. **Tool-level PII tagging** — Declare which PII categories each tool exposes via `ppiTags` on `ToolContract`
+2. **Security gateway evaluation** — The `dataSovereigntyPack` in `@veridex/agent-security` detects PII in tool arguments and evaluates jurisdictional rules
+
+<Callout type="warning">
+  PII tagging on tools is advisory — it helps the security gateway focus its evaluation. The gateway also performs independent PII detection via regex patterns and heuristics.
+</Callout>
+
+## Tagging Tools with PII Categories
+
+```typescript
+import { tool } from '@veridex/agents';
+import { z } from 'zod';
+
+const userLookup = tool({
+  name: 'lookup_user',
+  description: 'Look up user profile by ID',
+  input: z.object({ userId: z.string() }),
+  safetyClass: 'read',
+  ppiTags: ['name', 'email', 'address', 'phone'],
+  async execute({ input }) {
+    return { success: true, llmOutput: `User ${input.userId}: ...` };
+  },
+});
+```
+
+### Supported PII Categories
+
+| Category | Examples |
+|----------|---------|
+| `email` | Email addresses |
+| `phone` | Phone numbers |
+| `ssn` | Social security numbers, national IDs |
+| `name` | Full names, first/last names |
+| `address` | Physical addresses |
+| `dob` | Dates of birth |
+| `financial` | Bank accounts, card numbers |
+| `health` | Medical records, diagnoses |
+| `biometric` | Fingerprints, face data |
+
+## Configuring Jurisdictional Rules
+
+```typescript
+import { dataSovereigntyPack } from '@veridex/agent-security';
+
+const sovereignty = dataSovereigntyPack({
+  defaultJurisdiction: 'US',
+  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
+  jurisdictionRules: [
+    {
+      from: 'EU',
+      to: 'US',
+      verdict: 'block',
+      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
+      regulations: ['GDPR Art. 44-49'],
+    },
+    {
+      from: 'EU',
+      to: 'UK',
+      verdict: 'allow',
+      reason: 'UK has GDPR adequacy decision',
+      regulations: ['GDPR Art. 45'],
+    },
+    {
+      from: 'CA',
+      to: '*',
+      verdict: 'flag',
+      reason: 'PIPEDA requires consent for cross-border PII transfer',
+      regulations: ['PIPEDA Principle 4.1.3'],
+    },
+  ],
+  toolJurisdictions: {
+    'store_in_eu_db': 'EU',
+    'send_to_us_api': 'US',
+    'log_to_ca_service': 'CA',
+  },
+});
+```
+
+## Sovereignty Violation Flow
+
+<Steps>
+  <Step title="Tool Call">
+    Agent invokes a tool that handles PII (detected via `ppiTags` or pattern matching).
+  </Step>
+  <Step title="Jurisdiction Check">
+    The security gateway determines the source jurisdiction (tool tag or default) and destination jurisdiction (target tool or service).
+  </Step>
+  <Step title="Rule Evaluation">
+    Jurisdictional rules are evaluated. If a cross-border transfer violates a rule, a violation is generated.
+  </Step>
+  <Step title="Verdict">
+    Depending on the rule verdict (`block`, `flag`, or `allow`), the tool call is blocked, flagged for review, or allowed.
+  </Step>
+  <Step title="Audit">
+    Violations are recorded as `SovereigntyViolationSummary` events in the trace and forwarded to the relayer for audit.
+  </Step>
+</Steps>
+
+## Sovereignty Violations in Runtime
+
+The agent runtime automatically detects sovereignty violations and emits them as trace events:
+
+```typescript
+interface SovereigntyViolationSummary {
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  toolName: string;
+  piiCategories: string[];
+  fromJurisdiction: string;
+  toJurisdiction: string;
+  regulation: string;
+  timestamp: number;
+}
+```
+
+Listen for violations:
+
+```typescript
+agent.events.on('sovereignty_violation', (violation) => {
+  console.log(`PII violation: ${violation.piiCategories.join(', ')}`);
+  console.log(`${violation.fromJurisdiction} → ${violation.toJurisdiction}`);
+  console.log(`Regulation: ${violation.regulation}`);
+});
+```
+
+## Integration with Security Gateway
+
+For agents using the standalone security gateway:
+
+```typescript
+import { SecurityGateway, dataSovereigntyPack } from '@veridex/agent-security';
+
+const gateway = new SecurityGateway({
+  packs: [
+    dataSovereigntyPack({ /* config */ }),
+    // ... other packs
+  ],
+});
+
+const result = await gateway.evaluate({
+  type: 'tool_call',
+  toolName: 'send_to_us_api',
+  arguments: { email: 'user@example.com', name: 'John Doe' },
+  agentId: 'data-agent',
+});
+
+if (result.overall === 'block') {
+  // PII transfer blocked by sovereignty rules
+}
+```
+
+## Related
+
+- [Agent Security](/sdks/agent-security) — Security gateway
+- [Governance: Sovereignty Compliance](/governance/sovereignty) — Audit trail
+- [Security: Data Sovereignty](/security/data-sovereignty) — Policy reference
+- [API Reference](/api-reference/agent-security#datasovereigntypack-options) — Configuration types

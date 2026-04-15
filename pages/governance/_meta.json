@@ -3,5 +3,7 @@
   "policies": "Policies",
   "incidents": "Incidents",
   "traces": "Traces",
-  "evidence": "Evidence Export"
+  "evidence": "Evidence Export",
+  "sovereignty": "Sovereignty Compliance",
+  "execution-graph": "Execution Graph"
 }

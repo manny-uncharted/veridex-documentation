@@ -3,9 +3,11 @@ title: Agents Framework
 description: "@veridex/agents — general-purpose TypeScript agent runtime"
 ---
 
+import { Callout } from '../../components/Callout'
+
 # Agents Framework (`@veridex/agents`)
 
-A general-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, transports, and policy-aware execution.
+A general-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, transports, policy-aware execution, response integrity seals, and execution accountability.
 
 ## Installation
 
@@ -13,9 +15,234 @@ A general-purpose TypeScript agent runtime with tools, hooks, memory, checkpoint
 npm install @veridex/agents zod
 ```
 
-## Overview
+## Quick Start
 
-The agents framework provides the runtime infrastructure for building AI agents that execute within Veridex's bounded authority model. It integrates with the Agent SDK for session management and the relayer for governance.
+```typescript
+import { createAgent, tool, OpenAIProvider } from '@veridex/agents';
+import { z } from 'zod';
+
+const agent = createAgent(
+  {
+    name: 'my-agent',
+    description: 'A helpful assistant',
+    instructions: 'You are a helpful assistant.',
+    tools: [
+      tool({
+        name: 'greet',
+        description: 'Greet a user',
+        input: z.object({ name: z.string() }),
+        safetyClass: 'read',
+        async execute({ input }) {
+          return { success: true, llmOutput: `Hello, ${input.name}!` };
+        },
+      }),
+    ],
+  },
+  {
+    modelProviders: {
+      default: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+  },
+);
+
+const result = await agent.run('Say hello to Alice');
+console.log(result.output);
+```
+
+## Model Providers
+
+Built-in providers for major LLM services:
+
+| Provider | Class | Models |
+|----------|-------|--------|
+| OpenAI | `OpenAIProvider` | GPT-4o, GPT-4, GPT-3.5 |
+| Anthropic | `AnthropicProvider` | Claude 4 Opus, Sonnet, Haiku |
+| Google | `GeminiProvider` | Gemini 2.5 Pro, Flash |
+| OpenAI-Compatible | `OpenAICompatibleProvider` | Any OpenAI-compatible endpoint |
+
+```typescript
+import {
+  OpenAIProvider,
+  AnthropicProvider,
+  GeminiProvider,
+  OpenAICompatibleProvider,
+} from '@veridex/agents';
+
+const agent = createAgent(definition, {
+  modelProviders: {
+    default: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    reasoning: new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY }),
+    fast: new GeminiProvider({ apiKey: process.env.GEMINI_API_KEY }),
+    local: new OpenAICompatibleProvider({
+      baseURL: 'http://localhost:11434/v1',
+      model: 'llama3',
+    }),
+  },
+});
+```
+
+## Tools & Safety Classes
+
+Every tool has a safety class that determines policy treatment:
+
+```typescript
+import { tool, ToolSafetyClass } from '@veridex/agents';
+
+const readTool = tool({
+  name: 'lookup_order',
+  description: 'Look up an order by ID',
+  input: z.object({ orderId: z.string() }),
+  safetyClass: 'read', // auto-allowed by default policy
+  async execute({ input }) {
+    return { success: true, llmOutput: `Order ${input.orderId}: shipped` };
+  },
+});
+```
+
+| Safety Class | Default Policy | Description |
+|-------------|----------------|-------------|
+| `read` | Auto-allow | Read-only data access |
+| `write` | Auto-allow | State-modifying operations |
+| `financial` | Require approval | Money movement |
+| `destructive` | Block | Irreversible operations |
+| `privileged` | Block | Elevated-access operations |
+
+## Response Integrity (ResponseSeal)
+
+Every LLM response is sealed with an HMAC chain-of-custody signature, ensuring tamper-evident provenance from model provider to final output.
+
+```typescript
+import { createResponseSeal, verifyResponseSeal } from '@veridex/agents';
+
+// Seals are created automatically during agent runs.
+// To verify a seal manually:
+const isValid = verifyResponseSeal(
+  seal,
+  rawResponseBytes,
+  apiKeyBytes,
+);
+```
+
+### How It Works
+
+1. The model provider returns a raw response
+2. `ResponseSeal` derives a signing key via HKDF from the API key
+3. HMAC-SHA256 is computed over the raw response bytes
+4. The seal is attached to `ModelResponse._seal` and forwarded through the envelope
+
+### ResponseEnvelope
+
+The full response envelope with chain-of-custody:
+
+```typescript
+interface ResponseEnvelope {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  provider: string;
+  output: string;
+  tokensUsed: { prompt: number; completion: number };
+  chainOfCustodySeal?: {
+    algorithm: string;
+    seal: string;   // hex-encoded HMAC
+    rawHash: string; // SHA-256 of raw response
+    timestamp: number;
+  };
+}
+```
+
+## Agent Identity
+
+OIDC-A (OpenID Connect for Agents) and A-JWT (Agent JSON Web Tokens) for agentic identity:
+
+```typescript
+interface AgentIdentityClaims {
+  iss: string;       // Issuer
+  sub: string;       // Agent ID
+  aud: string;       // Audience
+  iat: number;       // Issued at
+  exp: number;       // Expires
+  scope: string[];   // Permissions
+  agentName: string;
+  agentVersion: string;
+}
+
+interface AgentIntegrityBinding {
+  agentId: string;
+  identityClaims: AgentIdentityClaims;
+  codeHash: string;         // SHA-256 of agent code
+  configHash: string;       // SHA-256 of agent configuration
+  toolManifestHash: string; // SHA-256 of registered tools
+  timestamp: number;
+}
+```
+
+## Execution Accountability Graph
+
+Track every execution as a directed acyclic graph of nodes and edges:
+
+```typescript
+interface ExecutionNode {
+  id: string;
+  type: 'turn' | 'tool_call' | 'model_call' | 'policy_check' | 'approval';
+  timestamp: number;
+  data: Record<string, unknown>;
+}
+
+interface ExecutionEdge {
+  from: string;
+  to: string;
+  type: 'triggered' | 'required' | 'produced';
+}
+
+interface ExecutionGraph {
+  nodes: ExecutionNode[];
+  edges: ExecutionEdge[];
+  rootId: string;
+}
+```
+
+## Data Sovereignty
+
+Track PII exposure and jurisdictional compliance in tool contracts:
+
+```typescript
+const userLookup = tool({
+  name: 'lookup_user',
+  description: 'Look up user profile',
+  input: z.object({ userId: z.string() }),
+  safetyClass: 'read',
+  ppiTags: ['name', 'email', 'address'], // PII categories this tool exposes
+  async execute({ input }) {
+    return { success: true, llmOutput: `User ${input.userId}: ...` };
+  },
+});
+```
+
+Sovereignty violations are automatically detected and reported when PII flows across jurisdictional boundaries.
+
+## Core Features
+
+The agents framework includes:
+
+- **Policy Engine** — Register rules, evaluate verdicts per tool call
+- **Approval Manager** — Route escalated proposals to human or automated approvers
+- **Memory Manager** — Four-tier memory (working, episodic, semantic, procedural)
+- **Event Bus** — Typed events for every runtime action
+- **Checkpoints** — Suspend and resume runs without losing state
+- **Hooks** — Before/after phases for cross-cutting concerns
+- **Transports** — MCP, ACP, and A2A protocol support
+
+See the [Veridex Agents Guide](/guides/veridex-agents) for a comprehensive tutorial covering all features.
+
+## Related
+
+- [API Reference](/api-reference/agents-framework) — Full type signatures
+- [Veridex Agents Guide](/guides/veridex-agents) — Step-by-step tutorial
+- [Agent Security](/sdks/agent-security) — Security gateway
+- [Agents Adapters](/sdks/agents-adapters) — Framework interop
+- [Agents React](/sdks/agents-react) — React hooks
+- [Agents Control Plane](/sdks/agents-control-plane) — Enterprise governance
 
 For detailed guides, see:
 

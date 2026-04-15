@@ -1,0 +1,204 @@
+---
+title: Agents OpenClaw API Reference
+description: "API reference for @veridex/agents-openclaw — context parsing, skill import, ACP bridge, session translation"
+---
+
+import { Cards, Card } from '../../components/mdx'
+
+# Agents OpenClaw API Reference
+
+Full API for `@veridex/agents-openclaw` — bridging the OpenClaw/Pi ecosystem into Veridex.
+
+---
+
+## Context File Parsing
+
+### `parseContextFile`
+
+```typescript
+function parseContextFile(
+  filename: string,
+  content: string,
+): ContextFile;
+```
+
+Parse a single OpenClaw context file (e.g., `AGENTS.md`, `IDENTITY.md`).
+
+### `parseWorkspaceContextFiles`
+
+```typescript
+function parseWorkspaceContextFiles(
+  files: Record<string, string>,
+): ContextFile[];
+```
+
+Parse all context files from a workspace directory.
+
+### `compileContextSections`
+
+```typescript
+function compileContextSections(
+  contextFiles: ContextFile[],
+): Record<string, string>;
+```
+
+Compile parsed context files into text blocks keyed by type.
+
+---
+
+## Skill Import
+
+### `parseSkillDocument`
+
+```typescript
+function parseSkillDocument(
+  path: string,
+  content: string,
+): SkillDocument;
+```
+
+Parse a `SKILL.md` file with YAML frontmatter into a structured document.
+
+### `importSkillDocument`
+
+```typescript
+function importSkillDocument(
+  doc: SkillDocument,
+): { tool: ToolContract; warnings: string[] };
+```
+
+Convert a parsed skill document into a Veridex `ToolContract`.
+
+### `importSkill`
+
+```typescript
+function importSkill(
+  path: string,
+  content: string,
+): { tool: ToolContract; warnings: string[] };
+```
+
+Convenience function: parse + import in one step.
+
+### `importSkillManifest`
+
+```typescript
+function importSkillManifest(
+  manifest: SkillManifest,
+): { tools: ToolContract[]; warnings: string[] };
+```
+
+Import all skills in a manifest.
+
+### `inferSafetyClassFromSkill`
+
+```typescript
+function inferSafetyClassFromSkill(
+  doc: SkillDocument,
+): ToolSafetyClass;
+```
+
+Infer Veridex safety class from skill metadata (name, description, tags).
+
+---
+
+## ACP Agent Cards
+
+### `toACPAgentCard`
+
+```typescript
+function toACPAgentCard(
+  definition: AgentDefinition,
+): ACPAgentCard;
+```
+
+Export a Veridex agent definition as an ACP-compatible agent card.
+
+### `fromACPCapabilities`
+
+```typescript
+function fromACPCapabilities(
+  capabilities: ACPCapability[],
+): ToolContract[];
+```
+
+Import ACP capabilities as Veridex tool contracts.
+
+### `createRemoteAgentTool`
+
+```typescript
+function createRemoteAgentTool(options: {
+  name: string;
+  description: string;
+  endpoint: string;
+  auth?: { type: 'bearer'; token: string };
+  timeoutMs?: number;
+}): ToolContract;
+```
+
+Create a tool that calls a remote ACP agent.
+
+---
+
+## Session Translation
+
+### `translateEvent`
+
+```typescript
+function translateEvent(
+  event: OpenClawEvent,
+): { event: TraceEvent; warnings: string[] };
+```
+
+Translate a single OpenClaw event into a Veridex trace event.
+
+### `translateSession`
+
+```typescript
+function translateSession(
+  session: OpenClawSession,
+): { events: TraceEvent[]; warnings: string[] };
+```
+
+Translate a full OpenClaw session into Veridex trace events.
+
+### `translateSessions`
+
+```typescript
+function translateSessions(
+  sessions: OpenClawSession[],
+): { events: TraceEvent[]; warnings: string[] }[];
+```
+
+Batch translate multiple sessions.
+
+---
+
+## Compatibility Audit
+
+### `buildCompatibilityAuditReport`
+
+```typescript
+function buildCompatibilityAuditReport(
+  contextFiles: ContextFile[],
+  skills: SkillDocument[],
+): CompatibilityReport;
+
+interface CompatibilityReport {
+  compatible: number;
+  warnings: CompatibilityWarning[];
+  unsupported: UnsupportedFeature[];
+  summary: string;
+}
+```
+
+---
+
+<Cards>
+  <Card title="OpenClaw Overview" href="/sdks/agents-openclaw">
+    Usage guide with examples
+  </Card>
+  <Card title="Guide: OpenClaw Bridge" href="/guides/veridex-agents#openclaw-bridge">
+    Migration tutorial
+  </Card>
+</Cards>

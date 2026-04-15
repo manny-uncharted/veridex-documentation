@@ -1,5 +1,11 @@
 {
   "core": "Core SDK",
+  "react": "React SDK",
   "agent": "Agent SDK",
-  "agents-framework": "Agents Framework"
+  "agent-security": "Agent Security",
+  "agents-framework": "Agents Framework",
+  "agents-react": "Agents React",
+  "agents-adapters": "Agents Adapters",
+  "agents-openclaw": "Agents OpenClaw",
+  "agents-control-plane": "Agents Control Plane"
 }

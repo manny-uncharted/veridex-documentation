@@ -648,22 +648,142 @@ enum VeridexErrorCode {
 
 ### CrossOriginAuthConfig
 
+Passed to `createCrossOriginAuth()`.
+
 ```typescript
 interface CrossOriginAuthConfig {
-  authPortalUrl: string;
-  relayerUrl: string;
-  appName: string;
-  appIcon?: string;
+  /** The Veridex RP ID (defaults to veridex.network) */
+  rpId?: string;
+  /** Auth portal URL for popup/redirect flow */
+  authPortalUrl?: string;
+  /** Relayer API URL for server-side session tokens */
+  relayerUrl?: string;
+  /** Authentication mode: popup or redirect */
+  mode?: 'popup' | 'redirect';
+  /** Popup window features (CSS string) */
+  popupFeatures?: string;
+  /** Timeout for auth operations in ms */
+  timeout?: number;
+  /** Callback URL for redirect mode */
+  redirectUri?: string;
 }
 ```
 
 ### CrossOriginSession
 
+Returned by `auth.authenticate()`, `auth.connectWithVeridex()`, and `auth.authenticateAndCreateSession()`.
+
 ```typescript
 interface CrossOriginSession {
-  credential: PasskeyCredential;
-  vaultAddress: string;
+  /** User's vault address */
+  address: string;
+  /** Session key public key */
+  sessionPublicKey: string;
+  /** Session key (encrypted, stored on client) */
+  encryptedSessionKey?: string;
+  /** When the session expires */
   expiresAt: number;
+  /** Proof of passkey ownership */
+  signature: WebAuthnSignature;
+  /** The credential used */
+  credential: PasskeyCredential;
+  /** Server-validated session token ID (from relayer) */
+  serverSessionId?: string;
+  /** Relayer-issued challenge binding for server session creation */
+  serverChallengeId?: string;
+}
+```
+
+### ServerSessionToken
+
+Returned by `auth.createServerSession()` and `auth.authenticateAndCreateSession()`.
+
+```typescript
+interface ServerSessionToken {
+  id: string;
+  keyHash: string;
+  appOrigin: string;
+  permissions: string[];
+  expiresAt: number;
+  createdAt: number;
+}
+```
+
+### AuthPortalMessage
+
+Message format exchanged between the SDK and the auth portal popup.
+
+```typescript
+interface AuthPortalMessage {
+  type: 'VERIDEX_AUTH_REQUEST' | 'VERIDEX_AUTH_RESPONSE' | 'VERIDEX_AUTH_ERROR';
+  payload: CrossOriginSession | { error: string; code: string };
+  origin: string;
+  state?: string;
+}
+```
+
+### AUTH_MESSAGE_TYPES
+
+```typescript
+const AUTH_MESSAGE_TYPES = {
+  AUTH_REQUEST: 'VERIDEX_AUTH_REQUEST',
+  AUTH_RESPONSE: 'VERIDEX_AUTH_RESPONSE',
+  AUTH_ERROR: 'VERIDEX_AUTH_ERROR',
+} as const;
+```
+
+---
+
+## Wallet Backup & Recovery
+
+### WalletBackupConfig
+
+Passed to the `WalletBackupManager` constructor.
+
+```typescript
+interface WalletBackupConfig {
+  /** PasskeyManager instance (must be configured with rpId and relayerUrl) */
+  passkey: PasskeyManager;
+  /** Relayer API URL */
+  relayerUrl: string;
+  /** API key for relayer authentication */
+  apiKey?: string;
+}
+```
+
+### BackupStatus
+
+Returned by `backup.getBackupStatus()`.
+
+```typescript
+interface BackupStatus {
+  /** Whether an encrypted archive exists on the relayer */
+  hasArchive: boolean;
+  /** Archive schema version */
+  archiveVersion: number | null;
+  /** When the archive was last updated (epoch ms) */
+  archiveUpdatedAt: number | null;
+  /** Number of active guardians (from relayer) */
+  guardianCount: number;
+  /** Whether PRF is supported (true = strong backup, false = rawId fallback) */
+  prfSupported: boolean;
+}
+```
+
+### WalletArchivePayload
+
+Internal structure of an encrypted backup archive.
+
+```typescript
+interface WalletArchivePayload {
+  /** All stored credentials */
+  credentials: SerializedCredential[];
+  /** Backup metadata */
+  meta: {
+    version: number;
+    createdAt: number;
+    deviceInfo?: string;
+  };
 }
 ```
 
@@ -702,6 +822,13 @@ import {
 
   // Identity
   type UnifiedIdentity, type VaultInfo,
+
+  // Cross-Origin Auth
+  type CrossOriginAuthConfig, type CrossOriginSession,
+  type ServerSessionToken, type AuthPortalMessage,
+
+  // Wallet Backup & Recovery
+  type WalletBackupConfig, type BackupStatus, type WalletArchivePayload,
 
   // Enterprise
   type EnterpriseManagerConfig, type BatchVaultRequest, type BatchVaultResult,

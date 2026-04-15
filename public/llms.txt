@@ -19,6 +19,7 @@ GitHub: https://github.com/veridex-protocol/
 - [Create Wallet](/guides/create-wallet): Passkey registration, vault address derivation
 - [Send Tokens](/guides/send-tokens): Prepare and execute transfers, gasless payments
 - [Cross-Domain Passkeys](/guides/cross-domain-passkeys): Share passkeys across origins
+- [Wallet Backup & Recovery](/guides/wallet-backup-recovery): Encrypted credential backup, PRF-based encryption, device recovery
 - [Gasless Transactions](/guides/gasless-transactions): Relayer-sponsored transfers
 - [Session Keys](/guides/session-keys): Delegated signing without repeated biometrics
 - [Spending Limits](/guides/spending-limits): Per-transaction and daily spending limits

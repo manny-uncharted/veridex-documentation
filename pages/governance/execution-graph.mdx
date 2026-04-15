@@ -1,0 +1,93 @@
+---
+title: Execution Graph
+description: DAG-based accountability for every agent execution
+---
+
+# Execution Graph
+
+Every agent run produces an execution accountability graph — a directed acyclic graph (DAG) that records every turn, tool call, model invocation, policy check, and approval decision.
+
+## Structure
+
+```typescript
+interface ExecutionGraph {
+  nodes: ExecutionNode[];
+  edges: ExecutionEdge[];
+  rootId: string;
+}
+
+interface ExecutionNode {
+  id: string;
+  type: 'turn' | 'tool_call' | 'model_call' | 'policy_check' | 'approval';
+  timestamp: number;
+  data: Record<string, unknown>;
+}
+
+interface ExecutionEdge {
+  from: string;
+  to: string;
+  type: 'triggered' | 'required' | 'produced';
+}
+```
+
+## Node Types
+
+| Type | Description | Example Data |
+|------|-------------|-------------|
+| `turn` | A full agent turn (model call + tool calls) | `{ turnIndex, input, output }` |
+| `tool_call` | Tool invocation | `{ toolName, arguments, result, durationMs }` |
+| `model_call` | LLM inference | `{ model, provider, tokensUsed, responseSeal }` |
+| `policy_check` | Policy evaluation | `{ ruleId, verdict, toolName }` |
+| `approval` | Approval decision | `{ approver, approved, reason }` |
+
+## Edge Types
+
+| Type | Meaning |
+|------|---------|
+| `triggered` | Source node caused target to execute |
+| `required` | Target was a prerequisite for source |
+| `produced` | Source produced target as output |
+
+## Accessing the Graph
+
+```typescript
+const result = await agent.run('Transfer $500 to savings');
+
+// The execution graph is available on the run result
+const graph = result.executionGraph;
+
+console.log(`Nodes: ${graph.nodes.length}`);
+console.log(`Root: ${graph.rootId}`);
+
+// Find all tool calls
+const toolCalls = graph.nodes.filter(n => n.type === 'tool_call');
+
+// Find all policy checks that blocked
+const blocked = graph.nodes.filter(
+  n => n.type === 'policy_check' && n.data.verdict === 'deny'
+);
+```
+
+## Trace Integration
+
+Execution graphs are stored as part of the trace record in the control plane:
+
+```typescript
+const trace = await controlPlane.getTrace(traceId);
+const graph = trace.executionGraph;
+```
+
+They are also included in evidence bundles for compliance review.
+
+## Use Cases
+
+- **Post-incident investigation**: Trace exactly which model call produced a problematic output, which policy approved it, and which tool executed
+- **Performance analysis**: Identify bottleneck nodes by `durationMs`
+- **Policy audit**: Verify that all required policy checks were executed before sensitive tool calls
+- **Accountability**: Prove the chain of decisions that led to any agent action
+
+## Related
+
+- [Governance: Traces](/governance/traces) — Per-execution audit trail
+- [Governance: Evidence Export](/governance/evidence) — Compliance bundles
+- [API Reference](/api-reference/agents-framework#execution-accountability-graph) — Type definitions

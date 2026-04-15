@@ -1,0 +1,303 @@
+---
+title: Agents Control Plane API Reference
+description: "API reference for @veridex/agents-control-plane — service, client, policy packs, traces, tenants, and Workforce OS"
+---
+
+import { Cards, Card } from '../../components/mdx'
+
+# Agents Control Plane API Reference
+
+Full API for `@veridex/agents-control-plane` — multi-tenant agent governance.
+
+---
+
+## Service & Client
+
+### `ControlPlaneService`
+
+In-process control plane for embedded use.
+
+```typescript
+import { ControlPlaneService } from '@veridex/agents-control-plane';
+
+const service = new ControlPlaneService({
+  policyPackManager: PolicyPackManager,
+  traceStore: TraceStore,
+  approvalEngine?: ApprovalWorkflowEngine,
+  tenantManager?: TenantManager,
+});
+```
+
+### `ControlPlaneClient`
+
+Local client that talks to a `ControlPlaneService` directly.
+
+```typescript
+import { ControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new ControlPlaneClient(service);
+```
+
+### `RemoteControlPlaneClient`
+
+HTTP client for a deployed control plane server.
+
+```typescript
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: string,
+  token: string,
+  tenantId?: string,
+  timeoutMs?: number,
+});
+```
+
+---
+
+## Server
+
+### `createControlPlaneApp`
+
+Create a Hono app without starting the server.
+
+```typescript
+import { createControlPlaneApp } from '@veridex/agents-control-plane';
+
+const app = createControlPlaneApp(options);
+```
+
+### `startControlPlaneServer`
+
+Start a full HTTP server.
+
+```typescript
+import { startControlPlaneServer } from '@veridex/agents-control-plane';
+
+const server = await startControlPlaneServer({
+  port?: number,                    // default: 4500
+  storageBackend: 'memory' | 'file' | 'postgres',
+  postgres?: { connectionString: string },
+  fileStorage?: { directory: string },
+  authRequired?: boolean,
+  bootstrapTokens?: { token: string; role: string }[],
+  traceRetentionDays?: number,
+});
+```
+
+---
+
+## `PolicyPackManager`
+
+```typescript
+import { PolicyPackManager } from '@veridex/agents-control-plane';
+
+const manager = new PolicyPackManager();
+
+manager.create(pack: PolicyPackDefinition): PolicyPack;
+manager.registerSystemPack(pack: PolicyPackDefinition): void;
+manager.get(name: string): PolicyPack | undefined;
+manager.list(): PolicyPack[];
+manager.update(name: string, updates: Partial<PolicyPackDefinition>): PolicyPack;
+manager.delete(name: string): boolean;
+```
+
+**PolicyPackDefinition:**
+
+```typescript
+interface PolicyPackDefinition {
+  name: string;
+  description: string;
+  version: string;
+  rules: PolicyRule[];
+  tags?: string[];
+}
+
+interface PolicyRule {
+  type: string;
+  params: Record<string, unknown>;
+  enabled: boolean;
+}
+```
+
+---
+
+## `ApprovalWorkflowEngine`
+
+```typescript
+import { ApprovalWorkflowEngine } from '@veridex/agents-control-plane';
+
+const engine = new ApprovalWorkflowEngine();
+
+engine.registerWorkflow(workflow: WorkflowDefinition): void;
+engine.startApproval(
+  workflowId: string,
+  runId: string,
+  agentId: string,
+  description: string,
+  riskScore: number,
+): ApprovalProcess;
+engine.vote(approvalId: string, voter: string, approved: boolean, reason?: string): void;
+engine.processTimeouts(): ApprovalProcess[];
+engine.getApproval(approvalId: string): ApprovalProcess | undefined;
+```
+
+**WorkflowDefinition:**
+
+```typescript
+interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  escalationChain: EscalationStep[];
+  defaultMode: 'block' | 'allow';
+}
+
+interface EscalationStep {
+  name: string;
+  approvers: string[];
+  timeoutSeconds: number;
+  minApprovals: number;
+}
+```
+
+---
+
+## `TraceStore`
+
+```typescript
+import { TraceStore } from '@veridex/agents-control-plane';
+
+const store = new TraceStore(backend);
+
+await store.ingest(trace: TraceInput): Promise<TraceRecord>;
+await store.query(filter: TraceFilter): Promise<TraceRecord[]>;
+await store.get(traceId: string): Promise<TraceRecord | null>;
+await store.verify(traceId: string): Promise<boolean>;
+await store.delete(traceId: string): Promise<boolean>;
+```
+
+**Backends:**
+
+| Backend | Import | Use Case |
+|---------|--------|----------|
+| `InMemoryTraceStore` | `@veridex/agents-control-plane` | Development, testing |
+| `FileTraceStoreBackend` | `@veridex/agents-control-plane` | Single-node production |
+| `PostgresTraceStoreBackend` | `@veridex/agents-control-plane` | Multi-node production |
+
+---
+
+## `TenantManager`
+
+```typescript
+import { TenantManager } from '@veridex/agents-control-plane';
+
+const tenants = new TenantManager();
+
+tenants.create(config: TenantConfig): Tenant;
+tenants.get(tenantId: string): Tenant | undefined;
+tenants.list(): Tenant[];
+tenants.update(tenantId: string, updates: Partial<TenantConfig>): Tenant;
+tenants.delete(tenantId: string): boolean;
+```
+
+**TenantConfig:**
+
+```typescript
+interface TenantConfig {
+  name: string;
+  config: {
+    maxConcurrentRuns: number;
+    dailySpendLimitUSD: number;
+    allowedProviders: string[];
+    auditEnabled: boolean;
+    traceRetentionDays: number;
+    deploymentMode: 'managed' | 'self-hosted';
+  };
+}
+```
+
+---
+
+## Metadata Stores
+
+### `JSONFileMetadataStore`
+
+```typescript
+import { JSONFileMetadataStore } from '@veridex/agents-control-plane';
+
+const store = new JSONFileMetadataStore({ directory: './metadata' });
+```
+
+### `PostgresMetadataStore`
+
+```typescript
+import { PostgresMetadataStore } from '@veridex/agents-control-plane';
+
+const store = new PostgresMetadataStore({ connectionString: process.env.DATABASE_URL });
+```
+
+---
+
+## Audit Export
+
+### `exportTraces`
+
+```typescript
+import { exportTraces } from '@veridex/agents-control-plane';
+
+const result = await exportTraces(traces, format, options?);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `traces` | `TraceRecord[]` | Traces to export |
+| `format` | `'json' \| 'jsonl' \| 'csv'` | Export format |
+| `options.includeMetadata` | `boolean?` | Include metadata fields |
+| `options.startTime` | `number?` | Filter by start time |
+
+**Returns:** `{ data: string; contentHash: string }`
+
+### `generateEvidenceBundle`
+
+```typescript
+import { generateEvidenceBundle } from '@veridex/agents-control-plane';
+
+const bundle = await generateEvidenceBundle(traceId, policyDecisions, approvalDecisions);
+// bundle.contentHash — SHA-256 combined hash for tamper detection
+```
+
+---
+
+## Workforce OS Types
+
+```typescript
+interface AgentManifest {
+  agentId: string;
+  name: string;
+  version: string;
+  capabilities: string[];
+  dependencies: string[];
+  resources: { cpu: string; memory: string };
+}
+
+interface Workspace { id: string; name: string; tenantId: string; agentIds: string[]; }
+interface Task { id: string; description: string; assignee?: string; status: string; priority: number; }
+interface Deployment { id: string; agentId: string; environment: string; version: string; replicas: number; }
+interface Incident { id: string; agentId: string; severity: string; description: string; status: string; timeline: IncidentEvent[]; }
+interface EvalSuite { id: string; name: string; tests: EvalTest[]; }
+interface PolicyBinding { id: string; packName: string; target: string; scope: 'tenant' | 'workspace' | 'agent'; }
+interface Assignment { id: string; agentId: string; taskId: string; priority: number; constraints: Record<string, unknown>; }
+interface MaintenanceJob { id: string; type: string; schedule: string; target: string; }
+```
+
+---
+
+<Cards>
+  <Card title="Control Plane Overview" href="/sdks/agents-control-plane">
+    Usage guide with examples
+  </Card>
+  <Card title="Guide: Enterprise Control Plane" href="/guides/veridex-agents#enterprise-control-plane">
+    Deployment walkthrough
+  </Card>
+</Cards>

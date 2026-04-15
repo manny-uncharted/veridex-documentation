@@ -805,3 +805,281 @@ sdk.transactions.track(txHash, chainId, (state) => {
 
 const state = await sdk.waitForTransaction(txHash);
 ```
+
+---
+
+## Enterprise Factories
+
+### createEnterpriseSDK
+
+```typescript
+import { createEnterpriseSDK } from '@veridex/sdk';
+
+const sdk = createEnterpriseSDK(chain, {
+  network: 'mainnet',
+  multisig: { threshold: number, signers: Signer[] },
+  recovery: { guardians: string[], delay: number },
+});
+```
+
+Returns a `VeridexSDK` instance pre-configured with `MultisigManager` and `RecoveryManager`.
+
+### createHubSDK
+
+```typescript
+import { createHubSDK } from '@veridex/sdk';
+
+const sdk = createHubSDK(chain, { network: 'testnet' });
+```
+
+Hub SDK for shared passkey credential management across multiple applications.
+
+### createSessionSDK
+
+```typescript
+import { createSessionSDK } from '@veridex/sdk';
+
+const sdk = createSessionSDK(chain, {
+  network: 'testnet',
+  sessionKeyHash: '0x...',
+});
+```
+
+Session-scoped SDK for backend services operating with a pre-existing session key.
+
+---
+
+## MultisigManager
+
+```typescript
+const multisig = sdk.multisig;
+
+await multisig.propose({ to, value, data });   // Propose transaction
+await multisig.approve(proposalId);             // Approve as signer
+await multisig.execute(proposalId);             // Execute (threshold met)
+await multisig.getProposal(proposalId);         // Get proposal details
+await multisig.listPending();                   // List pending proposals
+```
+
+---
+
+## RecoveryManager
+
+```typescript
+const recovery = sdk.recovery;
+
+await recovery.initiateRecovery(newOwner);       // Start recovery
+await recovery.attestAsGuardian(requestId, signer); // Guardian attestation
+await recovery.executeRecovery(requestId);        // Execute after delay
+await recovery.cancelRecovery(requestId);         // Cancel (by current owner)
+await recovery.getRecoveryStatus(requestId);      // Check status
+```
+
+---
+
+## CrossOriginAuth
+
+Enable Veridex passkey authentication in third-party applications. The SDK detects browser support and picks the best flow automatically.
+
+```typescript
+import { createCrossOriginAuth } from '@veridex/sdk';
+
+const auth = createCrossOriginAuth({
+  rpId: 'veridex.network',              // default
+  authPortalUrl: 'https://auth.veridex.network', // default
+  relayerUrl: 'https://relayer.veridex.network/api/v1', // default
+  mode: 'popup',                         // 'popup' | 'redirect'
+  redirectUri: 'https://myapp.com/callback', // only for redirect mode
+  timeout: 120000,                       // 2 minutes default
+});
+```
+
+### auth.supportsRelatedOrigins
+
+Check if the browser supports WebAuthn Related Origin Requests (seamless, no popup).
+
+```typescript
+const rorSupported = await auth.supportsRelatedOrigins(); // boolean
+```
+
+### auth.authenticate
+
+Native passkey authentication (only works when ROR is supported).
+
+```typescript
+const { credential, signature } = await auth.authenticate();
+console.log('Key hash:', credential.keyHash);
+console.log('Vault:', '0x' + credential.keyHash.slice(-40));
+```
+
+### auth.connectWithVeridex
+
+Auth Portal flow (popup or redirect). Works on all browsers.
+
+```typescript
+const session = await auth.connectWithVeridex();
+console.log('Address:', session.address);
+console.log('Credential:', session.credential.keyHash);
+```
+
+**Options:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `register` | `boolean` | Open in registration mode |
+| `username` | `string` | Pre-fill username for registration |
+| `displayName` | `string` | Pre-fill display name |
+| `createSession` | `boolean` | Handle full session flow inside a single popup |
+| `permissions` | `string[]` | Session permissions (e.g. `['read', 'transfer']`) |
+| `expiresInMs` | `number` | Session expiry duration in ms |
+
+### auth.authenticateAndCreateSession
+
+**Recommended.** Full flow: authenticate + create a server-validated session in one call.
+Uses a single popup when ROR is unavailable (no double-prompt).
+
+```typescript
+const { session, serverSession } = await auth.authenticateAndCreateSession({
+  permissions: ['read', 'transfer'],
+  expiresInMs: 3600000, // 1 hour
+});
+
+console.log('Vault address:', session.address);
+console.log('Server session ID:', serverSession.id);
+console.log('Expires at:', new Date(serverSession.expiresAt));
+
+// Store for subsequent API calls
+localStorage.setItem('veridex_session_id', serverSession.id);
+```
+
+### auth.createServerSession
+
+Create a server-validated session token from a cross-origin session.
+
+```typescript
+const serverSession = await auth.createServerSession(session);
+```
+
+### auth.validateServerSession
+
+Validate an existing session token (returns `null` if expired/revoked).
+
+```typescript
+const valid = await auth.validateServerSession('ses_abc123');
+if (valid) {
+  console.log('Session valid, expires:', new Date(valid.expiresAt));
+}
+```
+
+### auth.revokeServerSession
+
+```typescript
+await auth.revokeServerSession('ses_abc123');
+```
+
+### auth.completeRedirectAuth
+
+Call on your redirect callback page to extract the session from URL params.
+
+```typescript
+const session = auth.completeRedirectAuth(); // CrossOriginSession | null
+```
+
+---
+
+## WalletBackupManager
+
+PRF-based encrypted wallet backup and recovery. Backs up credentials to the relayer encrypted with a key derived from your passkey's PRF extension.
+
+```typescript
+import { WalletBackupManager } from '@veridex/sdk';
+
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+```
+
+### backup.backupCredentials
+
+Encrypt and store your wallet credentials on the relayer. The encryption key is derived from your passkey's PRF output — only you can decrypt it.
+
+```typescript
+const result = await backup.backupCredentials(keyHash);
+console.log('Archive ID:', result.archiveId);
+console.log('Backed up:', result.credentialCount, 'credentials');
+```
+
+**What happens:**
+1. SDK triggers a WebAuthn ceremony and extracts the PRF seed from your authenticator
+2. Derives an AES-GCM-256 encryption key via HKDF
+3. Encrypts all locally-stored credentials
+4. Uploads the encrypted archive to the relayer
+
+<Callout type="info">
+  If your device doesn't support PRF (the passkey extension for deterministic secrets), the SDK falls back to a credential-ID-based key. This is less secure — the account page will show a warning.
+</Callout>
+
+### backup.recoverCredentials
+
+Recover your credentials on a new device. Requires a passkey that was previously registered for this identity.
+
+```typescript
+const recovered = await backup.recoverCredentials(keyHash);
+console.log('Recovered:', recovered.credentials.length, 'credentials');
+// Credentials are automatically saved to localStorage
+```
+
+**What happens:**
+1. Fetches the encrypted archive from the relayer
+2. Triggers a WebAuthn ceremony to extract the same PRF seed
+3. Derives the same AES-GCM key
+4. Decrypts and restores all credentials to localStorage
+
+### backup.getBackupStatus
+
+Check backup readiness for an identity.
+
+```typescript
+const status = await backup.getBackupStatus(keyHash);
+console.log('Has archive:', status.hasArchive);
+console.log('PRF supported:', status.prfSupported);
+console.log('Guardians:', status.guardianCount);
+```
+
+**Returns:** `BackupStatus`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hasArchive` | `boolean` | Whether an encrypted backup exists |
+| `archiveVersion` | `number \| null` | Archive schema version |
+| `archiveUpdatedAt` | `number \| null` | Last update timestamp (epoch ms) |
+| `guardianCount` | `number` | Number of active social recovery guardians |
+| `prfSupported` | `boolean` | Whether PRF extension is available |
+
+### WalletBackupManager.checkPlatformSupport (static)
+
+Check if the current platform supports PRF-based backup.
+
+```typescript
+const support = await WalletBackupManager.checkPlatformSupport();
+console.log('WebAuthn:', support.webauthnSupported);
+console.log('PRF:', support.prfSupported);
+
+if (!support.prfSupported) {
+  showWarning('Your device uses weaker backup encryption');
+}
+```
+
+---
+
+## InjectedWalletAdapter
+
+```typescript
+import { InjectedWalletAdapter } from '@veridex/sdk';
+
+const adapter = new InjectedWalletAdapter();
+const session = await adapter.createSessionFromInjected(sessionConfig);
+```
+
+Bridges MetaMask, WalletConnect, and other injected wallets into Veridex session key management.

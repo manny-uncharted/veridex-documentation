@@ -1,0 +1,65 @@
+---
+title: Data Sovereignty
+description: Jurisdictional compliance policies for PII in agent operations
+---
+
+# Data Sovereignty
+
+Data sovereignty policies enforce jurisdictional rules for PII (Personally Identifiable Information) processed by AI agents. These policies ensure compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+
+## Policy Configuration
+
+Configure sovereignty rules in the `dataSovereigntyPack`:
+
+```typescript
+import { dataSovereigntyPack } from '@veridex/agent-security';
+
+const pack = dataSovereigntyPack({
+  defaultJurisdiction: 'US',
+  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
+  jurisdictionRules: [
+    {
+      from: 'EU',
+      to: 'US',
+      verdict: 'block',
+      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
+      regulations: ['GDPR Art. 44-49'],
+    },
+  ],
+  toolJurisdictions: {
+    'eu_database': 'EU',
+    'us_analytics': 'US',
+  },
+});
+```
+
+## Supported Regulations
+
+| Regulation | Jurisdiction | Key Requirements |
+|-----------|-------------|-----------------|
+| GDPR | EU/EEA | Data transfer restrictions (Art. 44-49), right to erasure, DPO |
+| CCPA/CPRA | California, US | Consumer opt-out, sale restrictions, access rights |
+| PIPEDA | Canada | Consent for cross-border transfer, purpose limitation |
+| LGPD | Brazil | Adequacy requirements, data localization |
+| POPIA | South Africa | Cross-border conditions, consent |
+
+## Enforcement Levels
+
+| Verdict | Behavior |
+|---------|----------|
+| `block` | Tool call is prevented. Agent receives a denial reason. |
+| `flag` | Tool call proceeds but a violation is recorded for review. |
+| `allow` | No restriction. |
+
+## Audit Trail
+
+All sovereignty evaluations are recorded:
+- Blocked calls appear as `sovereignty_violation` events in traces
+- Flagged calls create advisory records in the audit log
+- Evidence bundles include sovereignty context for compliance review
+
+## Related
+
+- [Guide: Data Sovereignty](/guides/data-sovereignty) — Configuration walkthrough
+- [Agent Security](/sdks/agent-security) — Security gateway
+- [Governance: Sovereignty Compliance](/governance/sovereignty) — Violation audit trail

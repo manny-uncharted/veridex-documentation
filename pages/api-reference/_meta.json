@@ -1,7 +1,12 @@
 {
   "sdk": "Core SDK",
+  "react": "React SDK",
   "agent-sdk": "Agent SDK",
+  "agent-security": "Agent Security",
   "agents-framework": "Agents Framework",
+  "agents-adapters": "Agents Adapters",
+  "agents-openclaw": "Agents OpenClaw",
+  "agents-control-plane": "Agents Control Plane",
   "relayer": "Relayer API",
   "types": "Types",
   "errors": "Errors"

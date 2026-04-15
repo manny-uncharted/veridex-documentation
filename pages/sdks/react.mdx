@@ -1,0 +1,219 @@
+---
+title: React SDK
+description: "@veridex/react — React hooks for passkeys, vaults, transfers, and balances"
+---
+
+import { Callout } from '../../components/Callout'
+
+# React SDK (`@veridex/react`)
+
+React hooks for the Veridex Protocol core SDK — passkey management, vault balances, token transfers, and multi-chain portfolio tracking.
+
+<Callout type="info">
+  This package wraps `@veridex/sdk` for React. For agent-specific React hooks (runs, approvals, traces), see [`@veridex/agents-react`](/sdks/agents-react).
+</Callout>
+
+## Installation
+
+```bash
+npm install @veridex/react @veridex/sdk react
+```
+
+## Setup
+
+Wrap your app with `VeridexProvider`:
+
+```tsx
+import { VeridexProvider } from '@veridex/react';
+import { createSDK } from '@veridex/sdk';
+
+const sdk = createSDK('base', { network: 'testnet' });
+
+function App() {
+  return (
+    <VeridexProvider sdk={sdk}>
+      <YourApp />
+    </VeridexProvider>
+  );
+}
+```
+
+## Hooks
+
+### useVeridexSDK
+
+Access the SDK instance from any component.
+
+```tsx
+import { useVeridexSDK } from '@veridex/react';
+
+function MyComponent() {
+  const sdk = useVeridexSDK();
+  // sdk.passkey, sdk.sessions, sdk.prepareTransfer, etc.
+}
+```
+
+### useNetwork
+
+Get current chain and network information.
+
+```tsx
+import { useNetwork } from '@veridex/react';
+
+function NetworkInfo() {
+  const { chain, network, chainId } = useNetwork();
+  return <p>Connected to {chain} ({network})</p>;
+}
+```
+
+### usePasskey
+
+Register, authenticate, and manage passkey credentials.
+
+```tsx
+import { usePasskey } from '@veridex/react';
+
+function PasskeyManager() {
+  const {
+    register,
+    authenticate,
+    credential,
+    isRegistering,
+    isAuthenticating,
+    error,
+  } = usePasskey();
+
+  return (
+    <div>
+      {!credential ? (
+        <>
+          <button onClick={() => register('alice', 'Alice')} disabled={isRegistering}>
+            {isRegistering ? 'Registering...' : 'Register Passkey'}
+          </button>
+          <button onClick={() => authenticate()} disabled={isAuthenticating}>
+            {isAuthenticating ? 'Authenticating...' : 'Sign In'}
+          </button>
+        </>
+      ) : (
+        <p>Authenticated: {credential.credentialId.slice(0, 12)}...</p>
+      )}
+      {error && <p style={{ color: 'red' }}>{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### useBalance
+
+Query vault balance for one or more tokens.
+
+```tsx
+import { useBalance } from '@veridex/react';
+
+function BalanceDisplay() {
+  const { balance, isLoading, refresh } = useBalance();
+
+  if (isLoading) return <p>Loading...</p>;
+  return (
+    <div>
+      <p>Balance: {balance?.formatted} {balance?.symbol}</p>
+      <button onClick={refresh}>Refresh</button>
+    </div>
+  );
+}
+```
+
+### useTransfer
+
+Prepare, review, and execute token transfers.
+
+```tsx
+import { useTransfer } from '@veridex/react';
+
+function TransferForm() {
+  const { prepare, execute, status, receipt, error } = useTransfer();
+
+  const handleTransfer = async () => {
+    const preview = await prepare({
+      token: 'USDC',
+      amount: '1000000', // 1 USDC
+      recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+      chain: 10004,
+    });
+
+    // Show preview to user, then execute
+    if (preview.estimatedFee) {
+      const receipt = await execute();
+      console.log('Transfer complete:', receipt.txHash);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={handleTransfer}>Send 1 USDC</button>
+      {status && <p>Status: {status}</p>}
+      {receipt && <p>Tx: {receipt.txHash}</p>}
+      {error && <p style={{ color: 'red' }}>{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### useMultiChainPortfolio
+
+Aggregate balances across all connected chains.
+
+```tsx
+import { useMultiChainPortfolio } from '@veridex/react';
+
+function Portfolio() {
+  const { portfolio, totalValueUSD, isLoading } = useMultiChainPortfolio();
+
+  if (isLoading) return <p>Loading portfolio...</p>;
+  return (
+    <div>
+      <h3>Total: ${totalValueUSD.toFixed(2)}</h3>
+      {portfolio.map((entry) => (
+        <div key={entry.chain}>
+          <strong>{entry.chain}</strong>: {entry.balance} {entry.symbol}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### useSpendingLimits
+
+Monitor session spending limits and utilization.
+
+```tsx
+import { useSpendingLimits } from '@veridex/react';
+
+function SpendingLimits() {
+  const { limits, spent, remaining, percentUsed } = useSpendingLimits();
+
+  return (
+    <div>
+      <p>Spent: ${spent} / ${limits?.dailyLimitUSD}</p>
+      <p>Remaining: ${remaining}</p>
+      <progress value={percentUsed} max={100} />
+    </div>
+  );
+}
+```
+
+## Utilities
+
+```tsx
+import { resolveChainId, resolveChainIds } from '@veridex/react';
+
+const chainId = resolveChainId('base');          // 8453
+const chainIds = resolveChainIds(['base', 'optimism']); // [8453, 10]
+```
+
+## Related
+
+- [API Reference](/api-reference/react) — Full type signatures
+- [React Hooks Guide](/guides/react-hooks) — Patterns and best practices
+- [Core SDK](/sdks/core) — Underlying SDK methods

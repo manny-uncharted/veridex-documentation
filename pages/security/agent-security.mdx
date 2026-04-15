@@ -1,0 +1,126 @@
+---
+title: Agent Security Gateway
+description: Deploy and operate the framework-agnostic security gateway for AI agents
+---
+
+# Agent Security Gateway
+
+The Agent Security Gateway (`@veridex/agent-security`) provides defense-in-depth for any AI agent — whether built with Veridex, LangChain, CrewAI, or custom code.
+
+## Deployment Patterns
+
+### Embedded (In-Process)
+
+Run the gateway inside your agent process for lowest latency:
+
+```typescript
+import { SecurityGateway, createDefaultPacks } from '@veridex/agent-security';
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  defaultAction: 'block',
+});
+
+// Evaluate before every tool call
+const result = await gateway.evaluate({
+  type: 'tool_call',
+  toolName: toolName,
+  arguments: args,
+  agentId: 'my-agent',
+});
+```
+
+### Sidecar Service
+
+Deploy as an HTTP service alongside your agent fleet:
+
+```typescript
+import { createSecurityServer } from '@veridex/agent-security/server';
+
+const server = createSecurityServer({
+  packs: createDefaultPacks(),
+  port: 4600,
+  authToken: process.env.SECURITY_GATEWAY_TOKEN,
+});
+
+await server.start();
+```
+
+### Centralized Gateway
+
+Single gateway serving multiple agent teams:
+
+```
+┌─────────────┐     ┌──────────────────┐
+│ Agent Team A │────▶│                  │
+├─────────────┤     │  Security        │
+│ Agent Team B │────▶│  Gateway         │
+├─────────────┤     │  (port 4600)     │
+│ Agent Team C │────▶│                  │
+└─────────────┘     └──────────────────┘
+```
+
+## Security Packs
+
+### Pack Selection
+
+Not every agent needs all 12 packs. Select based on your threat model:
+
+| Agent Type | Recommended Packs |
+|-----------|------------------|
+| Read-only data agents | `injectionDetection`, `secretDetection`, `endpointAllowlist` |
+| Financial agents | All above + `budgetCeiling`, `financialSafety`, `crossTurnAnomaly` |
+| Tool-using agents | All above + `toolPoisoning`, `shellCommandSafety`, `handoffSafety` |
+| Multi-jurisdiction agents | All above + `dataSovereignty` |
+| Production fleet | `createDefaultPacks()` (all 12) |
+
+### Custom Packs
+
+Implement the `SecurityPack` interface:
+
+```typescript
+const customPack: SecurityPack = {
+  id: 'custom-ip-filter',
+  name: 'IP Filter',
+  description: 'Block requests to internal IP ranges',
+  async evaluate(action) {
+    if (action.type === 'tool_call' && action.arguments?.url) {
+      const url = new URL(action.arguments.url as string);
+      if (isInternalIP(url.hostname)) {
+        return {
+          verdict: 'block',
+          reasons: ['Request to internal IP range blocked'],
+          packId: 'custom-ip-filter',
+          confidence: 1.0,
+        };
+      }
+    }
+    return { verdict: 'allow', reasons: [], packId: 'custom-ip-filter', confidence: 1.0 };
+  },
+};
+```
+
+## Monitoring
+
+Enable telemetry to track security evaluations:
+
+```typescript
+import { TelemetryReporter } from '@veridex/agent-security';
+
+const reporter = new TelemetryReporter({
+  endpoint: 'https://telemetry.example.com/events',
+  batchSize: 50,
+  flushIntervalMs: 10_000,
+});
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  telemetry: reporter,
+});
+```
+
+## Related
+
+- [Agent Security SDK](/sdks/agent-security) — Package documentation
+- [API Reference](/api-reference/agent-security) — Full type signatures
+- [Security: Data Sovereignty](/security/data-sovereignty) — Jurisdictional compliance

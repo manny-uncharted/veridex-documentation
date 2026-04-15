@@ -1,0 +1,253 @@
+---
+title: Agent Security API Reference
+description: "API reference for @veridex/agent-security — SecurityGateway, packs, client, and types"
+---
+
+import { Callout, Cards, Card } from '../../components/mdx'
+
+# Agent Security API Reference
+
+Full API for `@veridex/agent-security` — the framework-agnostic security gateway for AI agents.
+
+---
+
+## `SecurityGateway`
+
+In-process security evaluation gateway.
+
+```typescript
+import { SecurityGateway, createDefaultPacks } from '@veridex/agent-security';
+
+const gateway = new SecurityGateway(options);
+```
+
+**Constructor options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `packs` | `SecurityPack[]` | Security packs to evaluate |
+| `defaultAction` | `'block' \| 'warn' \| 'allow'` | Default verdict when no pack matches |
+| `telemetry` | `TelemetryReporter?` | Optional telemetry sink |
+
+### `gateway.evaluate(action)`
+
+Evaluate an agent action against all registered packs.
+
+```typescript
+const result = await gateway.evaluate(action);
+```
+
+**Parameters:**
+
+```typescript
+interface SecurityAction {
+  type: 'tool_call' | 'model_response' | 'handoff' | 'output';
+  toolName?: string;
+  arguments?: Record<string, unknown>;
+  response?: string;
+  agentId: string;
+  turnIndex?: number;
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Returns:** `SecurityEvalResult`
+
+```typescript
+interface SecurityEvalResult {
+  overall: 'allow' | 'block' | 'escalate';
+  verdicts: SecurityVerdict[];
+  metadata: Record<string, unknown>;
+}
+```
+
+---
+
+## `SecurityClient`
+
+HTTP client for a remote SecurityGateway server.
+
+```typescript
+import { SecurityClient } from '@veridex/agent-security';
+
+const client = new SecurityClient({
+  baseUrl: string,
+  authToken?: string,
+  timeoutMs?: number,
+});
+
+const result = await client.evaluate(action);
+```
+
+---
+
+## `TelemetryReporter`
+
+Batched telemetry reporting for security evaluations.
+
+```typescript
+import { TelemetryReporter } from '@veridex/agent-security';
+
+const reporter = new TelemetryReporter({
+  endpoint: string,
+  batchSize?: number,      // default: 50
+  flushIntervalMs?: number, // default: 10_000
+});
+```
+
+---
+
+## Security Packs
+
+### `createDefaultPacks()`
+
+Returns all 12 built-in packs with default configuration.
+
+```typescript
+const packs: SecurityPack[] = createDefaultPacks();
+```
+
+### Individual Packs
+
+| Function | Returns |
+|----------|---------|
+| `injectionDetectionPack(options?)` | Pack detecting prompt/SQL/command injection |
+| `toolPoisoningPack(options?)` | Pack detecting malicious tool chains |
+| `secretDetectionPack(options?)` | Pack detecting leaked secrets |
+| `budgetCeilingPack(options?)` | Pack enforcing spend limits |
+| `shellCommandSafetyPack(options?)` | Pack blocking dangerous shell commands |
+| `endpointAllowlistPack(options?)` | Pack restricting HTTP endpoints |
+| `handoffSafetyPack(options?)` | Pack validating agent handoffs |
+| `financialSafetyPack(options?)` | Pack enforcing financial limits |
+| `crossTurnAnomalyPack(options?)` | Pack detecting behavioral anomalies |
+| `llmResponseGuardPack(options?)` | Pack filtering model responses |
+| `dataSovereigntyPack(options)` | Pack enforcing jurisdictional compliance |
+
+### `SecurityPack` Interface
+
+```typescript
+interface SecurityPack {
+  id: string;
+  name: string;
+  description: string;
+  evaluate(action: SecurityAction, context?: EvalContext): Promise<SecurityVerdict>;
+}
+```
+
+---
+
+## `dataSovereigntyPack` Options
+
+```typescript
+interface DataSovereigntyPackOptions {
+  defaultJurisdiction: string;
+  piiCategories: string[];
+  jurisdictionRules: JurisdictionRule[];
+  toolJurisdictions: Record<string, string>;
+}
+
+interface JurisdictionRule {
+  from: string;
+  to: string;
+  verdict: 'block' | 'flag' | 'allow';
+  reason: string;
+  regulations: string[];
+}
+```
+
+---
+
+## Types
+
+### `SecurityVerdict`
+
+```typescript
+interface SecurityVerdict {
+  verdict: 'allow' | 'block' | 'escalate' | 'flag';
+  reasons: string[];
+  packId: string;
+  confidence: number; // 0.0 – 1.0
+}
+```
+
+### `SecurityCheckResult`
+
+```typescript
+interface SecurityCheckResult {
+  passed: boolean;
+  pack: string;
+  message?: string;
+}
+```
+
+### `ToolCallAction`
+
+```typescript
+interface ToolCallAction extends SecurityAction {
+  type: 'tool_call';
+  toolName: string;
+  arguments: Record<string, unknown>;
+}
+```
+
+---
+
+## Server
+
+### `createSecurityServer`
+
+Deploy the gateway as a standalone HTTP service (Hono-based).
+
+```typescript
+import { createSecurityServer } from '@veridex/agent-security/server';
+
+const server = createSecurityServer({
+  packs: SecurityPack[],
+  port?: number,
+  authToken?: string,
+});
+
+await server.start();
+```
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/evaluate` | Evaluate a security action |
+| `GET` | `/health` | Health check |
+| `GET` | `/packs` | List registered packs |
+
+---
+
+## Framework Adapters
+
+### LangChain
+
+```typescript
+import { VeridexSecurityCallback } from '@veridex/agent-security/adapters/langchain';
+
+const callback = new VeridexSecurityCallback(gateway);
+```
+
+Implements LangChain's `CallbackHandler` interface.
+
+### CrewAI
+
+```typescript
+import { VeridexCrewAIGuard } from '@veridex/agent-security/adapters/crewai';
+
+const guard = new VeridexCrewAIGuard(gateway);
+const result = await guard.evaluate(crewAction);
+```
+
+---
+
+<Cards>
+  <Card title="Agent Security SDK Overview" href="/sdks/agent-security">
+    Usage guide with examples
+  </Card>
+  <Card title="Security Gateway Deployment" href="/security/agent-security">
+    Deployment patterns and best practices
+  </Card>
+</Cards>

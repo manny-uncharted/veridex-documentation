@@ -60,6 +60,106 @@ sdk.sessions.selectSession(agentSession.keyHash);
 await sdk.sessions.revokeSession(webSession.keyHash);
 ```
 
+## Enterprise Factories
+
+Convenience constructors for common deployment scenarios:
+
+```typescript
+import {
+  createSDK,
+  createEnterpriseSDK,
+  createHubSDK,
+  createTestnetSDK,
+  createMainnetSDK,
+  createSessionSDK,
+} from '@veridex/sdk';
+
+// Enterprise — Multisig + recovery + cross-origin auth
+const enterprise = createEnterpriseSDK('base', {
+  network: 'mainnet',
+  multisig: { threshold: 2, signers: [signer1, signer2, signer3] },
+  recovery: { guardians: [guardian1, guardian2], delay: 86400 },
+});
+
+// Hub — Shared passkey across multiple apps
+const hub = createHubSDK('base', { network: 'testnet' });
+
+// Session-scoped — For backend services
+const session = createSessionSDK('base', {
+  network: 'testnet',
+  sessionKeyHash: existingKeyHash,
+});
+```
+
+## MultisigManager
+
+On-chain multisig with configurable thresholds:
+
+```typescript
+const multisig = sdk.multisig;
+
+// Propose a transaction
+const proposal = await multisig.propose({
+  to: recipient,
+  value: amount,
+  data: '0x',
+});
+
+// Other signers approve
+await multisig.approve(proposal.id);
+
+// Execute when threshold is met
+const receipt = await multisig.execute(proposal.id);
+```
+
+## RecoveryManager
+
+Social recovery with guardian-based key rotation:
+
+```typescript
+const recovery = sdk.recovery;
+
+// Initiate recovery (requires guardian attestations)
+const request = await recovery.initiateRecovery(newOwnerAddress);
+
+// Guardians attest
+await recovery.attestAsGuardian(request.id, guardianSigner);
+
+// Execute after delay period
+await recovery.executeRecovery(request.id);
+```
+
+## CrossOriginAuth
+
+Shared passkey authentication across domains:
+
+```typescript
+import { CrossOriginAuth } from '@veridex/sdk';
+
+const crossOrigin = new CrossOriginAuth({
+  hubDomain: 'auth.veridex.io',
+  allowedOrigins: ['https://app1.example.com', 'https://app2.example.com'],
+});
+
+// Authenticate from any allowed origin
+const credential = await crossOrigin.authenticate();
+```
+
+## InjectedWalletAdapter
+
+Bridge existing browser wallets (MetaMask, etc.) into Veridex sessions:
+
+```typescript
+import { InjectedWalletAdapter } from '@veridex/sdk';
+
+const adapter = new InjectedWalletAdapter();
+const session = await adapter.createSessionFromInjected({
+  permissions: ['transfer'],
+  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
+  duration: 3600,
+});
+```
+
 ## Key APIs
 
 | Method | Description |
@@ -72,9 +172,17 @@ await sdk.sessions.revokeSession(webSession.keyHash);
 | `sdk.sessions.revokeSession()` | Revoke a specific session |
 | `sdk.sessions.loadSession()` | Load a session by key hash |
 | `sdk.prepareTransfer()` | Prepare a cross-chain transfer |
+| `sdk.multisig.propose()` | Propose multisig transaction |
+| `sdk.multisig.approve()` | Approve a multisig proposal |
+| `sdk.recovery.initiateRecovery()` | Start social recovery |
+| `sdk.accounts.getAccountInfo()` | Account metadata |
+| `sdk.credentials.getAllStoredCredentials()` | List stored credentials |
 
 ## Related
 
 - [API Reference](/api-reference/sdk) — Full method signatures and types
+- [React SDK](/sdks/react) — React hooks for wallet operations
+- [Multisig Wallet Guide](/guides/multisig-wallet) — Multisig setup walkthrough
+- [Enterprise Manager Guide](/guides/enterprise-manager) — Enterprise deployment
 - [Session Keys Guide](/guides/session-keys) — Deep dive into session key concepts
 - [Multi-Session Guide](/guides/multi-session) — Managing multiple concurrent sessions

@@ -1,0 +1,275 @@
+---
+title: Agents React API Reference
+description: "API reference for @veridex/agents-react — agent hooks, operator hooks, and providers"
+---
+
+import { Cards, Card } from '../../components/mdx'
+
+# Agents React API Reference
+
+Full API for `@veridex/agents-react` — React hooks for agent runtimes and fleet operations.
+
+---
+
+## Providers
+
+### `AgentProvider`
+
+```tsx
+import { AgentProvider } from '@veridex/agents-react';
+
+<AgentProvider runtime={agentInstance}>
+  {children}
+</AgentProvider>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `runtime` | `AgentRuntime` | Agent instance from `createAgent()` |
+
+### `ControlPlaneProvider`
+
+```tsx
+import { ControlPlaneProvider } from '@veridex/agents-react';
+
+<ControlPlaneProvider client={controlPlaneClient}>
+  {children}
+</ControlPlaneProvider>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `client` | `ControlPlaneClient \| RemoteControlPlaneClient` | Control plane client |
+
+---
+
+## Context Hooks
+
+### `useAgentContext`
+
+```tsx
+const context = useAgentContext();
+```
+
+Returns the raw agent context. Prefer specific hooks below.
+
+### `useControlPlaneContext`
+
+```tsx
+const context = useControlPlaneContext();
+```
+
+Returns the raw control plane context.
+
+---
+
+## Agent Hooks
+
+### `useAgent`
+
+```tsx
+const { definition, state } = useAgent();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `definition` | `AgentDefinition` | Agent name, description, tools, instructions |
+| `state` | `AgentState` | Current runtime state |
+
+### `useRun`
+
+```tsx
+const { run, result, state, isLoading, error } = useRun();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `run` | `(input: string) => Promise<RunResult>` | Start a new run |
+| `result` | `RunResult \| null` | Latest run result |
+| `state` | `RunState` | `'idle' \| 'running' \| 'suspended' \| 'completed' \| 'failed'` |
+| `isLoading` | `boolean` | True while a run is active |
+| `error` | `Error \| null` | Last error |
+
+### `useTurnStream`
+
+```tsx
+const { stream, cancel } = useTurnStream();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stream` | `AsyncIterable<Turn>` | Async iterable of turn events |
+| `cancel` | `() => void` | Cancel the stream |
+
+### `useApprovals`
+
+```tsx
+const { pending, resolve } = useApprovals();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pending` | `ApprovalRequest[]` | Pending approval requests |
+| `resolve` | `(id: string, approved: boolean) => void` | Approve or deny |
+
+### `useTrace`
+
+```tsx
+const { events, latest } = useTrace();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `events` | `TraceEvent[]` | All trace events for the current run |
+| `latest` | `TraceEvent \| null` | Most recent event |
+
+### `useToolRegistry`
+
+```tsx
+const { tools, register, remove } = useToolRegistry();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tools` | `ToolContract[]` | Registered tools |
+| `register` | `(tool: ToolContract) => void` | Add a tool |
+| `remove` | `(name: string) => void` | Remove a tool |
+
+### `useMemory`
+
+```tsx
+const { entries, write, search, clear } = useMemory();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entries` | `MemoryEntry[]` | All memory entries |
+| `write` | `(entry: WriteParams) => Promise<void>` | Write a memory entry |
+| `search` | `(params: SearchParams) => Promise<MemoryEntry[]>` | Semantic search |
+| `clear` | `(tier?: string) => Promise<void>` | Clear entries by tier |
+
+### `useBudget`
+
+```tsx
+const { snapshot, estimateSpend } = useBudget();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `snapshot` | `BudgetSnapshot` | `{ spent, budget, percentUtilized }` |
+| `estimateSpend` | `(model: string, tokens: number) => number` | Estimate cost |
+
+### `useContextPlan`
+
+```tsx
+const { plan, recompile } = useContextPlan();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `plan` | `ContextPlan` | Compiled context sections with token counts |
+| `recompile` | `() => void` | Re-trigger context compilation |
+
+### `usePayments`
+
+```tsx
+const { balance, send, history } = usePayments();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `balance` | `TokenBalance[]` | Current balances |
+| `send` | `(params: TransferParams) => Promise<Receipt>` | Send tokens |
+| `history` | `PaymentRecord[]` | Transaction history |
+
+### `useAgentIdentity`
+
+```tsx
+const { identity, isVerified } = useAgentIdentity();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `identity` | `AgentIdentity \| null` | ERC-8004 on-chain identity |
+| `isVerified` | `boolean` | Whether identity is registered and valid |
+
+### `useAgentReputation`
+
+```tsx
+const { score, history } = useAgentReputation();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `score` | `number` | Aggregate reputation score |
+| `history` | `FeedbackEntry[]` | Historical feedback entries |
+
+### `useOpenClawBridge`
+
+```tsx
+const { importSkills, translateSession } = useOpenClawBridge();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `importSkills` | `(manifest: SkillManifest) => Promise<ToolContract[]>` | Import OpenClaw skills |
+| `translateSession` | `(session: OpenClawSession) => TranslationResult` | Translate a session |
+
+---
+
+## Operator Hooks
+
+Require `ControlPlaneProvider` in the component tree.
+
+### `useFleetStatus`
+
+```tsx
+const { agents, activeRuns, healthSummary } = useFleetStatus();
+```
+
+### `useOperatorTasks`
+
+```tsx
+const { tasks, assign, complete, cancel } = useOperatorTasks();
+```
+
+### `useDeployments`
+
+```tsx
+const { deployments, deploy, rollback, scale } = useDeployments();
+```
+
+### `useIncidents`
+
+```tsx
+const { incidents, acknowledge, resolve, escalate } = useIncidents();
+```
+
+### `useWorkspaceResources`
+
+```tsx
+const { workspaces, create, archive } = useWorkspaceResources();
+```
+
+### `useEvals`
+
+```tsx
+const { suites, run, results } = useEvals();
+```
+
+### `usePolicyBindings`
+
+```tsx
+const { bindings, bind, unbind, update } = usePolicyBindings();
+```
+
+---
+
+<Cards>
+  <Card title="Agents React Overview" href="/sdks/agents-react">
+    Usage guide with examples
+  </Card>
+  <Card title="React SDK" href="/sdks/react">
+    Core wallet/passkey hooks
+  </Card>
+</Cards>

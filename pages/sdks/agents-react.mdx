@@ -1,0 +1,286 @@
+---
+title: Agents React
+description: "@veridex/agents-react — React hooks for agent runs, approvals, traces, memory, and fleet operations"
+---
+
+import { Callout } from '../../components/Callout'
+
+# Agents React (`@veridex/agents-react`)
+
+React hooks and context providers for building agent UIs — runs, approvals, traces, memory, budgets, payments, identity, and fleet operations.
+
+<Callout type="info">
+  This package provides hooks for the agent runtime (`@veridex/agents`). For core wallet/passkey hooks, see [`@veridex/react`](/sdks/react).
+</Callout>
+
+## Installation
+
+```bash
+npm install @veridex/agents-react @veridex/agents react
+```
+
+## Providers
+
+### AgentProvider
+
+Wraps your app with agent runtime context:
+
+```tsx
+import { AgentProvider } from '@veridex/agents-react';
+import { createAgent } from '@veridex/agents';
+
+const agent = createAgent({ /* ... */ }, { modelProviders: { /* ... */ } });
+
+function App() {
+  return (
+    <AgentProvider runtime={agent}>
+      <AgentUI />
+    </AgentProvider>
+  );
+}
+```
+
+### ControlPlaneProvider
+
+For operator dashboards with fleet management:
+
+```tsx
+import { ControlPlaneProvider } from '@veridex/agents-react';
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const controlPlane = new RemoteControlPlaneClient({
+  baseUrl: 'https://cp.example.com',
+  token: process.env.CP_TOKEN,
+  tenantId: 'tenant-acme',
+});
+
+function OperatorDashboard() {
+  return (
+    <ControlPlaneProvider client={controlPlane}>
+      <FleetDashboard />
+    </ControlPlaneProvider>
+  );
+}
+```
+
+## Agent Hooks
+
+### useAgent
+
+```tsx
+const { definition, state } = useAgent();
+// definition — AgentDefinition (name, description, tools, etc.)
+// state — current agent state
+```
+
+### useRun
+
+```tsx
+const { run, result, state, isLoading, error } = useRun();
+
+// Start a run
+await run('What is the current BTC price?');
+
+// state: 'idle' | 'running' | 'suspended' | 'completed' | 'failed'
+```
+
+### useTurnStream
+
+```tsx
+const { stream, cancel } = useTurnStream();
+
+// Stream individual turns for real-time UI updates
+for await (const turn of stream) {
+  console.log(turn.content);
+}
+```
+
+### useApprovals
+
+```tsx
+const { pending, resolve } = useApprovals();
+
+// pending — ApprovalRequest[] awaiting decision
+// resolve(id, approved) — approve or deny
+```
+
+### useTrace
+
+```tsx
+const { events, latest } = useTrace();
+// events — all TraceEvent[] for the current run
+// latest — most recent event
+```
+
+### useToolRegistry
+
+```tsx
+const { tools, register, remove } = useToolRegistry();
+// tools — registered ToolContract[]
+// register(tool) / remove(toolName)
+```
+
+### useMemory
+
+```tsx
+const { entries, write, search, clear } = useMemory();
+
+await write({ tier: 'episodic', content: 'User prefers email' });
+const results = await search({ query: 'preferences', limit: 5 });
+```
+
+### useBudget
+
+```tsx
+const { snapshot, estimateSpend } = useBudget();
+
+// snapshot.spent, snapshot.budget, snapshot.percentUtilized
+const estimate = estimateSpend('gpt-4o', 5000); // tokens
+```
+
+### useContextPlan
+
+```tsx
+const { plan, recompile } = useContextPlan();
+// plan — compiled context sections with token counts
+```
+
+### usePayments
+
+```tsx
+const { balance, send, history } = usePayments();
+
+await send({ token: 'USDC', amount: '1000000', recipient: '0x...' });
+```
+
+### useAgentIdentity
+
+```tsx
+const { identity, isVerified } = useAgentIdentity();
+// identity — ERC-8004 on-chain identity (agentId, name, services)
+```
+
+### useAgentReputation
+
+```tsx
+const { score, history } = useAgentReputation();
+// score — current reputation score
+// history — feedback entries
+```
+
+### useOpenClawBridge
+
+```tsx
+const { importSkills, translateSession } = useOpenClawBridge();
+
+const tools = await importSkills(manifest);
+const translated = translateSession(openClawSession);
+```
+
+## Operator Hooks
+
+For fleet management dashboards — requires `ControlPlaneProvider`:
+
+### useFleetStatus
+
+```tsx
+const { agents, activeRuns, healthSummary } = useFleetStatus();
+```
+
+### useOperatorTasks
+
+```tsx
+const { tasks, assign, complete, cancel } = useOperatorTasks();
+```
+
+### useDeployments
+
+```tsx
+const { deployments, deploy, rollback, scale } = useDeployments();
+```
+
+### useIncidents
+
+```tsx
+const { incidents, acknowledge, resolve, escalate } = useIncidents();
+```
+
+### useWorkspaceResources
+
+```tsx
+const { workspaces, create, archive } = useWorkspaceResources();
+```
+
+### useEvals
+
+```tsx
+const { suites, run, results } = useEvals();
+```
+
+### usePolicyBindings
+
+```tsx
+const { bindings, bind, unbind, update } = usePolicyBindings();
+```
+
+## Example: Chat with Approvals
+
+```tsx
+import {
+  useAgent, useRun, useApprovals, useBudget, useTrace,
+} from '@veridex/agents-react';
+
+function ChatPanel() {
+  const { definition } = useAgent();
+  const { run, result, state, isLoading, error } = useRun();
+  const [input, setInput] = React.useState('');
+
+  return (
+    <div>
+      <h2>{definition.name}</h2>
+      <form onSubmit={(e) => { e.preventDefault(); run(input); }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} />
+        <button type="submit" disabled={isLoading}>Send</button>
+      </form>
+      {isLoading && <p>Thinking...</p>}
+      {error && <p style={{ color: 'red' }}>{error.message}</p>}
+      {result && <p>{result.output}</p>}
+    </div>
+  );
+}
+
+function ApprovalInbox() {
+  const { pending, resolve } = useApprovals();
+  if (!pending.length) return <p>No pending approvals.</p>;
+
+  return (
+    <ul>
+      {pending.map((req) => (
+        <li key={req.id}>
+          <strong>{req.proposal.toolName}</strong>
+          <pre>{JSON.stringify(req.proposal.arguments, null, 2)}</pre>
+          <button onClick={() => resolve(req.id, true)}>Approve</button>
+          <button onClick={() => resolve(req.id, false)}>Deny</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BudgetDisplay() {
+  const { snapshot } = useBudget();
+  return (
+    <div>
+      <p>Spent: ${snapshot.spent.toFixed(2)} / ${snapshot.budget.toFixed(2)}</p>
+      <progress value={snapshot.percentUtilized} max={100} />
+    </div>
+  );
+}
+```
+
+## Related
+
+- [React SDK](/sdks/react) — Core wallet/passkey hooks
+- [Agents Framework](/sdks/agents-framework) — Core agent runtime
+- [Guide: React Integration](/guides/veridex-agents#react-integration) — Setup walkthrough
+- [API Reference](/api-reference/agents-react) — Full type signatures

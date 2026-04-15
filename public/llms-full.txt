@@ -7,8 +7,8 @@
 > GitHub: https://github.com/veridex-protocol/
 > llms.txt index: https://docs.veridex.network/llms.txt
 
-> Generated: 2026-03-25T12:41:55.272Z
-> Pages: 52
+> Generated: 2026-04-14T20:42:46.981Z
+> Pages: 65
 
 ## Table of Contents
 
@@ -22,9 +22,11 @@
 ### Guides
 - Create Wallet (/guides/create-wallet)
 - Send Tokens (/guides/send-tokens)
+- Wallet Backup & Recovery (/guides/wallet-backup-recovery)
 - Cross-Domain Passkey Integration (/guides/cross-domain-passkeys)
 - Gasless Transactions (/guides/gasless-transactions)
 - Session Keys (/guides/session-keys)
+- Multi-Session Management (/guides/multi-session)
 - Spending Limits (/guides/spending-limits)
 - Balance Watching (/guides/balance-watching)
 - Cross-Chain Transfers (/guides/cross-chain)
@@ -34,6 +36,8 @@
 - Agent Payments (/guides/agent-payments)
 - Veridex Agents — Guide (/guides/veridex-agents)
 - Agent Identity & Reputation (/guides/agent-identity)
+- Agent Integrity & Response Seals (/guides/agent-integrity)
+- Data Sovereignty (/guides/data-sovereignty)
 - Examples (/guides/examples)
 - Multisig Wallet (/guides/multisig-wallet)
 - Advanced Patterns (/guides/advanced-patterns)
@@ -57,13 +61,22 @@
 - Security Audits (/security/audits)
 - Security Best Practices (/security/best-practices)
 - Account Recovery (/security/recovery)
+- Agent Security Gateway (/security/agent-security)
+- Response Integrity (/security/response-integrity)
+- Data Sovereignty (/security/data-sovereignty)
 ### Api Reference
 - SDK Reference (/api-reference/sdk)
+- React SDK API Reference (/api-reference/react)
 - Agent SDK Reference (/api-reference/agent-sdk)
+- Agent Security API Reference (/api-reference/agent-security)
 - Agents Framework API Reference (/api-reference/agents-framework)
+- Agents Adapters API Reference (/api-reference/agents-adapters)
+- Agents OpenClaw API Reference (/api-reference/agents-openclaw)
+- Agents Control Plane API Reference (/api-reference/agents-control-plane)
 - Relayer API (/api-reference/relayer)
 - TypeScript Types (/api-reference/types)
 - Error Handling (/api-reference/errors)
+- Agents React API Reference (/api-reference/agents-react)
 ### Resources
 - Architecture Decisions (/resources/architecture-decisions)
 - Contributing (/resources/contributing)
@@ -80,36 +93,75 @@ URL: /
 ================================================================================
 
 Open-source protocol
-  One passkey. Any chain.Fully self-custodial.
-  Cross-chain passkey wallets, general-purpose agent runtimes, autonomous payments, and on-chain identity — integrate in minutes.
+  Bounded authority.For apps & agents.
+  API keys identify applications. Session keys delegate bounded authority to software. Operators decide how much autonomy is acceptable. Developers decide how to implement it.
   
-    Get Started
-    API Reference
+    Developer Quickstart
+    Operator Quickstart
   
   
     npm install @veridex/sdk
   
 
 
+  How it works
+  
+    
+      1. 
+      API Keys
+      Register your app and get an API key. This identifies your application to the platform.
+    
+    
+      2. 
+      Session Keys
+      Create bounded session keys with limits, chains, expiry, and permissions. Multiple concurrent sessions per identity.
+    
+    
+      3. 
+      Governed Execution
+      Every action runs through policy evaluation. Spending limits, chain restrictions, approval thresholds, and counterparty rules.
+    
+    
+      4. 
+      Audit Evidence
+      Every execution produces a trace with reasoning, policy verdicts, signatures, and an exportable evidence bundle.
+    
+  
+
+
   
     🚀
     
-      Get Started
-      Install the SDK and create your first passkey wallet in 5 minutes.
+      Developer Quickstart
+      Register an app, create a session, execute your first governed request in under 10 minutes.
     
   
   
-    📖
+    🛡️
     
-      Guides
-      Step-by-step walkthroughs for wallets, transfers, sessions, agent runtimes, and payments.
+      Operator Quickstart
+      Review posture, configure policies, approve actions, inspect traces and evidence bundles.
     
   
   
     ⚡
     
-      API Reference
-      Complete SDK, agents framework, Agent SDK, and Relayer API documentation.
+      SDKs
+      Core SDK for wallets and sessions. Agent SDK for autonomous payments, identity, and MCP tools.
+    
+  
+  
+    🎛️
+    
+      Session Studio
+      Create, list, select, rotate, and revoke sessions. App sessions, agent sessions, multi-session inventory.
+    
+  
+  
+    📋
+    
+      Governance
+      Approvals, policies, incidents, traces, and evidence exports for operator oversight.
     
   
   
@@ -119,65 +171,57 @@ Open-source protocol
       Base, Optimism, Arbitrum, Solana, Aptos, Sui, Starknet, and Stacks.
     
   
-  
-    🧩
-    
-      Integrations
-      React hooks, Next.js, payment gateways, DeFi, and gaming.
-    
-  
-  
-    🔒
-    
-      Security
-      Audit reports, best practices, and recovery mechanisms.
-    
-  
 
 
-  Protocol and runtime packages
+  Packages
   
     
       @veridex/sdk
-      Passkey wallets, vaults, sessions, cross-chain transfers, spending limits, and ERC-8004 utilities.
+      Passkey wallets, multi-session keys, cross-chain transfers, spending limits, and ERC-8004 utilities.
       npm install @veridex/sdk
       View SDK docs →
     
     
       @veridex/agentic-payments
-      Autonomous payments, on-chain identity, reputation scoring, trust gates, and MCP tools for AI agents.
+      Autonomous payments, on-chain identity, session inventory, trust gates, and MCP tools for AI agents.
       npm install @veridex/agentic-payments
-      View Agent docs →
+      View Agent SDK docs →
     
     
       @veridex/agents
-      General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, transports, and policy-aware execution.
+      General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, and policy-aware execution.
       npm install @veridex/agents zod
       View framework docs →
-    
-    
-      @veridex/agents-control-plane
-      Remote governance layer for approvals, policy packs, traces, audit export, and Postgres-backed managed deployments.
-      npm install @veridex/agents-control-plane
-      View runtime guide →
     
   
 
 
-## Start building in minutes
+## Bounded Authority in 30 seconds
 
 ```typescript
 
 
 const sdk = createSDK('base', { network: 'testnet' });
 
-// Register a passkey (prompts biometric)
+// Register a passkey
 const credential = await sdk.passkey.register('alice', 'My Wallet');
 
-// Prepare and execute a cross-chain transfer
+// Create a bounded session (one of many)
+const session = await sdk.sessions.createSession({
+  permissions: ['transfer'],
+  chainScopes: [8453],
+  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
+  duration: 3600,
+  label: 'payment-agent-001',
+});
+
+// List all active sessions
+const sessions = await sdk.sessions.listSessions();
+
+// Execute a governed transfer with the active session
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  targetChain: 8453,
+  token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
   amount: 1000000n,
 });
@@ -186,19 +230,19 @@ const prepared = await sdk.prepareTransfer({
 
   Explore the docs
   
-    React Hooks →
-    Cross-Chain Transfers →
+    Multi-Session Management →
     Session Keys →
-    Spending Limits →
     Agent Payments →
     Veridex Agents →
     Agent Identity (ERC-8004) →
+    Cross-Chain Transfers →
+    Spending Limits →
+    React Hooks →
+    Approval Inbox →
+    Trace Explorer →
+    Evidence Export →
     Enterprise Manager →
-    Multisig Wallets →
-    Balance Watching →
-    Error Handling →
     Architecture Decisions →
-    Contributing →
     Glossary →
   
 
@@ -219,37 +263,47 @@ URL: /getting-started/quick-start
 
 Build a passkey wallet and send your first transaction in under 5 minutes.
 
+> **Note:** **What is a passkey wallet?** Instead of seed phrases or private keys, your wallet is secured by your device's biometrics (FaceID, fingerprint, Windows Hello). No passwords to remember, no seed phrases to write down. Your biometric = your wallet key.
+
 > **Note:** **Frontend Required:** Passkey operations (`register`, `authenticate`) use WebAuthn browser APIs and must run in a **client-side browser context** (HTTPS or localhost). They cannot run in Node.js, server components, or terminal scripts. All code examples below must execute in a browser — either in a React/Next.js client component, a plain HTML page with a `` tag, or any other browser environment.
 
 ## 1. Initialize the SDK
 
+First, tell the SDK which blockchain you want to use. We'll use Base Sepolia (a free test network) so you won't spend any real money while learning.
+
 ```typescript
 
 
-// Initialize with testnet (default)
+// Initialize with testnet (free test network — no real money involved)
 const sdk = createSDK('base', {
   network: 'testnet',
   relayerUrl: 'https://relayer.veridex.network',
 });
+// That's it! The SDK is ready to use.
 ```
 
 ## 2. Register a Passkey
 
+This is the "sign up" step. The user's browser will show a biometric prompt (FaceID, fingerprint, etc.). After they verify, a passkey is created and a wallet address is generated automatically.
+
 ```typescript
-// Prompt user to create a passkey with biometric
+// This pops up a biometric prompt (FaceID / fingerprint / PIN)
 const credential = await sdk.passkey.register(
-  'user@example.com',  // Username (displayed in passkey prompt)
-  'My Veridex Wallet'  // Display name
+  'user@example.com',  // Username shown in the passkey prompt
+  'My Veridex Wallet'  // A friendly name for this passkey
 );
 
+// Done! The user now has a wallet.
 console.log('Credential ID:', credential.credentialId);
 console.log('Key Hash:', credential.keyHash);
 console.log('Vault Address:', sdk.getVaultAddress());
 ```
 
-> **Note:** The vault address is **deterministic** — the same passkey always generates the same address across all EVM chains.
+> **Note:** The vault address is **deterministic** — the same passkey always produces the same address on every EVM chain. Your user gets one address that works everywhere.
 
 ## 3. Fund the Vault
+
+Your wallet needs some test tokens before it can send transactions. "Faucets" are free token dispensers for test networks — just paste your vault address and click a button.
 
 For testnet, use these faucets:
 
@@ -262,24 +316,27 @@ For testnet, use these faucets:
 
 ## 4. Prepare and Execute a Transfer
 
+Sending tokens is a two-step process: **prepare** (preview the cost) then **execute** (sign and send). This lets you show users exactly what will happen before they confirm.
+
 ```typescript
-// Prepare a transfer (shows gas cost before signing)
+// Step A: Prepare — calculates gas cost, doesn't send anything yet
 const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,  // Base Sepolia Wormhole chain ID
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC
+  targetChain: 10004,  // Base Sepolia (Wormhole chain ID)
+  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
   recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n, // 1 USDC (6 decimals)
+  amount: 1000000n, // 1 USDC (USDC has 6 decimals, so 1_000_000 = 1.0 USDC)
 });
 
-// Get human-readable summary
+// Show the user a human-readable summary
 const summary = await sdk.getTransactionSummary(prepared);
 console.log(summary.title);       // "Transfer"
 console.log(summary.description); // "Send 1.0 USDC to 0x742d...5A234"
 console.log('Gas cost:', prepared.formattedCost);
 
-// Execute with a signer (signs with passkey, then dispatches)
+// Step B: Execute — triggers biometric prompt, signs, and sends
 const result = await sdk.executeTransfer(prepared, signer);
 console.log('Transaction hash:', result.transactionHash);
+// Done! The tokens are on their way.
 ```
 
 ## 5. Check Spending Limits
@@ -315,6 +372,26 @@ for (const entry of portfolio.tokens) {
 }
 console.log('Total USD:', portfolio.totalUsdValue);
 ```
+
+## 7. Back Up Your Wallet (Optional but Recommended)
+
+If you lose your device, you can recover your wallet using an encrypted backup. This takes 30 seconds:
+
+```typescript
+
+
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+
+// Encrypt and upload your credentials (triggers biometric prompt)
+const cred = sdk.passkey.getCredential();
+const result = await backup.backupCredentials(cred.keyHash);
+console.log('Backup complete!', result.credentialCount, 'credentials saved');
+```
+
+> **Note:** Your backup is encrypted with a key only your passkey can produce — the server cannot read it. See the full [Wallet Backup & Recovery](/guides/wallet-backup-recovery) guide for recovery steps.
 
 ## Complete Example
 
@@ -560,7 +637,7 @@ URL: /getting-started/installation
 
 Veridex now provides a protocol layer and a runtime layer:
 
-- **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, and cross-chain transfers
+- **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, cross-chain transfers, and **wallet backup/recovery**
 - **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools
 - **`@veridex/agents`** — General-purpose TypeScript agent runtime
 - **`@veridex/agents-react`** — React hooks and provider for the runtime
@@ -1052,6 +1129,56 @@ Veridex uses Wormhole for secure cross-chain communication.
 | **VAA** | ~60 seconds | High-value transfers, critical actions |
 
 The relayer automatically chooses the optimal path based on transaction value.
+
+## Wallet Backup & Recovery
+
+Passkeys live in your device's secure enclave. If you lose all your devices, you need a way to recover access. Veridex provides encrypted credential backup via the relayer.
+
+### How Backup Works
+
+```
+┌─────────────┐                    ┌─────────────┐
+│ Your Device  │                    │   Relayer    │
+│              │                    │   (Cloud)    │
+│  Credentials ├── PRF encrypt ───▶│  Encrypted   │
+│  (keyHash,   │                    │    Blob      │
+│   credId)    │                    │  (can't read │
+│              │                    │   contents)  │
+└─────────────┘                    └─────────────┘
+```
+
+1. Your passkey generates a **PRF seed** — a deterministic secret only your authenticator can produce.
+2. The SDK derives an AES-256-GCM encryption key from that seed.
+3. All credential metadata is encrypted and uploaded to the Veridex relayer.
+4. On recovery, the same passkey (or a synced copy) regenerates the PRF seed and decrypts the archive.
+
+### PRF (Pseudo-Random Function)
+
+PRF is a WebAuthn extension that lets an authenticator produce a deterministic secret for a given input. Key properties:
+
+- **Deterministic**: Same passkey + same salt = same secret, every time
+- **Non-exportable**: The secret is generated inside the secure enclave
+- **Domain-bound**: Different RP IDs produce different outputs
+
+PRF is supported in Chrome 116+, Safari 17+, and Edge 116+. On browsers without PRF, the SDK falls back to a credential-ID-based key — functional but less secure.
+
+### Recovery Scenarios
+
+| Scenario | What Happens |
+|----------|-------------|
+| **Lost one device, passkey synced** | Use another device — passkey already there |
+| **Lost device, have relayer backup** | Authenticate on synced device → download + decrypt backup |
+| **Lost all devices, passkey synced via iCloud/Google** | Set up new device with same account → passkey restores → decrypt backup |
+| **Lost everything, passkey NOT synced** | Social recovery via guardians (Phase 2) |
+
+### Key Points
+
+- The relayer **cannot read** your backup — it only stores an encrypted blob.
+- Passkeys typically sync within your platform ecosystem (Apple → Apple, Google → Google).
+- For cross-ecosystem backup (iPhone → Windows PC), use the **Add Device** flow.
+- Back up after adding new devices or registering new passkeys.
+
+See the [Wallet Backup & Recovery Guide](/guides/wallet-backup-recovery) for step-by-step instructions.
 
 ## Gasless Transactions
 
@@ -2215,6 +2342,302 @@ try {
 
 
 ================================================================================
+URL: /guides/wallet-backup-recovery
+================================================================================
+
+# Wallet Backup & Recovery
+
+Lost your phone? Switched devices? This guide shows you how to back up your Veridex wallet so you can recover it anywhere — even if your original device is gone.
+
+> **Note:** **What gets backed up?** Your passkey *credentials* (public keys, key hashes, credential IDs) — the information needed to identify your wallet. The actual passkey private keys live in your device's secure enclave and are never extracted. Recovery works because your passkey syncs via your platform (iCloud Keychain, Google Password Manager) or because you've added backup devices.
+
+---
+
+## How It Works (Plain English)
+
+Think of it like this:
+
+1. **Your passkey** = the key to your house. It lives on your device (phone, laptop).
+2. **Your credentials** = a list of all the locks that key can open (wallet addresses, key hashes).
+3. **Backup** = you write down that list, put it in a locked box (encrypted), and store the box in the cloud (relayer).
+4. **The lock on the box** = your passkey's PRF output (a secret your authenticator generates deterministically). Only your passkey can open it.
+5. **Recovery** = you use your passkey on a new device to open the box and get the list back.
+
+```
+┌─────────┐     encrypt      ┌──────────┐     store      ┌──────────┐
+│ Device  │ ──────────────→  │ Encrypted │ ────────────→  │ Relayer  │
+│ Creds   │   (PRF key)      │  Archive  │               │ (cloud)  │
+└─────────┘                  └──────────┘               └──────────┘
+
+          ┌──────────┐     fetch       ┌──────────┐     decrypt
+          │ New      │ ←────────────  │ Relayer  │ ←────────────
+          │ Device   │   (PRF key)    │ (cloud)  │   restore!
+          └──────────┘               └──────────┘
+```
+
+---
+
+## Prerequisites
+
+- `@veridex/sdk` installed (`npm install @veridex/sdk ethers`)
+- An active passkey (you've already registered — see [Create Wallet](/guides/create-wallet))
+- A browser that supports WebAuthn (Chrome, Safari, Firefox, Edge)
+
+---
+
+## Step 1: Check Platform Support
+
+Before backing up, check if your device supports PRF (the strongest encryption method):
+
+```typescript
+
+
+const support = await WalletBackupManager.checkPlatformSupport();
+
+if (!support.webauthnSupported) {
+  console.log('WebAuthn not supported — backup not available');
+} else if (support.prfSupported) {
+  console.log('Full PRF support — your backup will be strongly encrypted');
+} else {
+  console.log('PRF not supported — backup will use a weaker fallback');
+  // Still works! Just less secure.
+}
+```
+
+> **Note:** **What is PRF?** PRF (Pseudo-Random Function) is a WebAuthn extension that lets your authenticator generate a deterministic secret. This secret becomes the encryption key for your backup. Without PRF, the SDK falls back to using your credential ID as the key source — this works but is less secure because credential IDs are not secret.
+
+### Which Browsers Support PRF?
+
+| Browser | PRF Support |
+|---------|------------|
+| Chrome 116+ | Yes |
+| Safari 17+ | Yes |
+| Firefox | Not yet |
+| Edge 116+ | Yes |
+
+---
+
+## Step 2: Create a Backup
+
+```typescript
+
+
+// Initialize
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+// Authenticate first (you need an active credential)
+const { credential } = await sdk.passkey.authenticate();
+
+// Create the backup manager
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+
+// Back up your credentials
+const result = await backup.backupCredentials(credential.keyHash);
+console.log('Backup complete!');
+console.log('Archive ID:', result.archiveId);
+console.log('Credentials backed up:', result.credentialCount);
+```
+
+**What happens when you press the button:**
+1. Your browser asks for biometric verification (FaceID/TouchID)
+2. The passkey generates a PRF seed (a deterministic secret)
+3. The SDK derives an AES-256-GCM encryption key from that seed
+4. All your stored credentials are encrypted
+5. The encrypted blob is uploaded to the Veridex relayer
+
+> **Note:** The relayer **cannot read your credentials** — they're encrypted with a key only your passkey can produce. Even if the relayer is compromised, your data is safe.
+
+---
+
+## Step 3: Recover on a New Device
+
+Got a new phone or laptop? Here's how to get your wallet back:
+
+```typescript
+
+
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+});
+
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+
+// Recover — uses your passkey to decrypt the backup
+const recovered = await backup.recoverCredentials(keyHash);
+console.log('Recovered', recovered.credentials.length, 'credentials!');
+
+// Your credentials are now in localStorage — you can use the SDK normally
+const vault = sdk.getVaultAddress();
+console.log('Welcome back! Your vault:', vault);
+```
+
+> **Note:** **You need your passkey!** Recovery requires the same passkey (or a synced copy). If you've lost ALL devices with your passkey and it wasn't synced, you'll need social recovery via guardians (a future feature).
+
+---
+
+## Step 4: Check Backup Status
+
+See if a backup exists and how fresh it is:
+
+```typescript
+const status = await backup.getBackupStatus(keyHash);
+
+if (status.hasArchive) {
+  console.log('Backup exists');
+  console.log('Last updated:', new Date(status.archiveUpdatedAt));
+  console.log('PRF supported:', status.prfSupported);
+  console.log('Guardians:', status.guardianCount);
+} else {
+  console.log('No backup found — create one!');
+}
+```
+
+---
+
+## Adding Extra Devices (Best Practice)
+
+The **best protection** is having your passkey on multiple devices. If your phone breaks, your laptop still has access.
+
+### How to Add a Device
+
+1. Go to your account page at `auth.veridex.network/account`
+2. Click **"Add Another Device"**
+3. Your browser will show a QR code — scan it with your other device
+4. The new device creates a passkey linked to the same identity
+
+> **Note:** **Cross-ecosystem tip:** Passkeys sync automatically within the same ecosystem (Apple→Apple, Google→Google). To bridge across ecosystems (e.g., iPhone to Windows PC), use the "Add Another Device" flow — it uses QR/Bluetooth to set up the passkey on the other device.
+
+### How Passkey Sync Works
+
+```
+┌──────────────────────────────────────────────────────┐
+│              Apple Ecosystem                          │
+│  iPhone ←──→ iPad ←──→ MacBook                       │
+│         (iCloud Keychain syncs passkeys)              │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│              Google Ecosystem                         │
+│  Android ←──→ Chrome (Windows) ←──→ Chromebook       │
+│         (Google Password Manager syncs passkeys)      │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│              Cross-Ecosystem (via Add Device)         │
+│  iPhone ──QR/BLE──→ Windows PC                       │
+│  Android ──QR/BLE──→ MacBook                         │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## Complete React Example
+
+```tsx
+
+
+export function BackupManager() {
+  const [status, setStatus] = useState<'idle' | 'backing-up' | 'recovering' | 'done'>('idle');
+  const [backupExists, setBackupExists] = useState(false);
+
+  const sdk = createSDK('base', {
+    network: 'testnet',
+    relayerUrl: 'https://relayer.veridex.network',
+  });
+
+  const backup = new WalletBackupManager({
+    passkey: sdk.passkey,
+    relayerUrl: 'https://relayer.veridex.network/api/v1',
+  });
+
+  // Check backup status on mount
+  useEffect(() => {
+    const cred = sdk.passkey.getCredential();
+    if (cred?.keyHash) {
+      backup.getBackupStatus(cred.keyHash).then((s) => {
+        setBackupExists(s.hasArchive);
+      });
+    }
+  }, []);
+
+  const handleBackup = async () => {
+    setStatus('backing-up');
+    const cred = sdk.passkey.getCredential();
+    if (!cred) return;
+    await backup.backupCredentials(cred.keyHash);
+    setBackupExists(true);
+    setStatus('done');
+  };
+
+  const handleRecover = async () => {
+    setStatus('recovering');
+    const cred = sdk.passkey.getCredential();
+    if (!cred) return;
+    await backup.recoverCredentials(cred.keyHash);
+    setStatus('done');
+  };
+
+  return (
+    
+      Wallet Backup
+      {backupExists ? (
+        ✅ Backup exists on the Veridex relayer
+      ) : (
+        ⚠️ No backup found
+      )}
+      
+        {status === 'backing-up' ? 'Backing up...' : 'Create Backup'}
+      
+      
+        {status === 'recovering' ? 'Recovering...' : 'Recover Wallet'}
+      
+    
+  );
+}
+```
+
+---
+
+## What Happens if I Lose Everything?
+
+| Scenario | Solution |
+|----------|----------|
+| Lost one device, but passkey synced to another | Use the other device — everything works |
+| Lost device, have backup on relayer | Use any synced passkey to recover |
+| Lost all devices, passkey synced via iCloud/Google | Sign in on a new device to restore passkey, then recover |
+| Lost all devices, passkey was NOT synced | Social recovery via guardians (coming soon) |
+
+---
+
+## FAQ
+
+
+  No. Your backup is encrypted with a key derived from your passkey's PRF output. The relayer stores the encrypted blob but cannot decrypt it. Even if the relayer database is compromised, your credentials are safe.
+
+
+  Back up whenever you add a new device or register a new passkey. The backup is a snapshot of your credential list at that moment.
+
+
+  The SDK falls back to a credential-ID-based encryption key. This still works but is less secure since credential IDs are not secret. You'll see a warning in the account page. Consider adding a device that supports PRF (Chrome 116+, Safari 17+) for stronger encryption.
+
+
+  No. Encrypted backups are stored on the Veridex relayer (a server), not on any blockchain. This is intentional — on-chain storage would be expensive and the encrypted blobs can be large.
+
+
+  Guardian-based social recovery is a Phase 2 feature. The database models for guardians are already in place. When ready, you'll be able to designate trusted contacts who can help you recover your wallet even if you've lost all devices and your passkey wasn't synced.
+
+
+================================================================================
 URL: /guides/cross-domain-passkeys
 ================================================================================
 
@@ -2241,9 +2664,9 @@ Two methods are supported, and the SDK handles both automatically:
 
 Every third-party origin must be registered before it can use Veridex cross-domain passkeys. Registration is free and instant.
 
-**Option A: Developer Portal (UI)**
+**Option A: Developer Platform (UI)**
 
-1. Go to the [Developer Portal](https://developers.veridex.network).
+1. Go to the [Developer Platform](https://developers.veridex.network).
 2. Enter your **Application Name**, **Origin** (e.g., `https://myapp.com`), and optionally a **Contact Email**.
 3. You'll receive an **App ID** and **API Key**. Save the API key — it's shown only once.
 
@@ -2314,11 +2737,15 @@ async function signIn() {
 
 After authentication, create a **server-validated session token** via the relayer. This gives you a token that your backend can verify independently.
 
+The SDK handles the entire session flow in a **single popup** — no double-prompt.
+
 ```typescript
 const auth = createCrossOriginAuth();
 
 async function signInWithServerSession() {
   // Full flow: authenticate + create server-validated session
+  // If ROR is available: native passkey dialog (no popup at all)
+  // If ROR is unavailable: single popup handles auth + session creation
   const { session, serverSession } = await auth.authenticateAndCreateSession({
     permissions: ['read', 'transfer'],
     expiresInMs: 3600000, // 1 hour
@@ -2331,6 +2758,10 @@ async function signInWithServerSession() {
   // Store the session ID for subsequent API calls
   localStorage.setItem('veridex_session_id', serverSession.id);
 }
+```
+
+> **Note:** **Single-popup flow:** When using `authenticateAndCreateSession()`, the auth portal handles session challenge creation internally. The user sees only one popup with one biometric prompt — not two separate ones.
+
 ```
 
 You can validate this session from your backend at any time:
@@ -2443,12 +2874,15 @@ Server session tokens let your backend verify a user's identity without trusting
 
 ### Create a Session
 
+The easiest way is `authenticateAndCreateSession()` (shown above). If you need manual control:
+
 ```typescript
-const serverSession = await auth.createServerSession(session, {
-  permissions: ['read', 'transfer'],
-  expiresInMs: 3600000, // 1 hour
-});
-// serverSession.id = "ses_abc123..."
+// 1. Authenticate first
+const session = await auth.connectWithVeridex();
+
+// 2. Create a server-validated token
+const serverSession = await auth.createServerSession(session);
+console.log('Session ID:', serverSession.id);
 ```
 
 ### Validate a Session (from your backend)
@@ -2585,7 +3019,7 @@ export async function GET() {
 }
 ```
 
-> **Note:** The canonical `.well-known/webauthn` file at `veridex.network` is managed by the Veridex team. Your origin is automatically added when you register via the Developer Portal. You only need to host this file on **your own domain** if you want ROR to work in both directions.
+> **Note:** The canonical `.well-known/webauthn` file at `veridex.network` is managed by the Veridex team. Your origin is automatically added when you register via the Developer Platform. You only need to host this file on **your own domain** if you want ROR to work in both directions.
 
 ---
 
@@ -3391,6 +3825,205 @@ try {
   
   
     Session keys on Stacks with native secp256k1
+
+
+================================================================================
+URL: /guides/multi-session
+================================================================================
+
+# Multi-Session Management
+
+Veridex supports multiple concurrent sessions per app and per agent. This guide covers when to use multiple sessions, how to manage them with both the Core SDK and Agent SDK, and patterns for production use.
+
+## When to Use Multiple Sessions
+
+| Scenario | Sessions | Example |
+|----------|----------|---------|
+| Single-purpose integration | 1 | A payment widget that processes one flow |
+| Multi-chain app | 1 per chain | Base session + Solana session |
+| Role-based agents | 1 per role | Treasury agent, swapper agent, monitor agent |
+| Time-windowed budgets | 1 per window | Daily budget session, refreshed each morning |
+| Isolated workloads | 1 per workload | Production session + staging session |
+
+## Core SDK: Multiple Sessions
+
+### Create Multiple Sessions
+
+```typescript
+
+
+const client = new VeridexClient({
+  apiKey: process.env.VERIDEX_API_KEY,
+  chain: 'base',
+  rpcUrl: 'https://...',
+});
+
+// Create sessions with distinct labels and limits
+const treasury = await client.createSession({
+  label: 'treasury-ops',
+  spendingLimit: '10000',
+  validUntil: Date.now() + 86400_000,
+});
+
+const swaps = await client.createSession({
+  label: 'swap-engine',
+  spendingLimit: '5000',
+  validUntil: Date.now() + 3600_000,
+});
+```
+
+### List Active Sessions
+
+```typescript
+const sessions = await client.listSessions();
+for (const s of sessions) {
+  console.log(`${s.label}: ${s.status} — ${s.remainingLimit} remaining`);
+}
+```
+
+### Execute with a Specific Session
+
+```typescript
+const result = await client.execute({
+  session: treasury.sessionKeyHash,
+  action: {
+    type: 'transfer',
+    to: '0x...',
+    amount: '500',
+    token: 'USDC',
+  },
+});
+```
+
+### Revoke a Session
+
+```typescript
+await client.revokeSession(swaps.sessionKeyHash);
+```
+
+## Agent SDK: Agent Sessions
+
+The Agent SDK (`@veridex/agentic-payments`) manages sessions through the `SessionKeyManager`.
+
+### Session Inventory
+
+```typescript
+
+
+const manager = new SessionKeyManager(signer, contractAddress, {
+  chain: 'base',
+  rpcUrl: 'https://...',
+});
+
+// Create labeled sessions
+const session1 = await manager.createSession({
+  label: 'defi-ops',
+  spendingLimit: '5000',
+  allowedTokens: ['USDC', 'ETH'],
+  validUntil: Date.now() + 86400_000,
+});
+
+const session2 = await manager.createSession({
+  label: 'monitoring',
+  spendingLimit: '100',
+  validUntil: Date.now() + 86400_000,
+});
+```
+
+### List and Filter Sessions
+
+```typescript
+const all = manager.listSessions();
+const active = manager.listSessions({ status: 'active' });
+const defi = manager.listSessions({ label: 'defi-ops' });
+```
+
+### Session Restoration
+
+On restart, the agent can restore sessions from storage:
+
+```typescript
+const restored = await manager.restoreSession(sessionKeyHash);
+console.log(`Restored: ${restored.label} — ${restored.status}`);
+```
+
+### MCP Tool: Session Inventory
+
+If using the MCP server, agents can query sessions via the `check_session_inventory` tool:
+
+```json
+{
+  "tool": "check_session_inventory",
+  "parameters": {}
+}
+```
+
+Returns all sessions with label, status, remaining limit, and expiry.
+
+## Patterns
+
+### Pattern: Daily Budget Refresh
+
+Create a new session each day with a fresh spending limit. Revoke the previous day's session.
+
+```typescript
+async function refreshDailyBudget(client: VeridexClient, dailyLimit: string) {
+  // Revoke yesterday's session
+  const sessions = await client.listSessions();
+  const expired = sessions.filter(s => s.label === 'daily-budget' && s.status === 'active');
+  for (const s of expired) {
+    await client.revokeSession(s.sessionKeyHash);
+  }
+
+  // Create today's session
+  return client.createSession({
+    label: 'daily-budget',
+    spendingLimit: dailyLimit,
+    validUntil: Date.now() + 86400_000,
+  });
+}
+```
+
+### Pattern: Chain-Specific Sessions
+
+Create one session per chain to isolate cross-chain risk.
+
+```typescript
+const baseSession = await client.createSession({
+  label: 'base-ops',
+  spendingLimit: '5000',
+  chainId: '8453',
+  validUntil: Date.now() + 86400_000,
+});
+
+const ethSession = await client.createSession({
+  label: 'eth-ops',
+  spendingLimit: '10000',
+  chainId: '1',
+  validUntil: Date.now() + 86400_000,
+});
+```
+
+### Pattern: Graceful Session Rotation
+
+Rotate sessions without downtime by creating the new session before revoking the old one.
+
+```typescript
+async function rotateSession(client: VeridexClient, oldHash: string, config: SessionConfig) {
+  const newSession = await client.createSession(config);
+  // New session is active — switch traffic
+  await client.revokeSession(oldHash);
+  return newSession;
+}
+```
+
+## Session Studio Integration
+
+The [Session Studio](/platform/session-studio) in the Developer Platform provides a visual interface for multi-session management:
+- View all active, expired, and revoked sessions
+- Filter by label, chain, or agent
+- Health indicators show remaining limits and expiry
+- Create new sessions with the provisioning wizard
 
 
 ================================================================================
@@ -7370,6 +8003,309 @@ Supported chains: Base, Ethereum, Polygon, Arbitrum, Optimism, Linea, MegaETH, M
   
   
     Official ERC-8004 standard
+
+
+================================================================================
+URL: /guides/agent-integrity
+================================================================================
+
+# Agent Integrity & Response Seals
+
+Response seals provide cryptographic tamper-evidence for every LLM response in the Veridex agent runtime. They ensure that model outputs haven't been modified between the provider and your application.
+
+> **Note:** Response seals are created **automatically** by all built-in model providers. No configuration required.
+
+## How It Works
+
+
+  
+    The model provider (OpenAI, Anthropic, Gemini, etc.) returns a raw response.
+  
+  
+    The provider adapter captures the raw response bytes, derives a signing key via HKDF from the API key, and computes HMAC-SHA256.
+  
+  
+    The seal is attached to the `ModelResponse._seal` field and forwarded through the response envelope.
+  
+  
+    Downstream consumers (control plane, audit system, or client) can verify the seal using the same API key.
+  
+
+
+## Verifying Response Seals
+
+```typescript
+
+
+// From a ResponseEnvelope
+const envelope = result.envelope;
+
+if (envelope.chainOfCustodySeal) {
+  const isValid = verifyResponseSeal(
+    envelope.chainOfCustodySeal,
+    rawResponseBytes,
+    apiKeyBytes,
+  );
+
+  if (!isValid) {
+    console.error('Response may have been tampered with!');
+  }
+}
+```
+
+## ResponseEnvelope Structure
+
+Every agent run turn produces a `ResponseEnvelope`:
+
+```typescript
+interface ResponseEnvelope {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  provider: string;
+  output: string;
+  tokensUsed: {
+    prompt: number;
+    completion: number;
+  };
+  chainOfCustodySeal?: {
+    algorithm: 'HMAC-SHA256';
+    seal: string;      // hex-encoded HMAC
+    rawHash: string;   // SHA-256 of raw response bytes
+    timestamp: number; // Unix ms when seal was created
+  };
+}
+```
+
+## Seal Cryptography
+
+| Component | Algorithm | Purpose |
+|-----------|-----------|---------|
+| Key Derivation | HKDF-SHA256 | Derive signing key from API key |
+| Signing | HMAC-SHA256 | Produce tamper-evident seal |
+| Raw Hash | SHA-256 | Fingerprint of raw response bytes |
+
+The signing key is derived using:
+- **IKM**: API key bytes
+- **Salt**: `"veridex-response-seal-v1"`
+- **Info**: `"hmac-signing-key"`
+
+## Supported Providers
+
+All built-in model providers automatically create seals:
+
+| Provider | Seal Support |
+|----------|-------------|
+| `OpenAIProvider` | Automatic |
+| `AnthropicProvider` | Automatic |
+| `GeminiProvider` | Automatic |
+| `OpenAICompatibleProvider` | Automatic |
+| `GroqProvider` | Automatic |
+| `TogetherAIProvider` | Automatic |
+| `FireworksProvider` | Automatic |
+| `DeepSeekProvider` | Automatic |
+| `PerplexityProvider` | Automatic |
+| `MistralProvider` | Automatic |
+
+## Agent Integrity Bindings
+
+Beyond response seals, agents can bind their identity to a specific code + config snapshot:
+
+```typescript
+interface AgentIntegrityBinding {
+  agentId: string;
+  identityClaims: AgentIdentityClaims;
+  codeHash: string;           // SHA-256 of agent code
+  configHash: string;         // SHA-256 of agent configuration
+  toolManifestHash: string;   // SHA-256 of registered tools
+  timestamp: number;
+}
+```
+
+This allows auditors to verify that an agent's behavior matches its declared capabilities at the time of execution.
+
+## Integration with Audit Trail
+
+Response seals are automatically:
+- Logged by `RawResponseHashLogger` for offline verification
+- Included in trace records via the control plane
+- Available in evidence bundles via `generateEvidenceBundle()`
+
+## Related
+
+- [Agents Framework](/sdks/agents-framework) — ResponseSeal API
+- [API Reference](/api-reference/agents-framework#response-integrity) — Full type signatures
+- [Governance: Traces](/governance/traces) — Audit trail
+- [Security: Response Integrity](/security/response-integrity) — Security implications
+
+
+================================================================================
+URL: /guides/data-sovereignty
+================================================================================
+
+# Data Sovereignty
+
+The Veridex agent framework detects PII in tool arguments and enforces jurisdictional transfer rules, ensuring compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+
+## Overview
+
+Data sovereignty enforcement works at two levels:
+
+1. **Tool-level PII tagging** — Declare which PII categories each tool exposes via `ppiTags` on `ToolContract`
+2. **Security gateway evaluation** — The `dataSovereigntyPack` in `@veridex/agent-security` detects PII in tool arguments and evaluates jurisdictional rules
+
+> **Note:** PII tagging on tools is advisory — it helps the security gateway focus its evaluation. The gateway also performs independent PII detection via regex patterns and heuristics.
+
+## Tagging Tools with PII Categories
+
+```typescript
+
+
+const userLookup = tool({
+  name: 'lookup_user',
+  description: 'Look up user profile by ID',
+  input: z.object({ userId: z.string() }),
+  safetyClass: 'read',
+  ppiTags: ['name', 'email', 'address', 'phone'],
+  async execute({ input }) {
+    return { success: true, llmOutput: `User ${input.userId}: ...` };
+  },
+});
+```
+
+### Supported PII Categories
+
+| Category | Examples |
+|----------|---------|
+| `email` | Email addresses |
+| `phone` | Phone numbers |
+| `ssn` | Social security numbers, national IDs |
+| `name` | Full names, first/last names |
+| `address` | Physical addresses |
+| `dob` | Dates of birth |
+| `financial` | Bank accounts, card numbers |
+| `health` | Medical records, diagnoses |
+| `biometric` | Fingerprints, face data |
+
+## Configuring Jurisdictional Rules
+
+```typescript
+
+
+const sovereignty = dataSovereigntyPack({
+  defaultJurisdiction: 'US',
+  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
+  jurisdictionRules: [
+    {
+      from: 'EU',
+      to: 'US',
+      verdict: 'block',
+      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
+      regulations: ['GDPR Art. 44-49'],
+    },
+    {
+      from: 'EU',
+      to: 'UK',
+      verdict: 'allow',
+      reason: 'UK has GDPR adequacy decision',
+      regulations: ['GDPR Art. 45'],
+    },
+    {
+      from: 'CA',
+      to: '*',
+      verdict: 'flag',
+      reason: 'PIPEDA requires consent for cross-border PII transfer',
+      regulations: ['PIPEDA Principle 4.1.3'],
+    },
+  ],
+  toolJurisdictions: {
+    'store_in_eu_db': 'EU',
+    'send_to_us_api': 'US',
+    'log_to_ca_service': 'CA',
+  },
+});
+```
+
+## Sovereignty Violation Flow
+
+
+  
+    Agent invokes a tool that handles PII (detected via `ppiTags` or pattern matching).
+  
+  
+    The security gateway determines the source jurisdiction (tool tag or default) and destination jurisdiction (target tool or service).
+  
+  
+    Jurisdictional rules are evaluated. If a cross-border transfer violates a rule, a violation is generated.
+  
+  
+    Depending on the rule verdict (`block`, `flag`, or `allow`), the tool call is blocked, flagged for review, or allowed.
+  
+  
+    Violations are recorded as `SovereigntyViolationSummary` events in the trace and forwarded to the relayer for audit.
+  
+
+
+## Sovereignty Violations in Runtime
+
+The agent runtime automatically detects sovereignty violations and emits them as trace events:
+
+```typescript
+interface SovereigntyViolationSummary {
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  toolName: string;
+  piiCategories: string[];
+  fromJurisdiction: string;
+  toJurisdiction: string;
+  regulation: string;
+  timestamp: number;
+}
+```
+
+Listen for violations:
+
+```typescript
+agent.events.on('sovereignty_violation', (violation) => {
+  console.log(`PII violation: ${violation.piiCategories.join(', ')}`);
+  console.log(`${violation.fromJurisdiction} → ${violation.toJurisdiction}`);
+  console.log(`Regulation: ${violation.regulation}`);
+});
+```
+
+## Integration with Security Gateway
+
+For agents using the standalone security gateway:
+
+```typescript
+
+
+const gateway = new SecurityGateway({
+  packs: [
+    dataSovereigntyPack({ /* config */ }),
+    // ... other packs
+  ],
+});
+
+const result = await gateway.evaluate({
+  type: 'tool_call',
+  toolName: 'send_to_us_api',
+  arguments: { email: 'user@example.com', name: 'John Doe' },
+  agentId: 'data-agent',
+});
+
+if (result.overall === 'block') {
+  // PII transfer blocked by sovereignty rules
+}
+```
+
+## Related
+
+- [Agent Security](/sdks/agent-security) — Security gateway
+- [Governance: Sovereignty Compliance](/governance/sovereignty) — Audit trail
+- [Security: Data Sovereignty](/security/data-sovereignty) — Policy reference
+- [API Reference](/api-reference/agent-security#datasovereigntypack-options) — Configuration types
 
 
 ================================================================================
@@ -14191,6 +15127,249 @@ A: Once threshold approvals are collected, recovery is immediate. Collecting app
 
 
 ================================================================================
+URL: /security/agent-security
+================================================================================
+
+# Agent Security Gateway
+
+The Agent Security Gateway (`@veridex/agent-security`) provides defense-in-depth for any AI agent — whether built with Veridex, LangChain, CrewAI, or custom code.
+
+## Deployment Patterns
+
+### Embedded (In-Process)
+
+Run the gateway inside your agent process for lowest latency:
+
+```typescript
+
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  defaultAction: 'block',
+});
+
+// Evaluate before every tool call
+const result = await gateway.evaluate({
+  type: 'tool_call',
+  toolName: toolName,
+  arguments: args,
+  agentId: 'my-agent',
+});
+```
+
+### Sidecar Service
+
+Deploy as an HTTP service alongside your agent fleet:
+
+```typescript
+
+
+const server = createSecurityServer({
+  packs: createDefaultPacks(),
+  port: 4600,
+  authToken: process.env.SECURITY_GATEWAY_TOKEN,
+});
+
+await server.start();
+```
+
+### Centralized Gateway
+
+Single gateway serving multiple agent teams:
+
+```
+┌─────────────┐     ┌──────────────────┐
+│ Agent Team A │────▶│                  │
+├─────────────┤     │  Security        │
+│ Agent Team B │────▶│  Gateway         │
+├─────────────┤     │  (port 4600)     │
+│ Agent Team C │────▶│                  │
+└─────────────┘     └──────────────────┘
+```
+
+## Security Packs
+
+### Pack Selection
+
+Not every agent needs all 12 packs. Select based on your threat model:
+
+| Agent Type | Recommended Packs |
+|-----------|------------------|
+| Read-only data agents | `injectionDetection`, `secretDetection`, `endpointAllowlist` |
+| Financial agents | All above + `budgetCeiling`, `financialSafety`, `crossTurnAnomaly` |
+| Tool-using agents | All above + `toolPoisoning`, `shellCommandSafety`, `handoffSafety` |
+| Multi-jurisdiction agents | All above + `dataSovereignty` |
+| Production fleet | `createDefaultPacks()` (all 12) |
+
+### Custom Packs
+
+Implement the `SecurityPack` interface:
+
+```typescript
+const customPack: SecurityPack = {
+  id: 'custom-ip-filter',
+  name: 'IP Filter',
+  description: 'Block requests to internal IP ranges',
+  async evaluate(action) {
+    if (action.type === 'tool_call' && action.arguments?.url) {
+      const url = new URL(action.arguments.url as string);
+      if (isInternalIP(url.hostname)) {
+        return {
+          verdict: 'block',
+          reasons: ['Request to internal IP range blocked'],
+          packId: 'custom-ip-filter',
+          confidence: 1.0,
+        };
+      }
+    }
+    return { verdict: 'allow', reasons: [], packId: 'custom-ip-filter', confidence: 1.0 };
+  },
+};
+```
+
+## Monitoring
+
+Enable telemetry to track security evaluations:
+
+```typescript
+
+
+const reporter = new TelemetryReporter({
+  endpoint: 'https://telemetry.example.com/events',
+  batchSize: 50,
+  flushIntervalMs: 10_000,
+});
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  telemetry: reporter,
+});
+```
+
+## Related
+
+- [Agent Security SDK](/sdks/agent-security) — Package documentation
+- [API Reference](/api-reference/agent-security) — Full type signatures
+- [Security: Data Sovereignty](/security/data-sovereignty) — Jurisdictional compliance
+
+
+================================================================================
+URL: /security/response-integrity
+================================================================================
+
+# Response Integrity
+
+Every LLM response in the Veridex agent runtime is sealed with an HMAC chain-of-custody signature. This provides cryptographic proof that model outputs haven't been modified between the provider and your application.
+
+## Threat Model
+
+| Threat | Mitigation |
+|--------|-----------|
+| Man-in-the-middle modifying LLM responses | HMAC seal verification detects tampering |
+| Proxy or middleware injecting content | Raw response hash comparison reveals modifications |
+| Disputed agent behavior | Sealed response envelopes provide non-repudiable evidence |
+| Audit trail integrity | Content-hashed traces with embedded seals |
+
+## Seal Algorithm
+
+1. **Key Derivation**: HKDF-SHA256 with API key as IKM, salt `"veridex-response-seal-v1"`, info `"hmac-signing-key"`
+2. **Signing**: HMAC-SHA256 over the raw response bytes
+3. **Hashing**: SHA-256 of raw response bytes for fingerprinting
+
+## Verification
+
+```typescript
+
+
+const isValid = verifyResponseSeal(
+  envelope.chainOfCustodySeal,
+  rawResponseBytes,
+  apiKeyBytes,
+);
+```
+
+## Limitations
+
+- Seals verify integrity from the Veridex runtime, not from the model provider's infrastructure
+- API key rotation requires re-deriving signing keys
+- Streaming responses are sealed after assembly (not per-chunk)
+
+The [Provider Response Signing Initiative](/guides/agent-integrity) proposes a future where model providers cryptographically sign responses at origin.
+
+## Related
+
+- [Guide: Agent Integrity](/guides/agent-integrity) — Full walkthrough
+- [Agents Framework](/sdks/agents-framework#response-integrity-responseseal) — ResponseSeal API
+- [Governance: Traces](/governance/traces) — Audit trail with seals
+
+
+================================================================================
+URL: /security/data-sovereignty
+================================================================================
+
+# Data Sovereignty
+
+Data sovereignty policies enforce jurisdictional rules for PII (Personally Identifiable Information) processed by AI agents. These policies ensure compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+
+## Policy Configuration
+
+Configure sovereignty rules in the `dataSovereigntyPack`:
+
+```typescript
+
+
+const pack = dataSovereigntyPack({
+  defaultJurisdiction: 'US',
+  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
+  jurisdictionRules: [
+    {
+      from: 'EU',
+      to: 'US',
+      verdict: 'block',
+      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
+      regulations: ['GDPR Art. 44-49'],
+    },
+  ],
+  toolJurisdictions: {
+    'eu_database': 'EU',
+    'us_analytics': 'US',
+  },
+});
+```
+
+## Supported Regulations
+
+| Regulation | Jurisdiction | Key Requirements |
+|-----------|-------------|-----------------|
+| GDPR | EU/EEA | Data transfer restrictions (Art. 44-49), right to erasure, DPO |
+| CCPA/CPRA | California, US | Consumer opt-out, sale restrictions, access rights |
+| PIPEDA | Canada | Consent for cross-border transfer, purpose limitation |
+| LGPD | Brazil | Adequacy requirements, data localization |
+| POPIA | South Africa | Cross-border conditions, consent |
+
+## Enforcement Levels
+
+| Verdict | Behavior |
+|---------|----------|
+| `block` | Tool call is prevented. Agent receives a denial reason. |
+| `flag` | Tool call proceeds but a violation is recorded for review. |
+| `allow` | No restriction. |
+
+## Audit Trail
+
+All sovereignty evaluations are recorded:
+- Blocked calls appear as `sovereignty_violation` events in traces
+- Flagged calls create advisory records in the audit log
+- Evidence bundles include sovereignty context for compliance review
+
+## Related
+
+- [Guide: Data Sovereignty](/guides/data-sovereignty) — Configuration walkthrough
+- [Agent Security](/sdks/agent-security) — Security gateway
+- [Governance: Sovereignty Compliance](/governance/sovereignty) — Violation audit trail
+
+
+================================================================================
 URL: /api-reference/sdk
 ================================================================================
 
@@ -14992,6 +16171,473 @@ sdk.transactions.track(txHash, chainId, (state) => {
 
 const state = await sdk.waitForTransaction(txHash);
 ```
+
+---
+
+## Enterprise Factories
+
+### createEnterpriseSDK
+
+```typescript
+
+
+const sdk = createEnterpriseSDK(chain, {
+  network: 'mainnet',
+  multisig: { threshold: number, signers: Signer[] },
+  recovery: { guardians: string[], delay: number },
+});
+```
+
+Returns a `VeridexSDK` instance pre-configured with `MultisigManager` and `RecoveryManager`.
+
+### createHubSDK
+
+```typescript
+
+
+const sdk = createHubSDK(chain, { network: 'testnet' });
+```
+
+Hub SDK for shared passkey credential management across multiple applications.
+
+### createSessionSDK
+
+```typescript
+
+
+const sdk = createSessionSDK(chain, {
+  network: 'testnet',
+  sessionKeyHash: '0x...',
+});
+```
+
+Session-scoped SDK for backend services operating with a pre-existing session key.
+
+---
+
+## MultisigManager
+
+```typescript
+const multisig = sdk.multisig;
+
+await multisig.propose({ to, value, data });   // Propose transaction
+await multisig.approve(proposalId);             // Approve as signer
+await multisig.execute(proposalId);             // Execute (threshold met)
+await multisig.getProposal(proposalId);         // Get proposal details
+await multisig.listPending();                   // List pending proposals
+```
+
+---
+
+## RecoveryManager
+
+```typescript
+const recovery = sdk.recovery;
+
+await recovery.initiateRecovery(newOwner);       // Start recovery
+await recovery.attestAsGuardian(requestId, signer); // Guardian attestation
+await recovery.executeRecovery(requestId);        // Execute after delay
+await recovery.cancelRecovery(requestId);         // Cancel (by current owner)
+await recovery.getRecoveryStatus(requestId);      // Check status
+```
+
+---
+
+## CrossOriginAuth
+
+Enable Veridex passkey authentication in third-party applications. The SDK detects browser support and picks the best flow automatically.
+
+```typescript
+
+
+const auth = createCrossOriginAuth({
+  rpId: 'veridex.network',              // default
+  authPortalUrl: 'https://auth.veridex.network', // default
+  relayerUrl: 'https://relayer.veridex.network/api/v1', // default
+  mode: 'popup',                         // 'popup' | 'redirect'
+  redirectUri: 'https://myapp.com/callback', // only for redirect mode
+  timeout: 120000,                       // 2 minutes default
+});
+```
+
+### auth.supportsRelatedOrigins
+
+Check if the browser supports WebAuthn Related Origin Requests (seamless, no popup).
+
+```typescript
+const rorSupported = await auth.supportsRelatedOrigins(); // boolean
+```
+
+### auth.authenticate
+
+Native passkey authentication (only works when ROR is supported).
+
+```typescript
+const { credential, signature } = await auth.authenticate();
+console.log('Key hash:', credential.keyHash);
+console.log('Vault:', '0x' + credential.keyHash.slice(-40));
+```
+
+### auth.connectWithVeridex
+
+Auth Portal flow (popup or redirect). Works on all browsers.
+
+```typescript
+const session = await auth.connectWithVeridex();
+console.log('Address:', session.address);
+console.log('Credential:', session.credential.keyHash);
+```
+
+**Options:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `register` | `boolean` | Open in registration mode |
+| `username` | `string` | Pre-fill username for registration |
+| `displayName` | `string` | Pre-fill display name |
+| `createSession` | `boolean` | Handle full session flow inside a single popup |
+| `permissions` | `string[]` | Session permissions (e.g. `['read', 'transfer']`) |
+| `expiresInMs` | `number` | Session expiry duration in ms |
+
+### auth.authenticateAndCreateSession
+
+**Recommended.** Full flow: authenticate + create a server-validated session in one call.
+Uses a single popup when ROR is unavailable (no double-prompt).
+
+```typescript
+const { session, serverSession } = await auth.authenticateAndCreateSession({
+  permissions: ['read', 'transfer'],
+  expiresInMs: 3600000, // 1 hour
+});
+
+console.log('Vault address:', session.address);
+console.log('Server session ID:', serverSession.id);
+console.log('Expires at:', new Date(serverSession.expiresAt));
+
+// Store for subsequent API calls
+localStorage.setItem('veridex_session_id', serverSession.id);
+```
+
+### auth.createServerSession
+
+Create a server-validated session token from a cross-origin session.
+
+```typescript
+const serverSession = await auth.createServerSession(session);
+```
+
+### auth.validateServerSession
+
+Validate an existing session token (returns `null` if expired/revoked).
+
+```typescript
+const valid = await auth.validateServerSession('ses_abc123');
+if (valid) {
+  console.log('Session valid, expires:', new Date(valid.expiresAt));
+}
+```
+
+### auth.revokeServerSession
+
+```typescript
+await auth.revokeServerSession('ses_abc123');
+```
+
+### auth.completeRedirectAuth
+
+Call on your redirect callback page to extract the session from URL params.
+
+```typescript
+const session = auth.completeRedirectAuth(); // CrossOriginSession | null
+```
+
+---
+
+## WalletBackupManager
+
+PRF-based encrypted wallet backup and recovery. Backs up credentials to the relayer encrypted with a key derived from your passkey's PRF extension.
+
+```typescript
+
+
+const backup = new WalletBackupManager({
+  passkey: sdk.passkey,
+  relayerUrl: 'https://relayer.veridex.network/api/v1',
+});
+```
+
+### backup.backupCredentials
+
+Encrypt and store your wallet credentials on the relayer. The encryption key is derived from your passkey's PRF output — only you can decrypt it.
+
+```typescript
+const result = await backup.backupCredentials(keyHash);
+console.log('Archive ID:', result.archiveId);
+console.log('Backed up:', result.credentialCount, 'credentials');
+```
+
+**What happens:**
+1. SDK triggers a WebAuthn ceremony and extracts the PRF seed from your authenticator
+2. Derives an AES-GCM-256 encryption key via HKDF
+3. Encrypts all locally-stored credentials
+4. Uploads the encrypted archive to the relayer
+
+> **Note:** If your device doesn't support PRF (the passkey extension for deterministic secrets), the SDK falls back to a credential-ID-based key. This is less secure — the account page will show a warning.
+
+### backup.recoverCredentials
+
+Recover your credentials on a new device. Requires a passkey that was previously registered for this identity.
+
+```typescript
+const recovered = await backup.recoverCredentials(keyHash);
+console.log('Recovered:', recovered.credentials.length, 'credentials');
+// Credentials are automatically saved to localStorage
+```
+
+**What happens:**
+1. Fetches the encrypted archive from the relayer
+2. Triggers a WebAuthn ceremony to extract the same PRF seed
+3. Derives the same AES-GCM key
+4. Decrypts and restores all credentials to localStorage
+
+### backup.getBackupStatus
+
+Check backup readiness for an identity.
+
+```typescript
+const status = await backup.getBackupStatus(keyHash);
+console.log('Has archive:', status.hasArchive);
+console.log('PRF supported:', status.prfSupported);
+console.log('Guardians:', status.guardianCount);
+```
+
+**Returns:** `BackupStatus`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hasArchive` | `boolean` | Whether an encrypted backup exists |
+| `archiveVersion` | `number \| null` | Archive schema version |
+| `archiveUpdatedAt` | `number \| null` | Last update timestamp (epoch ms) |
+| `guardianCount` | `number` | Number of active social recovery guardians |
+| `prfSupported` | `boolean` | Whether PRF extension is available |
+
+### WalletBackupManager.checkPlatformSupport (static)
+
+Check if the current platform supports PRF-based backup.
+
+```typescript
+const support = await WalletBackupManager.checkPlatformSupport();
+console.log('WebAuthn:', support.webauthnSupported);
+console.log('PRF:', support.prfSupported);
+
+if (!support.prfSupported) {
+  showWarning('Your device uses weaker backup encryption');
+}
+```
+
+---
+
+## InjectedWalletAdapter
+
+```typescript
+
+
+const adapter = new InjectedWalletAdapter();
+const session = await adapter.createSessionFromInjected(sessionConfig);
+```
+
+Bridges MetaMask, WalletConnect, and other injected wallets into Veridex session key management.
+
+
+================================================================================
+URL: /api-reference/react
+================================================================================
+
+# React SDK API Reference
+
+Full API for `@veridex/react` — the React bindings for the Veridex Protocol core SDK.
+
+---
+
+## `VeridexProvider`
+
+Context provider that makes the SDK available to all child components.
+
+```tsx
+
+
+  
+
+```
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `sdk` | `VeridexSDK` | SDK instance from `createSDK()` |
+| `children` | `ReactNode` | Child components |
+
+---
+
+## `useVeridexSDK`
+
+```tsx
+const sdk: VeridexSDK = useVeridexSDK();
+```
+
+Returns the SDK instance from the nearest `VeridexProvider`. Throws if used outside of a provider.
+
+---
+
+## `useNetwork`
+
+```tsx
+const { chain, network, chainId } = useNetwork();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chain` | `string` | Chain name (e.g. `'base'`) |
+| `network` | `'testnet' \| 'mainnet'` | Network environment |
+| `chainId` | `number` | Wormhole chain ID |
+
+---
+
+## `usePasskey`
+
+```tsx
+const {
+  register,
+  authenticate,
+  credential,
+  isRegistering,
+  isAuthenticating,
+  error,
+} = usePasskey();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `register` | `(username: string, displayName: string) => Promise` | Register a new passkey |
+| `authenticate` | `() => Promise` | Authenticate with an existing passkey |
+| `credential` | `Credential \| null` | Current credential |
+| `isRegistering` | `boolean` | Registration in progress |
+| `isAuthenticating` | `boolean` | Authentication in progress |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useBalance`
+
+```tsx
+const { balance, isLoading, error, refresh } = useBalance(tokenAddress?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tokenAddress` | `string?` | Token contract address (optional, defaults to native) |
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `balance` | `TokenBalance \| null` | Token balance with `formatted`, `symbol`, `decimals` |
+| `isLoading` | `boolean` | Loading state |
+| `error` | `Error \| null` | Last error |
+| `refresh` | `() => void` | Force refresh |
+
+---
+
+## `useTransfer`
+
+```tsx
+const { prepare, execute, status, receipt, error } = useTransfer();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prepare` | `(params: TransferParams) => Promise` | Prepare a transfer for review |
+| `execute` | `() => Promise` | Execute the prepared transfer |
+| `status` | `string \| null` | Current status (`'preparing'`, `'signing'`, `'confirming'`, `'complete'`) |
+| `receipt` | `TransferReceipt \| null` | Transaction receipt after completion |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useMultiChainPortfolio`
+
+```tsx
+const { portfolio, totalValueUSD, isLoading, error } = useMultiChainPortfolio(chainIds?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chainIds` | `number[]?` | Chains to query (default: all configured) |
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `portfolio` | `PortfolioEntry[]` | Balance per chain |
+| `totalValueUSD` | `number` | Aggregate USD value |
+| `isLoading` | `boolean` | Loading state |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useSpendingLimits`
+
+```tsx
+const { limits, spent, remaining, percentUsed } = useSpendingLimits();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `limits` | `SpendingLimits \| null` | Configured limits |
+| `spent` | `number` | Amount spent in current period |
+| `remaining` | `number` | Remaining allowance |
+| `percentUsed` | `number` | Utilization percentage (0-100) |
+
+---
+
+## Utility Functions
+
+### `resolveChainId`
+
+```typescript
+resolveChainId(name: string): number
+```
+
+Resolve a chain name to its Wormhole chain ID.
+
+### `resolveChainIds`
+
+```typescript
+resolveChainIds(names: string[]): number[]
+```
+
+Resolve multiple chain names.
+
+---
+
+
+  
+    Usage examples and setup guide
+  
+  
+    Patterns and best practices
 
 
 ================================================================================
@@ -16441,6 +18087,256 @@ async function runDataAgent() {
 
 runDataAgent().catch(console.error);
 ```
+
+
+================================================================================
+URL: /api-reference/agent-security
+================================================================================
+
+# Agent Security API Reference
+
+Full API for `@veridex/agent-security` — the framework-agnostic security gateway for AI agents.
+
+---
+
+## `SecurityGateway`
+
+In-process security evaluation gateway.
+
+```typescript
+
+
+const gateway = new SecurityGateway(options);
+```
+
+**Constructor options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `packs` | `SecurityPack[]` | Security packs to evaluate |
+| `defaultAction` | `'block' \| 'warn' \| 'allow'` | Default verdict when no pack matches |
+| `telemetry` | `TelemetryReporter?` | Optional telemetry sink |
+
+### `gateway.evaluate(action)`
+
+Evaluate an agent action against all registered packs.
+
+```typescript
+const result = await gateway.evaluate(action);
+```
+
+**Parameters:**
+
+```typescript
+interface SecurityAction {
+  type: 'tool_call' | 'model_response' | 'handoff' | 'output';
+  toolName?: string;
+  arguments?: Record;
+  response?: string;
+  agentId: string;
+  turnIndex?: number;
+  metadata?: Record;
+}
+```
+
+**Returns:** `SecurityEvalResult`
+
+```typescript
+interface SecurityEvalResult {
+  overall: 'allow' | 'block' | 'escalate';
+  verdicts: SecurityVerdict[];
+  metadata: Record;
+}
+```
+
+---
+
+## `SecurityClient`
+
+HTTP client for a remote SecurityGateway server.
+
+```typescript
+
+
+const client = new SecurityClient({
+  baseUrl: string,
+  authToken?: string,
+  timeoutMs?: number,
+});
+
+const result = await client.evaluate(action);
+```
+
+---
+
+## `TelemetryReporter`
+
+Batched telemetry reporting for security evaluations.
+
+```typescript
+
+
+const reporter = new TelemetryReporter({
+  endpoint: string,
+  batchSize?: number,      // default: 50
+  flushIntervalMs?: number, // default: 10_000
+});
+```
+
+---
+
+## Security Packs
+
+### `createDefaultPacks()`
+
+Returns all 12 built-in packs with default configuration.
+
+```typescript
+const packs: SecurityPack[] = createDefaultPacks();
+```
+
+### Individual Packs
+
+| Function | Returns |
+|----------|---------|
+| `injectionDetectionPack(options?)` | Pack detecting prompt/SQL/command injection |
+| `toolPoisoningPack(options?)` | Pack detecting malicious tool chains |
+| `secretDetectionPack(options?)` | Pack detecting leaked secrets |
+| `budgetCeilingPack(options?)` | Pack enforcing spend limits |
+| `shellCommandSafetyPack(options?)` | Pack blocking dangerous shell commands |
+| `endpointAllowlistPack(options?)` | Pack restricting HTTP endpoints |
+| `handoffSafetyPack(options?)` | Pack validating agent handoffs |
+| `financialSafetyPack(options?)` | Pack enforcing financial limits |
+| `crossTurnAnomalyPack(options?)` | Pack detecting behavioral anomalies |
+| `llmResponseGuardPack(options?)` | Pack filtering model responses |
+| `dataSovereigntyPack(options)` | Pack enforcing jurisdictional compliance |
+
+### `SecurityPack` Interface
+
+```typescript
+interface SecurityPack {
+  id: string;
+  name: string;
+  description: string;
+  evaluate(action: SecurityAction, context?: EvalContext): Promise;
+}
+```
+
+---
+
+## `dataSovereigntyPack` Options
+
+```typescript
+interface DataSovereigntyPackOptions {
+  defaultJurisdiction: string;
+  piiCategories: string[];
+  jurisdictionRules: JurisdictionRule[];
+  toolJurisdictions: Record;
+}
+
+interface JurisdictionRule {
+  from: string;
+  to: string;
+  verdict: 'block' | 'flag' | 'allow';
+  reason: string;
+  regulations: string[];
+}
+```
+
+---
+
+## Types
+
+### `SecurityVerdict`
+
+```typescript
+interface SecurityVerdict {
+  verdict: 'allow' | 'block' | 'escalate' | 'flag';
+  reasons: string[];
+  packId: string;
+  confidence: number; // 0.0 – 1.0
+}
+```
+
+### `SecurityCheckResult`
+
+```typescript
+interface SecurityCheckResult {
+  passed: boolean;
+  pack: string;
+  message?: string;
+}
+```
+
+### `ToolCallAction`
+
+```typescript
+interface ToolCallAction extends SecurityAction {
+  type: 'tool_call';
+  toolName: string;
+  arguments: Record;
+}
+```
+
+---
+
+## Server
+
+### `createSecurityServer`
+
+Deploy the gateway as a standalone HTTP service (Hono-based).
+
+```typescript
+
+
+const server = createSecurityServer({
+  packs: SecurityPack[],
+  port?: number,
+  authToken?: string,
+});
+
+await server.start();
+```
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/evaluate` | Evaluate a security action |
+| `GET` | `/health` | Health check |
+| `GET` | `/packs` | List registered packs |
+
+---
+
+## Framework Adapters
+
+### LangChain
+
+```typescript
+
+
+const callback = new VeridexSecurityCallback(gateway);
+```
+
+Implements LangChain's `CallbackHandler` interface.
+
+### CrewAI
+
+```typescript
+
+
+const guard = new VeridexCrewAIGuard(gateway);
+const result = await guard.evaluate(crewAction);
+```
+
+---
+
+
+  
+    Usage guide with examples
+  
+  
+    Deployment patterns and best practices
 
 
 ================================================================================
@@ -18312,6 +20208,164 @@ function BudgetBar() {
 
 ---
 
+## Response Integrity
+
+### `ResponseSeal`
+
+HMAC-based chain-of-custody seal for LLM responses. Created automatically during agent runs.
+
+```typescript
+
+
+// Create a seal (done automatically by model providers)
+const seal = createResponseSeal(rawResponseBytes, apiKeyBytes);
+
+// Verify a seal
+const isValid = verifyResponseSeal(seal, rawResponseBytes, apiKeyBytes);
+```
+
+**Seal structure:**
+
+```typescript
+interface ResponseSealData {
+  algorithm: 'HMAC-SHA256';
+  seal: string;      // hex-encoded HMAC
+  rawHash: string;   // SHA-256 of raw response bytes
+  timestamp: number; // Unix ms
+}
+```
+
+### `ResponseEnvelope`
+
+Full response envelope with chain-of-custody:
+
+```typescript
+interface ResponseEnvelope {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  provider: string;
+  output: string;
+  tokensUsed: { prompt: number; completion: number };
+  chainOfCustodySeal?: ResponseSealData;
+}
+```
+
+---
+
+## Agent Identity Types
+
+### `AgentIdentityClaims`
+
+OIDC-A (OpenID Connect for Agents) claims:
+
+```typescript
+interface AgentIdentityClaims {
+  iss: string;          // Issuer
+  sub: string;          // Agent ID
+  aud: string;          // Audience
+  iat: number;          // Issued at
+  exp: number;          // Expires
+  scope: string[];      // Permissions
+  agentName: string;
+  agentVersion: string;
+}
+```
+
+### `AgentIntegrityBinding`
+
+Binds agent identity to a specific code + config snapshot:
+
+```typescript
+interface AgentIntegrityBinding {
+  agentId: string;
+  identityClaims: AgentIdentityClaims;
+  codeHash: string;           // SHA-256 of agent code
+  configHash: string;         // SHA-256 of configuration
+  toolManifestHash: string;   // SHA-256 of registered tools
+  timestamp: number;
+}
+```
+
+---
+
+## Execution Accountability Graph
+
+```typescript
+interface ExecutionNode {
+  id: string;
+  type: 'turn' | 'tool_call' | 'model_call' | 'policy_check' | 'approval';
+  timestamp: number;
+  data: Record;
+}
+
+interface ExecutionEdge {
+  from: string;
+  to: string;
+  type: 'triggered' | 'required' | 'produced';
+}
+
+interface ExecutionGraph {
+  nodes: ExecutionNode[];
+  edges: ExecutionEdge[];
+  rootId: string;
+}
+```
+
+---
+
+## Model Providers
+
+### `OpenAIProvider`
+
+```typescript
+new OpenAIProvider({ apiKey: string, model?: string, baseURL?: string })
+```
+
+### `AnthropicProvider`
+
+```typescript
+new AnthropicProvider({ apiKey: string, model?: string })
+```
+
+### `GeminiProvider`
+
+```typescript
+new GeminiProvider({ apiKey: string, model?: string })
+```
+
+### `OpenAICompatibleProvider`
+
+```typescript
+new OpenAICompatibleProvider({ baseURL: string, apiKey?: string, model: string })
+```
+
+Subclasses: `GroqProvider`, `TogetherAIProvider`, `FireworksProvider`, `DeepSeekProvider`, `PerplexityProvider`, `MistralProvider`
+
+All providers automatically create `ResponseSeal` on every completion.
+
+---
+
+## Sovereignty Types
+
+### `SovereigntyViolationSummary`
+
+```typescript
+interface SovereigntyViolationSummary {
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  toolName: string;
+  piiCategories: string[];
+  fromJurisdiction: string;
+  toJurisdiction: string;
+  regulation: string;
+  timestamp: number;
+}
+```
+
+---
+
 
   
     Narrative walkthrough with architecture and examples
@@ -18321,6 +20375,688 @@ function BudgetBar() {
   
   
     ADRs explaining the design rationale
+
+
+================================================================================
+URL: /api-reference/agents-adapters
+================================================================================
+
+# Agents Adapters API Reference
+
+Full API for `@veridex/agents-adapters` — import, export, and bridge agents across frameworks.
+
+---
+
+## Framework Adapters
+
+All adapters implement the `FrameworkAdapter` interface:
+
+```typescript
+interface FrameworkAdapter {
+  importAgent(config: TImport): { definition: AgentDefinition; warnings: string[] };
+  exportAgent(definition: AgentDefinition): { config: TExport; warnings: string[] };
+}
+```
+
+### `OpenAIAgentsAdapter`
+
+```typescript
+
+
+const adapter = new OpenAIAgentsAdapter();
+const { definition, warnings } = adapter.importAgent(openAIConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+### `LangGraphAdapter`
+
+```typescript
+
+
+const adapter = new LangGraphAdapter();
+const { definition, warnings } = adapter.importAgent(langGraphConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+### `PydanticAIAdapter`
+
+```typescript
+
+
+const adapter = new PydanticAIAdapter();
+const { definition, warnings } = adapter.importAgent(pydanticAIConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+---
+
+## `OpenAPIImporter`
+
+Convert OpenAPI 3.x specifications into Veridex `ToolContract` objects.
+
+```typescript
+
+
+const importer = new OpenAPIImporter();
+```
+
+### `importer.importTools(spec, options)`
+
+```typescript
+const tools: ToolContract[] = importer.importTools(spec, {
+  baseUrl: string,
+  auth?: { type: 'bearer' | 'api-key'; value: string; header?: string },
+  safetyClassOverrides?: Record,
+});
+```
+
+Each path + method combination becomes a `ToolContract` with:
+- Name derived from `operationId` or path
+- Zod input schema generated from request body / query parameters
+- Safety class inferred from HTTP method (`GET` → `read`, `POST` → `write`, `DELETE` → `destructive`)
+
+---
+
+## Runtime Bridges
+
+Live bridges invoke external runtimes as Veridex tools or handoff targets.
+
+### `OpenAIRuntimeBridge`
+
+```typescript
+
+
+const bridge = new OpenAIRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey: string,
+  timeoutMs?: number,
+});
+
+const tool = bridge.asTool({ name: string, description?: string });
+const handler = bridge.asHandoffHandler();
+```
+
+### `LangGraphRuntimeBridge`
+
+```typescript
+
+
+const bridge = new LangGraphRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey?: string,
+});
+```
+
+### `PydanticAIRuntimeBridge`
+
+```typescript
+
+
+const bridge = new PydanticAIRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey?: string,
+});
+```
+
+---
+
+## Capability Binding
+
+### `AgentCapabilityBinder`
+
+```typescript
+
+
+const binder = new AgentCapabilityBinder();
+const boundTools: ToolContract[] = binder.bind(importedTools);
+```
+
+### `inferSafetyClass`
+
+```typescript
+
+
+const safetyClass: ToolSafetyClass = inferSafetyClass(toolDefinition);
+```
+
+Heuristic inference based on tool name, description, and schema analysis.
+
+---
+
+## Utilities
+
+### `jsonSchemaToZod`
+
+```typescript
+
+
+const zodSchema = jsonSchemaToZod(jsonSchemaObject);
+```
+
+Converts a JSON Schema object to a Zod schema for `ToolContract` input validation.
+
+### `createStubExecutor`
+
+```typescript
+
+
+const executor = createStubExecutor(toolName);
+```
+
+Creates a stub executor that returns a placeholder result, useful for testing imported tools.
+
+---
+
+
+  
+    Usage guide with examples
+  
+  
+    Core agent runtime
+
+
+================================================================================
+URL: /api-reference/agents-openclaw
+================================================================================
+
+# Agents OpenClaw API Reference
+
+Full API for `@veridex/agents-openclaw` — bridging the OpenClaw/Pi ecosystem into Veridex.
+
+---
+
+## Context File Parsing
+
+### `parseContextFile`
+
+```typescript
+function parseContextFile(
+  filename: string,
+  content: string,
+): ContextFile;
+```
+
+Parse a single OpenClaw context file (e.g., `AGENTS.md`, `IDENTITY.md`).
+
+### `parseWorkspaceContextFiles`
+
+```typescript
+function parseWorkspaceContextFiles(
+  files: Record,
+): ContextFile[];
+```
+
+Parse all context files from a workspace directory.
+
+### `compileContextSections`
+
+```typescript
+function compileContextSections(
+  contextFiles: ContextFile[],
+): Record;
+```
+
+Compile parsed context files into text blocks keyed by type.
+
+---
+
+## Skill Import
+
+### `parseSkillDocument`
+
+```typescript
+function parseSkillDocument(
+  path: string,
+  content: string,
+): SkillDocument;
+```
+
+Parse a `SKILL.md` file with YAML frontmatter into a structured document.
+
+### `importSkillDocument`
+
+```typescript
+function importSkillDocument(
+  doc: SkillDocument,
+): { tool: ToolContract; warnings: string[] };
+```
+
+Convert a parsed skill document into a Veridex `ToolContract`.
+
+### `importSkill`
+
+```typescript
+function importSkill(
+  path: string,
+  content: string,
+): { tool: ToolContract; warnings: string[] };
+```
+
+Convenience function: parse + import in one step.
+
+### `importSkillManifest`
+
+```typescript
+function importSkillManifest(
+  manifest: SkillManifest,
+): { tools: ToolContract[]; warnings: string[] };
+```
+
+Import all skills in a manifest.
+
+### `inferSafetyClassFromSkill`
+
+```typescript
+function inferSafetyClassFromSkill(
+  doc: SkillDocument,
+): ToolSafetyClass;
+```
+
+Infer Veridex safety class from skill metadata (name, description, tags).
+
+---
+
+## ACP Agent Cards
+
+### `toACPAgentCard`
+
+```typescript
+function toACPAgentCard(
+  definition: AgentDefinition,
+): ACPAgentCard;
+```
+
+Export a Veridex agent definition as an ACP-compatible agent card.
+
+### `fromACPCapabilities`
+
+```typescript
+function fromACPCapabilities(
+  capabilities: ACPCapability[],
+): ToolContract[];
+```
+
+Import ACP capabilities as Veridex tool contracts.
+
+### `createRemoteAgentTool`
+
+```typescript
+function createRemoteAgentTool(options: {
+  name: string;
+  description: string;
+  endpoint: string;
+  auth?: { type: 'bearer'; token: string };
+  timeoutMs?: number;
+}): ToolContract;
+```
+
+Create a tool that calls a remote ACP agent.
+
+---
+
+## Session Translation
+
+### `translateEvent`
+
+```typescript
+function translateEvent(
+  event: OpenClawEvent,
+): { event: TraceEvent; warnings: string[] };
+```
+
+Translate a single OpenClaw event into a Veridex trace event.
+
+### `translateSession`
+
+```typescript
+function translateSession(
+  session: OpenClawSession,
+): { events: TraceEvent[]; warnings: string[] };
+```
+
+Translate a full OpenClaw session into Veridex trace events.
+
+### `translateSessions`
+
+```typescript
+function translateSessions(
+  sessions: OpenClawSession[],
+): { events: TraceEvent[]; warnings: string[] }[];
+```
+
+Batch translate multiple sessions.
+
+---
+
+## Compatibility Audit
+
+### `buildCompatibilityAuditReport`
+
+```typescript
+function buildCompatibilityAuditReport(
+  contextFiles: ContextFile[],
+  skills: SkillDocument[],
+): CompatibilityReport;
+
+interface CompatibilityReport {
+  compatible: number;
+  warnings: CompatibilityWarning[];
+  unsupported: UnsupportedFeature[];
+  summary: string;
+}
+```
+
+---
+
+
+  
+    Usage guide with examples
+  
+  
+    Migration tutorial
+
+
+================================================================================
+URL: /api-reference/agents-control-plane
+================================================================================
+
+# Agents Control Plane API Reference
+
+Full API for `@veridex/agents-control-plane` — multi-tenant agent governance.
+
+---
+
+## Service & Client
+
+### `ControlPlaneService`
+
+In-process control plane for embedded use.
+
+```typescript
+
+
+const service = new ControlPlaneService({
+  policyPackManager: PolicyPackManager,
+  traceStore: TraceStore,
+  approvalEngine?: ApprovalWorkflowEngine,
+  tenantManager?: TenantManager,
+});
+```
+
+### `ControlPlaneClient`
+
+Local client that talks to a `ControlPlaneService` directly.
+
+```typescript
+
+
+const client = new ControlPlaneClient(service);
+```
+
+### `RemoteControlPlaneClient`
+
+HTTP client for a deployed control plane server.
+
+```typescript
+
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: string,
+  token: string,
+  tenantId?: string,
+  timeoutMs?: number,
+});
+```
+
+---
+
+## Server
+
+### `createControlPlaneApp`
+
+Create a Hono app without starting the server.
+
+```typescript
+
+
+const app = createControlPlaneApp(options);
+```
+
+### `startControlPlaneServer`
+
+Start a full HTTP server.
+
+```typescript
+
+
+const server = await startControlPlaneServer({
+  port?: number,                    // default: 4500
+  storageBackend: 'memory' | 'file' | 'postgres',
+  postgres?: { connectionString: string },
+  fileStorage?: { directory: string },
+  authRequired?: boolean,
+  bootstrapTokens?: { token: string; role: string }[],
+  traceRetentionDays?: number,
+});
+```
+
+---
+
+## `PolicyPackManager`
+
+```typescript
+
+
+const manager = new PolicyPackManager();
+
+manager.create(pack: PolicyPackDefinition): PolicyPack;
+manager.registerSystemPack(pack: PolicyPackDefinition): void;
+manager.get(name: string): PolicyPack | undefined;
+manager.list(): PolicyPack[];
+manager.update(name: string, updates: Partial): PolicyPack;
+manager.delete(name: string): boolean;
+```
+
+**PolicyPackDefinition:**
+
+```typescript
+interface PolicyPackDefinition {
+  name: string;
+  description: string;
+  version: string;
+  rules: PolicyRule[];
+  tags?: string[];
+}
+
+interface PolicyRule {
+  type: string;
+  params: Record;
+  enabled: boolean;
+}
+```
+
+---
+
+## `ApprovalWorkflowEngine`
+
+```typescript
+
+
+const engine = new ApprovalWorkflowEngine();
+
+engine.registerWorkflow(workflow: WorkflowDefinition): void;
+engine.startApproval(
+  workflowId: string,
+  runId: string,
+  agentId: string,
+  description: string,
+  riskScore: number,
+): ApprovalProcess;
+engine.vote(approvalId: string, voter: string, approved: boolean, reason?: string): void;
+engine.processTimeouts(): ApprovalProcess[];
+engine.getApproval(approvalId: string): ApprovalProcess | undefined;
+```
+
+**WorkflowDefinition:**
+
+```typescript
+interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  escalationChain: EscalationStep[];
+  defaultMode: 'block' | 'allow';
+}
+
+interface EscalationStep {
+  name: string;
+  approvers: string[];
+  timeoutSeconds: number;
+  minApprovals: number;
+}
+```
+
+---
+
+## `TraceStore`
+
+```typescript
+
+
+const store = new TraceStore(backend);
+
+await store.ingest(trace: TraceInput): Promise;
+await store.query(filter: TraceFilter): Promise;
+await store.get(traceId: string): Promise;
+await store.verify(traceId: string): Promise;
+await store.delete(traceId: string): Promise;
+```
+
+**Backends:**
+
+| Backend | Import | Use Case |
+|---------|--------|----------|
+| `InMemoryTraceStore` | `@veridex/agents-control-plane` | Development, testing |
+| `FileTraceStoreBackend` | `@veridex/agents-control-plane` | Single-node production |
+| `PostgresTraceStoreBackend` | `@veridex/agents-control-plane` | Multi-node production |
+
+---
+
+## `TenantManager`
+
+```typescript
+
+
+const tenants = new TenantManager();
+
+tenants.create(config: TenantConfig): Tenant;
+tenants.get(tenantId: string): Tenant | undefined;
+tenants.list(): Tenant[];
+tenants.update(tenantId: string, updates: Partial): Tenant;
+tenants.delete(tenantId: string): boolean;
+```
+
+**TenantConfig:**
+
+```typescript
+interface TenantConfig {
+  name: string;
+  config: {
+    maxConcurrentRuns: number;
+    dailySpendLimitUSD: number;
+    allowedProviders: string[];
+    auditEnabled: boolean;
+    traceRetentionDays: number;
+    deploymentMode: 'managed' | 'self-hosted';
+  };
+}
+```
+
+---
+
+## Metadata Stores
+
+### `JSONFileMetadataStore`
+
+```typescript
+
+
+const store = new JSONFileMetadataStore({ directory: './metadata' });
+```
+
+### `PostgresMetadataStore`
+
+```typescript
+
+
+const store = new PostgresMetadataStore({ connectionString: process.env.DATABASE_URL });
+```
+
+---
+
+## Audit Export
+
+### `exportTraces`
+
+```typescript
+
+
+const result = await exportTraces(traces, format, options?);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `traces` | `TraceRecord[]` | Traces to export |
+| `format` | `'json' \| 'jsonl' \| 'csv'` | Export format |
+| `options.includeMetadata` | `boolean?` | Include metadata fields |
+| `options.startTime` | `number?` | Filter by start time |
+
+**Returns:** `{ data: string; contentHash: string }`
+
+### `generateEvidenceBundle`
+
+```typescript
+
+
+const bundle = await generateEvidenceBundle(traceId, policyDecisions, approvalDecisions);
+// bundle.contentHash — SHA-256 combined hash for tamper detection
+```
+
+---
+
+## Workforce OS Types
+
+```typescript
+interface AgentManifest {
+  agentId: string;
+  name: string;
+  version: string;
+  capabilities: string[];
+  dependencies: string[];
+  resources: { cpu: string; memory: string };
+}
+
+interface Workspace { id: string; name: string; tenantId: string; agentIds: string[]; }
+interface Task { id: string; description: string; assignee?: string; status: string; priority: number; }
+interface Deployment { id: string; agentId: string; environment: string; version: string; replicas: number; }
+interface Incident { id: string; agentId: string; severity: string; description: string; status: string; timeline: IncidentEvent[]; }
+interface EvalSuite { id: string; name: string; tests: EvalTest[]; }
+interface PolicyBinding { id: string; packName: string; target: string; scope: 'tenant' | 'workspace' | 'agent'; }
+interface Assignment { id: string; agentId: string; taskId: string; priority: number; constraints: Record; }
+interface MaintenanceJob { id: string; type: string; schedule: string; target: string; }
+```
+
+---
+
+
+  
+    Usage guide with examples
+  
+  
+    Deployment walkthrough
 
 
 ================================================================================
@@ -18974,6 +21710,145 @@ Revoke a cross-origin session token.
   "revoked": true
 }
 ```
+
+---
+
+## Recovery
+
+Encrypted credential backup and recovery endpoints. Archives are encrypted client-side with a PRF-derived key — the relayer cannot read them.
+
+### POST /api/v1/recovery/archive
+
+Store or update an encrypted recovery archive for a key hash.
+
+**Request Body:**
+
+```json
+{
+  "keyHash": "0x1234...",
+  "ciphertext": "base64-encoded-encrypted-data",
+  "iv": "base64-encoded-initialization-vector",
+  "version": 1
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyHash` | string | Yes | Owner's key hash (0x-prefixed hex) |
+| `ciphertext` | string | Yes | AES-GCM encrypted credential data (base64) |
+| `iv` | string | Yes | AES-GCM initialization vector (base64) |
+| `version` | number | No | Archive schema version (default: 1) |
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "updatedAt": 1691234567890
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format, missing ciphertext or iv |
+| 404 | Credential not found (user must register a passkey first) |
+
+---
+
+### GET /api/v1/recovery/archive/:keyHash
+
+Retrieve an encrypted recovery archive. Public endpoint — the data is encrypted and only meaningful to the key holder.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `keyHash` | string | Owner's key hash (0x-prefixed hex) |
+
+**Response (archive exists):**
+
+```json
+{
+  "exists": true,
+  "ciphertext": "base64-encoded-encrypted-data",
+  "iv": "base64-encoded-initialization-vector",
+  "version": 1,
+  "updatedAt": 1691234567890
+}
+```
+
+**Response (no archive):**
+
+```json
+{
+  "exists": false
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
+
+---
+
+### DELETE /api/v1/recovery/archive/:keyHash
+
+Delete a recovery archive. Requires ownership proof (valid session for this keyHash).
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
+| 404 | Archive not found |
+
+---
+
+### GET /api/v1/recovery/status/:keyHash
+
+Check recovery readiness for a given identity. Returns whether a backup exists, its version, and guardian count.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `keyHash` | string | Owner's key hash (0x-prefixed hex) |
+
+**Response (200):**
+
+```json
+{
+  "hasArchive": true,
+  "archiveVersion": 1,
+  "archiveUpdatedAt": 1691234567890,
+  "guardianCount": 2
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hasArchive` | boolean | Whether an encrypted archive exists |
+| `archiveVersion` | number \| null | Archive schema version (null if no archive) |
+| `archiveUpdatedAt` | number \| null | Last update timestamp in ms (null if no archive) |
+| `guardianCount` | number | Number of active recovery guardians |
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
 
 ---
 
@@ -19693,22 +22568,142 @@ enum VeridexErrorCode {
 
 ### CrossOriginAuthConfig
 
+Passed to `createCrossOriginAuth()`.
+
 ```typescript
 interface CrossOriginAuthConfig {
-  authPortalUrl: string;
-  relayerUrl: string;
-  appName: string;
-  appIcon?: string;
+  /** The Veridex RP ID (defaults to veridex.network) */
+  rpId?: string;
+  /** Auth portal URL for popup/redirect flow */
+  authPortalUrl?: string;
+  /** Relayer API URL for server-side session tokens */
+  relayerUrl?: string;
+  /** Authentication mode: popup or redirect */
+  mode?: 'popup' | 'redirect';
+  /** Popup window features (CSS string) */
+  popupFeatures?: string;
+  /** Timeout for auth operations in ms */
+  timeout?: number;
+  /** Callback URL for redirect mode */
+  redirectUri?: string;
 }
 ```
 
 ### CrossOriginSession
 
+Returned by `auth.authenticate()`, `auth.connectWithVeridex()`, and `auth.authenticateAndCreateSession()`.
+
 ```typescript
 interface CrossOriginSession {
-  credential: PasskeyCredential;
-  vaultAddress: string;
+  /** User's vault address */
+  address: string;
+  /** Session key public key */
+  sessionPublicKey: string;
+  /** Session key (encrypted, stored on client) */
+  encryptedSessionKey?: string;
+  /** When the session expires */
   expiresAt: number;
+  /** Proof of passkey ownership */
+  signature: WebAuthnSignature;
+  /** The credential used */
+  credential: PasskeyCredential;
+  /** Server-validated session token ID (from relayer) */
+  serverSessionId?: string;
+  /** Relayer-issued challenge binding for server session creation */
+  serverChallengeId?: string;
+}
+```
+
+### ServerSessionToken
+
+Returned by `auth.createServerSession()` and `auth.authenticateAndCreateSession()`.
+
+```typescript
+interface ServerSessionToken {
+  id: string;
+  keyHash: string;
+  appOrigin: string;
+  permissions: string[];
+  expiresAt: number;
+  createdAt: number;
+}
+```
+
+### AuthPortalMessage
+
+Message format exchanged between the SDK and the auth portal popup.
+
+```typescript
+interface AuthPortalMessage {
+  type: 'VERIDEX_AUTH_REQUEST' | 'VERIDEX_AUTH_RESPONSE' | 'VERIDEX_AUTH_ERROR';
+  payload: CrossOriginSession | { error: string; code: string };
+  origin: string;
+  state?: string;
+}
+```
+
+### AUTH_MESSAGE_TYPES
+
+```typescript
+const AUTH_MESSAGE_TYPES = {
+  AUTH_REQUEST: 'VERIDEX_AUTH_REQUEST',
+  AUTH_RESPONSE: 'VERIDEX_AUTH_RESPONSE',
+  AUTH_ERROR: 'VERIDEX_AUTH_ERROR',
+} as const;
+```
+
+---
+
+## Wallet Backup & Recovery
+
+### WalletBackupConfig
+
+Passed to the `WalletBackupManager` constructor.
+
+```typescript
+interface WalletBackupConfig {
+  /** PasskeyManager instance (must be configured with rpId and relayerUrl) */
+  passkey: PasskeyManager;
+  /** Relayer API URL */
+  relayerUrl: string;
+  /** API key for relayer authentication */
+  apiKey?: string;
+}
+```
+
+### BackupStatus
+
+Returned by `backup.getBackupStatus()`.
+
+```typescript
+interface BackupStatus {
+  /** Whether an encrypted archive exists on the relayer */
+  hasArchive: boolean;
+  /** Archive schema version */
+  archiveVersion: number | null;
+  /** When the archive was last updated (epoch ms) */
+  archiveUpdatedAt: number | null;
+  /** Number of active guardians (from relayer) */
+  guardianCount: number;
+  /** Whether PRF is supported (true = strong backup, false = rawId fallback) */
+  prfSupported: boolean;
+}
+```
+
+### WalletArchivePayload
+
+Internal structure of an encrypted backup archive.
+
+```typescript
+interface WalletArchivePayload {
+  /** All stored credentials */
+  credentials: SerializedCredential[];
+  /** Backup metadata */
+  meta: {
+    version: number;
+    createdAt: number;
+    deviceInfo?: string;
+  };
 }
 ```
 
@@ -19747,6 +22742,13 @@ interface CrossOriginSession {
 
   // Identity
   type UnifiedIdentity, type VaultInfo,
+
+  // Cross-Origin Auth
+  type CrossOriginAuthConfig, type CrossOriginSession,
+  type ServerSessionToken, type AuthPortalMessage,
+
+  // Wallet Backup & Recovery
+  type WalletBackupConfig, type BackupStatus, type WalletArchivePayload,
 
   // Enterprise
   type EnterpriseManagerConfig, type BatchVaultRequest, type BatchVaultResult,
@@ -20081,6 +23083,276 @@ The Agent SDK (`@veridex/agentic-payments`) has its own error class:
 | `CHAIN_NOT_SUPPORTED` | Chain ID not in `allowedChains` | No |
 | `TOKEN_NOT_SUPPORTED` | Token not available on target chain | No |
 | `NETWORK_ERROR` | Network or RPC failure | Yes |
+
+
+================================================================================
+URL: /api-reference/agents-react
+================================================================================
+
+# Agents React API Reference
+
+Full API for `@veridex/agents-react` — React hooks for agent runtimes and fleet operations.
+
+---
+
+## Providers
+
+### `AgentProvider`
+
+```tsx
+
+
+  {children}
+
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `runtime` | `AgentRuntime` | Agent instance from `createAgent()` |
+
+### `ControlPlaneProvider`
+
+```tsx
+
+
+  {children}
+
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `client` | `ControlPlaneClient \| RemoteControlPlaneClient` | Control plane client |
+
+---
+
+## Context Hooks
+
+### `useAgentContext`
+
+```tsx
+const context = useAgentContext();
+```
+
+Returns the raw agent context. Prefer specific hooks below.
+
+### `useControlPlaneContext`
+
+```tsx
+const context = useControlPlaneContext();
+```
+
+Returns the raw control plane context.
+
+---
+
+## Agent Hooks
+
+### `useAgent`
+
+```tsx
+const { definition, state } = useAgent();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `definition` | `AgentDefinition` | Agent name, description, tools, instructions |
+| `state` | `AgentState` | Current runtime state |
+
+### `useRun`
+
+```tsx
+const { run, result, state, isLoading, error } = useRun();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `run` | `(input: string) => Promise` | Start a new run |
+| `result` | `RunResult \| null` | Latest run result |
+| `state` | `RunState` | `'idle' \| 'running' \| 'suspended' \| 'completed' \| 'failed'` |
+| `isLoading` | `boolean` | True while a run is active |
+| `error` | `Error \| null` | Last error |
+
+### `useTurnStream`
+
+```tsx
+const { stream, cancel } = useTurnStream();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stream` | `AsyncIterable` | Async iterable of turn events |
+| `cancel` | `() => void` | Cancel the stream |
+
+### `useApprovals`
+
+```tsx
+const { pending, resolve } = useApprovals();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pending` | `ApprovalRequest[]` | Pending approval requests |
+| `resolve` | `(id: string, approved: boolean) => void` | Approve or deny |
+
+### `useTrace`
+
+```tsx
+const { events, latest } = useTrace();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `events` | `TraceEvent[]` | All trace events for the current run |
+| `latest` | `TraceEvent \| null` | Most recent event |
+
+### `useToolRegistry`
+
+```tsx
+const { tools, register, remove } = useToolRegistry();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tools` | `ToolContract[]` | Registered tools |
+| `register` | `(tool: ToolContract) => void` | Add a tool |
+| `remove` | `(name: string) => void` | Remove a tool |
+
+### `useMemory`
+
+```tsx
+const { entries, write, search, clear } = useMemory();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entries` | `MemoryEntry[]` | All memory entries |
+| `write` | `(entry: WriteParams) => Promise` | Write a memory entry |
+| `search` | `(params: SearchParams) => Promise` | Semantic search |
+| `clear` | `(tier?: string) => Promise` | Clear entries by tier |
+
+### `useBudget`
+
+```tsx
+const { snapshot, estimateSpend } = useBudget();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `snapshot` | `BudgetSnapshot` | `{ spent, budget, percentUtilized }` |
+| `estimateSpend` | `(model: string, tokens: number) => number` | Estimate cost |
+
+### `useContextPlan`
+
+```tsx
+const { plan, recompile } = useContextPlan();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `plan` | `ContextPlan` | Compiled context sections with token counts |
+| `recompile` | `() => void` | Re-trigger context compilation |
+
+### `usePayments`
+
+```tsx
+const { balance, send, history } = usePayments();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `balance` | `TokenBalance[]` | Current balances |
+| `send` | `(params: TransferParams) => Promise` | Send tokens |
+| `history` | `PaymentRecord[]` | Transaction history |
+
+### `useAgentIdentity`
+
+```tsx
+const { identity, isVerified } = useAgentIdentity();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `identity` | `AgentIdentity \| null` | ERC-8004 on-chain identity |
+| `isVerified` | `boolean` | Whether identity is registered and valid |
+
+### `useAgentReputation`
+
+```tsx
+const { score, history } = useAgentReputation();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `score` | `number` | Aggregate reputation score |
+| `history` | `FeedbackEntry[]` | Historical feedback entries |
+
+### `useOpenClawBridge`
+
+```tsx
+const { importSkills, translateSession } = useOpenClawBridge();
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `importSkills` | `(manifest: SkillManifest) => Promise` | Import OpenClaw skills |
+| `translateSession` | `(session: OpenClawSession) => TranslationResult` | Translate a session |
+
+---
+
+## Operator Hooks
+
+Require `ControlPlaneProvider` in the component tree.
+
+### `useFleetStatus`
+
+```tsx
+const { agents, activeRuns, healthSummary } = useFleetStatus();
+```
+
+### `useOperatorTasks`
+
+```tsx
+const { tasks, assign, complete, cancel } = useOperatorTasks();
+```
+
+### `useDeployments`
+
+```tsx
+const { deployments, deploy, rollback, scale } = useDeployments();
+```
+
+### `useIncidents`
+
+```tsx
+const { incidents, acknowledge, resolve, escalate } = useIncidents();
+```
+
+### `useWorkspaceResources`
+
+```tsx
+const { workspaces, create, archive } = useWorkspaceResources();
+```
+
+### `useEvals`
+
+```tsx
+const { suites, run, results } = useEvals();
+```
+
+### `usePolicyBindings`
+
+```tsx
+const { bindings, bind, unbind, update } = usePolicyBindings();
+```
+
+---
+
+
+  
+    Usage guide with examples
+  
+  
+    Core wallet/passkey hooks
 
 
 ================================================================================

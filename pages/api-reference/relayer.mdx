@@ -653,6 +653,145 @@ Revoke a cross-origin session token.
 
 ---
 
+## Recovery
+
+Encrypted credential backup and recovery endpoints. Archives are encrypted client-side with a PRF-derived key — the relayer cannot read them.
+
+### POST /api/v1/recovery/archive
+
+Store or update an encrypted recovery archive for a key hash.
+
+**Request Body:**
+
+```json
+{
+  "keyHash": "0x1234...",
+  "ciphertext": "base64-encoded-encrypted-data",
+  "iv": "base64-encoded-initialization-vector",
+  "version": 1
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyHash` | string | Yes | Owner's key hash (0x-prefixed hex) |
+| `ciphertext` | string | Yes | AES-GCM encrypted credential data (base64) |
+| `iv` | string | Yes | AES-GCM initialization vector (base64) |
+| `version` | number | No | Archive schema version (default: 1) |
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "updatedAt": 1691234567890
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format, missing ciphertext or iv |
+| 404 | Credential not found (user must register a passkey first) |
+
+---
+
+### GET /api/v1/recovery/archive/:keyHash
+
+Retrieve an encrypted recovery archive. Public endpoint — the data is encrypted and only meaningful to the key holder.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `keyHash` | string | Owner's key hash (0x-prefixed hex) |
+
+**Response (archive exists):**
+
+```json
+{
+  "exists": true,
+  "ciphertext": "base64-encoded-encrypted-data",
+  "iv": "base64-encoded-initialization-vector",
+  "version": 1,
+  "updatedAt": 1691234567890
+}
+```
+
+**Response (no archive):**
+
+```json
+{
+  "exists": false
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
+
+---
+
+### DELETE /api/v1/recovery/archive/:keyHash
+
+Delete a recovery archive. Requires ownership proof (valid session for this keyHash).
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
+| 404 | Archive not found |
+
+---
+
+### GET /api/v1/recovery/status/:keyHash
+
+Check recovery readiness for a given identity. Returns whether a backup exists, its version, and guardian count.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `keyHash` | string | Owner's key hash (0x-prefixed hex) |
+
+**Response (200):**
+
+```json
+{
+  "hasArchive": true,
+  "archiveVersion": 1,
+  "archiveUpdatedAt": 1691234567890,
+  "guardianCount": 2
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hasArchive` | boolean | Whether an encrypted archive exists |
+| `archiveVersion` | number \| null | Archive schema version (null if no archive) |
+| `archiveUpdatedAt` | number \| null | Last update timestamp in ms (null if no archive) |
+| `guardianCount` | number | Number of active recovery guardians |
+
+**Error Responses:**
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid keyHash format |
+
+---
+
 ## Error Codes
 
 | Code | HTTP Status | Description |

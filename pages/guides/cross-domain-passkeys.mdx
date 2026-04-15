@@ -105,11 +105,15 @@ async function signIn() {
 
 After authentication, create a **server-validated session token** via the relayer. This gives you a token that your backend can verify independently.
 
+The SDK handles the entire session flow in a **single popup** — no double-prompt.
+
 ```typescript
 const auth = createCrossOriginAuth();
 
 async function signInWithServerSession() {
   // Full flow: authenticate + create server-validated session
+  // If ROR is available: native passkey dialog (no popup at all)
+  // If ROR is unavailable: single popup handles auth + session creation
   const { session, serverSession } = await auth.authenticateAndCreateSession({
     permissions: ['read', 'transfer'],
     expiresInMs: 3600000, // 1 hour
@@ -122,6 +126,11 @@ async function signInWithServerSession() {
   // Store the session ID for subsequent API calls
   localStorage.setItem('veridex_session_id', serverSession.id);
 }
+```
+
+<Callout type="tip">
+  **Single-popup flow:** When using `authenticateAndCreateSession()`, the auth portal handles session challenge creation internally. The user sees only one popup with one biometric prompt — not two separate ones.
+</Callout>
 ```
 
 You can validate this session from your backend at any time:
@@ -237,12 +246,15 @@ Server session tokens let your backend verify a user's identity without trusting
 
 ### Create a Session
 
+The easiest way is `authenticateAndCreateSession()` (shown above). If you need manual control:
+
 ```typescript
-const serverSession = await auth.createServerSession(session, {
-  permissions: ['read', 'transfer'],
-  expiresInMs: 3600000, // 1 hour
-});
-// serverSession.id = "ses_abc123..."
+// 1. Authenticate first
+const session = await auth.connectWithVeridex();
+
+// 2. Create a server-validated token
+const serverSession = await auth.createServerSession(session);
+console.log('Session ID:', serverSession.id);
 ```
 
 ### Validate a Session (from your backend)

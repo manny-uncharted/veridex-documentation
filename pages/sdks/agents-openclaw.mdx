@@ -1,0 +1,166 @@
+---
+title: Agents OpenClaw
+description: "@veridex/agents-openclaw — bridge the OpenClaw/Pi ecosystem into Veridex agents"
+---
+
+import { Callout } from '../../components/Callout'
+
+# Agents OpenClaw (`@veridex/agents-openclaw`)
+
+Bridge the OpenClaw / Pi agent ecosystem into Veridex — parse context files, import skills as tools, translate sessions, and interoperate via ACP agent cards.
+
+## Installation
+
+```bash
+npm install @veridex/agents-openclaw @veridex/agents
+```
+
+## Context File Parsing
+
+OpenClaw workspaces use markdown files to configure agents. The bridge parses these into structured context sections.
+
+### Supported Files
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | Agent definitions and roles |
+| `BOOTSTRAP.md` | Initialization instructions |
+| `HEARTBEAT.md` | Health check and status |
+| `IDENTITY.md` | Agent identity configuration |
+| `MEMORY.md` | Memory and context management |
+| `SOUL.md` | Personality and behavioral traits |
+
+### Parse Workspace Files
+
+```typescript
+import { parseWorkspaceContextFiles, compileContextSections } from '@veridex/agents-openclaw';
+import fs from 'fs';
+
+const files = {
+  'AGENTS.md': fs.readFileSync('workspace/AGENTS.md', 'utf8'),
+  'IDENTITY.md': fs.readFileSync('workspace/IDENTITY.md', 'utf8'),
+  'TOOLS.md': fs.readFileSync('workspace/TOOLS.md', 'utf8'),
+};
+
+const contextFiles = parseWorkspaceContextFiles(files);
+const compiled = compileContextSections(contextFiles);
+// compiled['AGENTS'] → text block for agent definitions
+// compiled['IDENTITY'] → text block for identity config
+```
+
+### Parse Single File
+
+```typescript
+import { parseContextFile } from '@veridex/agents-openclaw';
+
+const result = parseContextFile('AGENTS.md', content);
+// result.type → 'AGENTS'
+// result.sections → parsed markdown sections
+```
+
+## Skill Import
+
+OpenClaw skills are defined in `SKILL.md` documents with YAML frontmatter. The bridge converts them into Veridex `ToolContract` objects.
+
+### Import a Single Skill
+
+```typescript
+import { parseSkillDocument, importSkillDocument } from '@veridex/agents-openclaw';
+
+const doc = parseSkillDocument('web-search/SKILL.md', skillContent);
+const { tool, warnings } = importSkillDocument(doc);
+
+// tool is a Veridex ToolContract ready to register
+agent.tools.register(tool);
+```
+
+### Import a Skill Manifest
+
+```typescript
+import { importSkillManifest } from '@veridex/agents-openclaw';
+
+const { tools, warnings } = importSkillManifest(manifest);
+tools.forEach((t) => agent.tools.register(t));
+```
+
+### Safety Class Inference
+
+```typescript
+import { inferSafetyClassFromSkill } from '@veridex/agents-openclaw';
+
+const safetyClass = inferSafetyClassFromSkill(skillDoc);
+// → 'read' | 'write' | 'financial' | 'destructive' | 'privileged'
+```
+
+## ACP Agent Cards
+
+Export Veridex agents as ACP-compatible agent cards, import remote capabilities, and create tools that call remote ACP agents.
+
+### Export Agent Card
+
+```typescript
+import { toACPAgentCard } from '@veridex/agents-openclaw';
+
+const card = toACPAgentCard(agent.definition);
+// card.name, card.description, card.capabilities
+```
+
+### Import Remote Capabilities
+
+```typescript
+import { fromACPCapabilities } from '@veridex/agents-openclaw';
+
+const remoteTools = fromACPCapabilities(remoteCard.capabilities);
+remoteTools.forEach((t) => agent.tools.register(t));
+```
+
+### Create Remote Agent Tool
+
+```typescript
+import { createRemoteAgentTool } from '@veridex/agents-openclaw';
+
+const remoteTool = createRemoteAgentTool({
+  name: 'research-agent',
+  description: 'Performs deep research',
+  endpoint: 'https://agents.example.com/research',
+  auth: { type: 'bearer', token: process.env.RESEARCH_TOKEN },
+  timeoutMs: 30_000,
+});
+
+agent.tools.register(remoteTool);
+```
+
+## Session Translation
+
+Migrate from OpenClaw to Veridex by translating session histories into Veridex trace events.
+
+```typescript
+import { translateSession, translateSessions } from '@veridex/agents-openclaw';
+
+// Translate a single session
+const result = translateSession(openClawSession);
+// result.events → Veridex trace events
+// result.warnings → any translation issues
+
+// Batch translate
+const results = translateSessions(openClawSessions);
+```
+
+## Compatibility Audit
+
+Generate a report of how well an OpenClaw workspace maps to Veridex:
+
+```typescript
+import { buildCompatibilityAuditReport } from '@veridex/agents-openclaw';
+
+const report = buildCompatibilityAuditReport(contextFiles, skills);
+// report.compatible → number of fully compatible items
+// report.warnings → items with partial compatibility
+// report.unsupported → items that can't be translated
+```
+
+## Related
+
+- [Guide: OpenClaw Bridge](/guides/veridex-agents#openclaw-bridge) — Step-by-step migration tutorial
+- [Agents Framework](/sdks/agents-framework) — Core agent runtime
+- [API Reference](/api-reference/agents-openclaw) — Full type signatures

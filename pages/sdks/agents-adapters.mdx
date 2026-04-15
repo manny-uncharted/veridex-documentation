@@ -1,0 +1,171 @@
+---
+title: Agents Adapters
+description: "@veridex/agents-adapters — import, export, and bridge agents from OpenAI, LangGraph, PydanticAI"
+---
+
+import { Callout } from '../../components/Callout'
+
+# Agents Adapters (`@veridex/agents-adapters`)
+
+Import agents from other frameworks (OpenAI Agents SDK, LangGraph, PydanticAI), export Veridex agents to external formats, convert OpenAPI specs to tools, and bridge live external agent runtimes.
+
+## Installation
+
+```bash
+npm install @veridex/agents-adapters @veridex/agents
+```
+
+## Framework Adapters
+
+### OpenAI Agents SDK
+
+```typescript
+import { OpenAIAgentsAdapter } from '@veridex/agents-adapters';
+
+const adapter = new OpenAIAgentsAdapter();
+
+// Import from OpenAI format → Veridex AgentDefinition
+const { definition, warnings } = adapter.importAgent({
+  name: 'Billing Agent',
+  instructions: 'Help with billing questions.',
+  model: 'gpt-4o',
+  tools: [
+    {
+      type: 'function',
+      function: {
+        name: 'lookup_account',
+        description: 'Look up customer account',
+        parameters: {
+          type: 'object',
+          properties: { accountId: { type: 'string' } },
+          required: ['accountId'],
+        },
+      },
+    },
+  ],
+});
+
+// Export back to OpenAI format
+const { config } = adapter.exportAgent(definition);
+```
+
+### LangGraph
+
+```typescript
+import { LangGraphAdapter } from '@veridex/agents-adapters';
+
+const adapter = new LangGraphAdapter();
+const { definition, warnings } = adapter.importAgent(langGraphConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+### PydanticAI
+
+```typescript
+import { PydanticAIAdapter } from '@veridex/agents-adapters';
+
+const adapter = new PydanticAIAdapter();
+const { definition, warnings } = adapter.importAgent(pydanticAIConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+<Callout type="warning">
+  Import warnings indicate features that didn't map cleanly. Always check `warnings` after import.
+</Callout>
+
+## OpenAPI Tool Import
+
+Convert any OpenAPI 3.x specification into Veridex `ToolContract` objects:
+
+```typescript
+import { OpenAPIImporter } from '@veridex/agents-adapters';
+
+const importer = new OpenAPIImporter();
+const tools = importer.importTools(openAPISpec, {
+  baseUrl: 'https://api.example.com',
+  auth: { type: 'bearer', value: process.env.API_TOKEN },
+});
+
+// Each path+method becomes a validated ToolContract with Zod schema
+tools.forEach((t) => agent.tools.register(t));
+```
+
+## Runtime Bridges
+
+Invoke external agent runtimes live — wrap them as Veridex tools or handoff targets.
+
+### OpenAI Runtime Bridge
+
+```typescript
+import { OpenAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new OpenAIRuntimeBridge({
+  name: 'billing-assistant',
+  endpoint: 'https://api.openai.com/v1/agents/asst_xxx',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Use as a tool in your Veridex agent
+const billingTool = bridge.asTool({ name: 'ask_billing_agent' });
+agent.tools.register(billingTool);
+
+// Or use as a handoff target
+const handoff = bridge.asHandoffHandler();
+```
+
+### LangGraph Runtime Bridge
+
+```typescript
+import { LangGraphRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new LangGraphRuntimeBridge({
+  name: 'research-agent',
+  endpoint: 'https://langgraph.example.com/graphs/research',
+  apiKey: process.env.LANGGRAPH_API_KEY,
+});
+
+const researchTool = bridge.asTool({ name: 'ask_research_agent' });
+```
+
+### PydanticAI Runtime Bridge
+
+```typescript
+import { PydanticAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new PydanticAIRuntimeBridge({
+  name: 'analysis-agent',
+  endpoint: 'https://pydantic.example.com/agents/analysis',
+  apiKey: process.env.PYDANTIC_API_KEY,
+});
+```
+
+## Capability Binding
+
+Automatically infer safety classes and bind capabilities:
+
+```typescript
+import { AgentCapabilityBinder, inferSafetyClass } from '@veridex/agents-adapters';
+
+// Infer safety class from tool metadata
+const safetyClass = inferSafetyClass(toolDefinition);
+// → 'read' | 'write' | 'financial' | 'destructive' | 'privileged'
+
+// Bind all imported tools with inferred capabilities
+const binder = new AgentCapabilityBinder();
+const boundTools = binder.bind(importedTools);
+```
+
+## Schema Conversion
+
+```typescript
+import { jsonSchemaToZod } from '@veridex/agents-adapters';
+
+// Convert JSON Schema to Zod for ToolContract input validation
+const zodSchema = jsonSchemaToZod(jsonSchemaObject);
+```
+
+## Related
+
+- [Agents Framework](/sdks/agents-framework) — Core agent runtime
+- [Guide: Framework Adapters](/guides/veridex-agents#framework-adapters) — Step-by-step tutorial
+- [API Reference](/api-reference/agents-adapters) — Full type signatures

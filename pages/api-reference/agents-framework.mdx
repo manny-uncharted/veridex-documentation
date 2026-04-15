@@ -1874,6 +1874,164 @@ function BudgetBar() {
 
 ---
 
+## Response Integrity
+
+### `ResponseSeal`
+
+HMAC-based chain-of-custody seal for LLM responses. Created automatically during agent runs.
+
+```typescript
+import { createResponseSeal, verifyResponseSeal } from '@veridex/agents';
+
+// Create a seal (done automatically by model providers)
+const seal = createResponseSeal(rawResponseBytes, apiKeyBytes);
+
+// Verify a seal
+const isValid = verifyResponseSeal(seal, rawResponseBytes, apiKeyBytes);
+```
+
+**Seal structure:**
+
+```typescript
+interface ResponseSealData {
+  algorithm: 'HMAC-SHA256';
+  seal: string;      // hex-encoded HMAC
+  rawHash: string;   // SHA-256 of raw response bytes
+  timestamp: number; // Unix ms
+}
+```
+
+### `ResponseEnvelope`
+
+Full response envelope with chain-of-custody:
+
+```typescript
+interface ResponseEnvelope {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  provider: string;
+  output: string;
+  tokensUsed: { prompt: number; completion: number };
+  chainOfCustodySeal?: ResponseSealData;
+}
+```
+
+---
+
+## Agent Identity Types
+
+### `AgentIdentityClaims`
+
+OIDC-A (OpenID Connect for Agents) claims:
+
+```typescript
+interface AgentIdentityClaims {
+  iss: string;          // Issuer
+  sub: string;          // Agent ID
+  aud: string;          // Audience
+  iat: number;          // Issued at
+  exp: number;          // Expires
+  scope: string[];      // Permissions
+  agentName: string;
+  agentVersion: string;
+}
+```
+
+### `AgentIntegrityBinding`
+
+Binds agent identity to a specific code + config snapshot:
+
+```typescript
+interface AgentIntegrityBinding {
+  agentId: string;
+  identityClaims: AgentIdentityClaims;
+  codeHash: string;           // SHA-256 of agent code
+  configHash: string;         // SHA-256 of configuration
+  toolManifestHash: string;   // SHA-256 of registered tools
+  timestamp: number;
+}
+```
+
+---
+
+## Execution Accountability Graph
+
+```typescript
+interface ExecutionNode {
+  id: string;
+  type: 'turn' | 'tool_call' | 'model_call' | 'policy_check' | 'approval';
+  timestamp: number;
+  data: Record<string, unknown>;
+}
+
+interface ExecutionEdge {
+  from: string;
+  to: string;
+  type: 'triggered' | 'required' | 'produced';
+}
+
+interface ExecutionGraph {
+  nodes: ExecutionNode[];
+  edges: ExecutionEdge[];
+  rootId: string;
+}
+```
+
+---
+
+## Model Providers
+
+### `OpenAIProvider`
+
+```typescript
+new OpenAIProvider({ apiKey: string, model?: string, baseURL?: string })
+```
+
+### `AnthropicProvider`
+
+```typescript
+new AnthropicProvider({ apiKey: string, model?: string })
+```
+
+### `GeminiProvider`
+
+```typescript
+new GeminiProvider({ apiKey: string, model?: string })
+```
+
+### `OpenAICompatibleProvider`
+
+```typescript
+new OpenAICompatibleProvider({ baseURL: string, apiKey?: string, model: string })
+```
+
+Subclasses: `GroqProvider`, `TogetherAIProvider`, `FireworksProvider`, `DeepSeekProvider`, `PerplexityProvider`, `MistralProvider`
+
+All providers automatically create `ResponseSeal` on every completion.
+
+---
+
+## Sovereignty Types
+
+### `SovereigntyViolationSummary`
+
+```typescript
+interface SovereigntyViolationSummary {
+  runId: string;
+  agentId: string;
+  turnIndex: number;
+  toolName: string;
+  piiCategories: string[];
+  fromJurisdiction: string;
+  toJurisdiction: string;
+  regulation: string;
+  timestamp: number;
+}
+```
+
+---
+
 <Cards>
   <Card title="Veridex Agents Guide" href="/guides/veridex-agents">
     Narrative walkthrough with architecture and examples

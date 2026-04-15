@@ -1,6 +1,7 @@
 {
   "create-wallet": "Create Wallet",
   "send-tokens": "Send Tokens",
+  "wallet-backup-recovery": "Wallet Backup & Recovery",
   "cross-domain-passkeys": "Cross-Domain Passkeys",
   "gasless-transactions": "Gasless Transactions",
   "session-keys": "Session Keys",
@@ -14,6 +15,8 @@
   "agent-payments": "Agent Payments",
   "veridex-agents": "Veridex Agents",
   "agent-identity": "Agent Identity",
+  "agent-integrity": "Agent Integrity & Response Seals",
+  "data-sovereignty": "Data Sovereignty",
   "examples": "Examples",
   "multisig-wallet": "Multisig Wallet",
   "advanced-patterns": "Advanced Patterns"

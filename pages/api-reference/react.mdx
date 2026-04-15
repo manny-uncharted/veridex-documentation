@@ -1,0 +1,195 @@
+---
+title: React SDK API Reference
+description: "API reference for @veridex/react — Provider, hooks, and utility functions"
+---
+
+import { Callout, Cards, Card } from '../../components/mdx'
+
+# React SDK API Reference
+
+Full API for `@veridex/react` — the React bindings for the Veridex Protocol core SDK.
+
+---
+
+## `VeridexProvider`
+
+Context provider that makes the SDK available to all child components.
+
+```tsx
+import { VeridexProvider } from '@veridex/react';
+
+<VeridexProvider sdk={sdkInstance}>
+  <App />
+</VeridexProvider>
+```
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `sdk` | `VeridexSDK` | SDK instance from `createSDK()` |
+| `children` | `ReactNode` | Child components |
+
+---
+
+## `useVeridexSDK`
+
+```tsx
+const sdk: VeridexSDK = useVeridexSDK();
+```
+
+Returns the SDK instance from the nearest `VeridexProvider`. Throws if used outside of a provider.
+
+---
+
+## `useNetwork`
+
+```tsx
+const { chain, network, chainId } = useNetwork();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chain` | `string` | Chain name (e.g. `'base'`) |
+| `network` | `'testnet' \| 'mainnet'` | Network environment |
+| `chainId` | `number` | Wormhole chain ID |
+
+---
+
+## `usePasskey`
+
+```tsx
+const {
+  register,
+  authenticate,
+  credential,
+  isRegistering,
+  isAuthenticating,
+  error,
+} = usePasskey();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `register` | `(username: string, displayName: string) => Promise<Credential>` | Register a new passkey |
+| `authenticate` | `() => Promise<Credential>` | Authenticate with an existing passkey |
+| `credential` | `Credential \| null` | Current credential |
+| `isRegistering` | `boolean` | Registration in progress |
+| `isAuthenticating` | `boolean` | Authentication in progress |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useBalance`
+
+```tsx
+const { balance, isLoading, error, refresh } = useBalance(tokenAddress?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tokenAddress` | `string?` | Token contract address (optional, defaults to native) |
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `balance` | `TokenBalance \| null` | Token balance with `formatted`, `symbol`, `decimals` |
+| `isLoading` | `boolean` | Loading state |
+| `error` | `Error \| null` | Last error |
+| `refresh` | `() => void` | Force refresh |
+
+---
+
+## `useTransfer`
+
+```tsx
+const { prepare, execute, status, receipt, error } = useTransfer();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prepare` | `(params: TransferParams) => Promise<TransferPreview>` | Prepare a transfer for review |
+| `execute` | `() => Promise<TransferReceipt>` | Execute the prepared transfer |
+| `status` | `string \| null` | Current status (`'preparing'`, `'signing'`, `'confirming'`, `'complete'`) |
+| `receipt` | `TransferReceipt \| null` | Transaction receipt after completion |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useMultiChainPortfolio`
+
+```tsx
+const { portfolio, totalValueUSD, isLoading, error } = useMultiChainPortfolio(chainIds?);
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chainIds` | `number[]?` | Chains to query (default: all configured) |
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `portfolio` | `PortfolioEntry[]` | Balance per chain |
+| `totalValueUSD` | `number` | Aggregate USD value |
+| `isLoading` | `boolean` | Loading state |
+| `error` | `Error \| null` | Last error |
+
+---
+
+## `useSpendingLimits`
+
+```tsx
+const { limits, spent, remaining, percentUsed } = useSpendingLimits();
+```
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `limits` | `SpendingLimits \| null` | Configured limits |
+| `spent` | `number` | Amount spent in current period |
+| `remaining` | `number` | Remaining allowance |
+| `percentUsed` | `number` | Utilization percentage (0-100) |
+
+---
+
+## Utility Functions
+
+### `resolveChainId`
+
+```typescript
+resolveChainId(name: string): number
+```
+
+Resolve a chain name to its Wormhole chain ID.
+
+### `resolveChainIds`
+
+```typescript
+resolveChainIds(names: string[]): number[]
+```
+
+Resolve multiple chain names.
+
+---
+
+<Cards>
+  <Card title="React SDK Overview" href="/sdks/react">
+    Usage examples and setup guide
+  </Card>
+  <Card title="React Hooks Guide" href="/guides/react-hooks">
+    Patterns and best practices
+  </Card>
+</Cards>

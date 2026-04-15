@@ -1,0 +1,82 @@
+---
+title: Sovereignty Compliance
+description: Audit trail for data sovereignty violations and jurisdictional compliance
+---
+
+# Sovereignty Compliance
+
+Track, audit, and remediate data sovereignty violations across your agent fleet.
+
+## Violation Records
+
+When a sovereignty violation is detected — either by the agent runtime or the security gateway — a `SovereigntyViolationSummary` is recorded:
+
+| Field | Description |
+|-------|-------------|
+| `runId` | Agent run that produced the violation |
+| `agentId` | Agent that triggered the violation |
+| `turnIndex` | Turn within the run |
+| `toolName` | Tool that was invoked |
+| `piiCategories` | PII types detected (e.g., `['email', 'name']`) |
+| `fromJurisdiction` | Source jurisdiction |
+| `toJurisdiction` | Destination jurisdiction |
+| `regulation` | Violated regulation (e.g., `'GDPR Art. 44-49'`) |
+| `timestamp` | Unix timestamp |
+
+## Querying Violations
+
+### Via Control Plane
+
+```typescript
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: 'https://cp.example.com',
+  token: process.env.CP_TOKEN,
+});
+
+const traces = await client.queryTraces({
+  eventType: 'sovereignty_violation',
+  startAfter: Date.now() - 30 * 86_400_000, // last 30 days
+});
+```
+
+### Via Agent Events
+
+```typescript
+agent.events.on('sovereignty_violation', (violation) => {
+  logger.warn('Sovereignty violation', {
+    agent: violation.agentId,
+    tool: violation.toolName,
+    pii: violation.piiCategories,
+    route: `${violation.fromJurisdiction} → ${violation.toJurisdiction}`,
+    regulation: violation.regulation,
+  });
+});
+```
+
+## Compliance Reports
+
+Export sovereignty violations as part of evidence bundles:
+
+```typescript
+import { exportTraces, generateEvidenceBundle } from '@veridex/agents-control-plane';
+
+const bundle = await generateEvidenceBundle(traceId, policyDecisions, approvalDecisions);
+// bundle includes sovereignty violations with full context
+```
+
+## Remediation
+
+| Violation Type | Recommended Action |
+|---------------|-------------------|
+| Cross-border PII transfer (blocked) | Route data to compliant jurisdiction, obtain user consent |
+| PII detected in tool output (flagged) | Review data flow, add PII scrubbing |
+| Missing jurisdiction mapping | Configure `toolJurisdictions` in sovereignty pack |
+| Recurring violations | Update policy packs to block at source |
+
+## Related
+
+- [Guide: Data Sovereignty](/guides/data-sovereignty) — Configuration walkthrough
+- [Agent Security](/sdks/agent-security) — Data sovereignty pack
+- [Governance: Traces](/governance/traces) — Full execution audit trail

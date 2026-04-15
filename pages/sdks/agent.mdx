@@ -79,6 +79,151 @@ await wallet.init();
 ## Related
 
 - [API Reference](/api-reference/agent-sdk) — Full method signatures and types
+- [Agent Identity Guide](/guides/agent-identity) — ERC-8004 identity & reputation
+- [Agent Payments Guide](/guides/agent-payments) — Payment setup walkthrough
+
+---
+
+## Universal Protocol Layer
+
+The Agent SDK supports multiple payment protocols out of the box:
+
+| Protocol | Description |
+|----------|-------------|
+| **x402** | HTTP 402-based micropayments |
+| **UCP** | Unified Communication Protocol |
+| **ACP** | Agent Communication Protocol |
+| **AP2** | Agent Payment Protocol v2 |
+| **MPP** | Multi-Party Payments |
+
+```typescript
+import { createAgentWallet } from '@veridex/agentic-payments';
+
+const agent = await createAgentWallet({
+  /* ... credentials and session config ... */
+  protocols: ['x402', 'ucp', 'acp'],
+});
+
+// Protocol is auto-selected based on the endpoint
+const response = await agent.fetch('https://api.example.com/data', {
+  maxPayment: { amount: '0.01', currency: 'USD' },
+});
+```
+
+## Multi-Chain Support
+
+Built-in chain clients for EVM and non-EVM chains:
+
+| Chain | Client |
+|-------|--------|
+| EVM (Base, Ethereum, Optimism, Arbitrum, Polygon) | `EVMChainClient` |
+| Solana | `SolanaChainClient` |
+| Aptos | `AptosChainClient` |
+| Sui | `SuiChainClient` |
+| Starknet | `StarknetChainClient` |
+| Stacks | `StacksChainClient` |
+| Monad | `MonadChainClient` |
+| Avalanche | `AvalancheChainClient` |
+
+### Cross-Chain Router
+
+```typescript
+import { CrossChainRouter, BridgeOrchestrator, FeeEstimator } from '@veridex/agentic-payments';
+
+const router = new CrossChainRouter({
+  bridges: ['wormhole', 'layerzero', 'hyperlane'],
+  feeEstimator: new FeeEstimator(),
+});
+
+// Find optimal route across chains
+const route = await router.findRoute({
+  sourceChain: 'base',
+  destChain: 'solana',
+  token: 'USDC',
+  amount: '1000000',
+});
+
+// Execute the bridge transfer
+const orchestrator = new BridgeOrchestrator(router);
+const receipt = await orchestrator.execute(route);
+```
+
+## Identity & Reputation (ERC-8004)
+
+```typescript
+const agent = await createAgentWallet({
+  /* ... */
+  erc8004: { enabled: true, testnet: true },
+});
+
+// Register on-chain identity
+const { agentId } = await agent.register({
+  name: 'Market Analyst',
+  description: 'Autonomous market data agent',
+  services: [{ name: 'analyze', endpoint: 'https://api.example.com/analyze' }],
+});
+
+// Query reputation
+const rep = await agent.reputation.getSummary(agentId);
+```
+
+## Monitoring & Audit
+
+```typescript
+import { AuditLogger, AlertManager, ComplianceExporter } from '@veridex/agentic-payments';
+
+const logger = new AuditLogger({ sink: 'postgres', connectionString: process.env.DATABASE_URL });
+const alerts = new AlertManager({
+  channels: ['slack', 'email'],
+  thresholds: { spendPerHour: 100, failedTxCount: 5 },
+});
+
+// Attach to agent wallet
+agent.on('transaction', (tx) => logger.log(tx));
+agent.on('alert', (alert) => alerts.dispatch(alert));
+
+// Export for compliance
+const exporter = new ComplianceExporter(logger);
+await exporter.export({ format: 'csv', since: Date.now() - 86_400_000 });
+```
+
+## Middleware
+
+```typescript
+import { veridexPaywall, nextAppRouter } from '@veridex/agentic-payments/middleware';
+
+// Express/Hono middleware — paywall an endpoint
+app.use('/api/premium', veridexPaywall({
+  price: { amount: '0.001', currency: 'USD' },
+  protocols: ['x402'],
+}));
+
+// Next.js App Router
+export const middleware = nextAppRouter({
+  protectedRoutes: ['/api/premium/*'],
+  price: { amount: '0.001', currency: 'USD' },
+});
+```
+
+## DeFi Integrations
+
+```typescript
+import { PythOracle, DEXAggregator } from '@veridex/agentic-payments';
+
+// Real-time price feeds
+const oracle = new PythOracle();
+const btcPrice = await oracle.getPrice('BTC/USD');
+
+// DEX aggregation
+const dex = new DEXAggregator({ chains: ['base', 'optimism'] });
+const quote = await dex.getQuote({
+  tokenIn: 'USDC',
+  tokenOut: 'WETH',
+  amount: '1000000000',
+});
+```
+
+- [API Reference](/api-reference/agent-sdk) — Full method signatures and types
 - [Agent Payments Guide](/guides/agent-payments) — Autonomous payment workflows
 - [Agent Identity Guide](/guides/agent-identity) — ERC-8004 on-chain identity
 - [Multi-Session Guide](/guides/multi-session) — Session management patterns

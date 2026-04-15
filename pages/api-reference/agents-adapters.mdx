@@ -1,0 +1,184 @@
+---
+title: Agents Adapters API Reference
+description: "API reference for @veridex/agents-adapters — Framework adapters, OpenAPI importer, and runtime bridges"
+---
+
+import { Cards, Card } from '../../components/mdx'
+
+# Agents Adapters API Reference
+
+Full API for `@veridex/agents-adapters` — import, export, and bridge agents across frameworks.
+
+---
+
+## Framework Adapters
+
+All adapters implement the `FrameworkAdapter` interface:
+
+```typescript
+interface FrameworkAdapter<TImport, TExport> {
+  importAgent(config: TImport): { definition: AgentDefinition; warnings: string[] };
+  exportAgent(definition: AgentDefinition): { config: TExport; warnings: string[] };
+}
+```
+
+### `OpenAIAgentsAdapter`
+
+```typescript
+import { OpenAIAgentsAdapter } from '@veridex/agents-adapters';
+
+const adapter = new OpenAIAgentsAdapter();
+const { definition, warnings } = adapter.importAgent(openAIConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+### `LangGraphAdapter`
+
+```typescript
+import { LangGraphAdapter } from '@veridex/agents-adapters';
+
+const adapter = new LangGraphAdapter();
+const { definition, warnings } = adapter.importAgent(langGraphConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+### `PydanticAIAdapter`
+
+```typescript
+import { PydanticAIAdapter } from '@veridex/agents-adapters';
+
+const adapter = new PydanticAIAdapter();
+const { definition, warnings } = adapter.importAgent(pydanticAIConfig);
+const { config } = adapter.exportAgent(definition);
+```
+
+---
+
+## `OpenAPIImporter`
+
+Convert OpenAPI 3.x specifications into Veridex `ToolContract` objects.
+
+```typescript
+import { OpenAPIImporter } from '@veridex/agents-adapters';
+
+const importer = new OpenAPIImporter();
+```
+
+### `importer.importTools(spec, options)`
+
+```typescript
+const tools: ToolContract[] = importer.importTools(spec, {
+  baseUrl: string,
+  auth?: { type: 'bearer' | 'api-key'; value: string; header?: string },
+  safetyClassOverrides?: Record<string, ToolSafetyClass>,
+});
+```
+
+Each path + method combination becomes a `ToolContract` with:
+- Name derived from `operationId` or path
+- Zod input schema generated from request body / query parameters
+- Safety class inferred from HTTP method (`GET` → `read`, `POST` → `write`, `DELETE` → `destructive`)
+
+---
+
+## Runtime Bridges
+
+Live bridges invoke external runtimes as Veridex tools or handoff targets.
+
+### `OpenAIRuntimeBridge`
+
+```typescript
+import { OpenAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new OpenAIRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey: string,
+  timeoutMs?: number,
+});
+
+const tool = bridge.asTool({ name: string, description?: string });
+const handler = bridge.asHandoffHandler();
+```
+
+### `LangGraphRuntimeBridge`
+
+```typescript
+import { LangGraphRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new LangGraphRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey?: string,
+});
+```
+
+### `PydanticAIRuntimeBridge`
+
+```typescript
+import { PydanticAIRuntimeBridge } from '@veridex/agents-adapters';
+
+const bridge = new PydanticAIRuntimeBridge({
+  name: string,
+  endpoint: string,
+  apiKey?: string,
+});
+```
+
+---
+
+## Capability Binding
+
+### `AgentCapabilityBinder`
+
+```typescript
+import { AgentCapabilityBinder } from '@veridex/agents-adapters';
+
+const binder = new AgentCapabilityBinder();
+const boundTools: ToolContract[] = binder.bind(importedTools);
+```
+
+### `inferSafetyClass`
+
+```typescript
+import { inferSafetyClass } from '@veridex/agents-adapters';
+
+const safetyClass: ToolSafetyClass = inferSafetyClass(toolDefinition);
+```
+
+Heuristic inference based on tool name, description, and schema analysis.
+
+---
+
+## Utilities
+
+### `jsonSchemaToZod`
+
+```typescript
+import { jsonSchemaToZod } from '@veridex/agents-adapters';
+
+const zodSchema = jsonSchemaToZod(jsonSchemaObject);
+```
+
+Converts a JSON Schema object to a Zod schema for `ToolContract` input validation.
+
+### `createStubExecutor`
+
+```typescript
+import { createStubExecutor } from '@veridex/agents-adapters';
+
+const executor = createStubExecutor(toolName);
+```
+
+Creates a stub executor that returns a placeholder result, useful for testing imported tools.
+
+---
+
+<Cards>
+  <Card title="Adapters Overview" href="/sdks/agents-adapters">
+    Usage guide with examples
+  </Card>
+  <Card title="Agents Framework" href="/sdks/agents-framework">
+    Core agent runtime
+  </Card>
+</Cards>

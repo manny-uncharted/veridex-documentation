@@ -198,6 +198,56 @@ Veridex uses Wormhole for secure cross-chain communication.
 
 The relayer automatically chooses the optimal path based on transaction value.
 
+## Wallet Backup & Recovery
+
+Passkeys live in your device's secure enclave. If you lose all your devices, you need a way to recover access. Veridex provides encrypted credential backup via the relayer.
+
+### How Backup Works
+
+```
+┌─────────────┐                    ┌─────────────┐
+│ Your Device  │                    │   Relayer    │
+│              │                    │   (Cloud)    │
+│  Credentials ├── PRF encrypt ───▶│  Encrypted   │
+│  (keyHash,   │                    │    Blob      │
+│   credId)    │                    │  (can't read │
+│              │                    │   contents)  │
+└─────────────┘                    └─────────────┘
+```
+
+1. Your passkey generates a **PRF seed** — a deterministic secret only your authenticator can produce.
+2. The SDK derives an AES-256-GCM encryption key from that seed.
+3. All credential metadata is encrypted and uploaded to the Veridex relayer.
+4. On recovery, the same passkey (or a synced copy) regenerates the PRF seed and decrypts the archive.
+
+### PRF (Pseudo-Random Function)
+
+PRF is a WebAuthn extension that lets an authenticator produce a deterministic secret for a given input. Key properties:
+
+- **Deterministic**: Same passkey + same salt = same secret, every time
+- **Non-exportable**: The secret is generated inside the secure enclave
+- **Domain-bound**: Different RP IDs produce different outputs
+
+PRF is supported in Chrome 116+, Safari 17+, and Edge 116+. On browsers without PRF, the SDK falls back to a credential-ID-based key — functional but less secure.
+
+### Recovery Scenarios
+
+| Scenario | What Happens |
+|----------|-------------|
+| **Lost one device, passkey synced** | Use another device — passkey already there |
+| **Lost device, have relayer backup** | Authenticate on synced device → download + decrypt backup |
+| **Lost all devices, passkey synced via iCloud/Google** | Set up new device with same account → passkey restores → decrypt backup |
+| **Lost everything, passkey NOT synced** | Social recovery via guardians (Phase 2) |
+
+### Key Points
+
+- The relayer **cannot read** your backup — it only stores an encrypted blob.
+- Passkeys typically sync within your platform ecosystem (Apple → Apple, Google → Google).
+- For cross-ecosystem backup (iPhone → Windows PC), use the **Add Device** flow.
+- Back up after adding new devices or registering new passkeys.
+
+See the [Wallet Backup & Recovery Guide](/guides/wallet-backup-recovery) for step-by-step instructions.
+
 ## Gasless Transactions
 
 Users never need to hold gas tokens — the relayer pays gas fees.

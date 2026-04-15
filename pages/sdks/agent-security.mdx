@@ -1,0 +1,214 @@
+---
+title: Agent Security
+description: "@veridex/agent-security — framework-agnostic security gateway for AI agents"
+---
+
+import { Callout } from '../../components/Callout'
+
+# Agent Security (`@veridex/agent-security`)
+
+A framework-agnostic security gateway that protects any AI agent — whether built with Veridex, LangChain, CrewAI, AutoGPT, or custom code — with pluggable security packs.
+
+<Callout type="info">
+  This package works standalone. It does not require `@veridex/agents` or any other Veridex package.
+</Callout>
+
+## Installation
+
+```bash
+npm install @veridex/agent-security
+```
+
+## Quick Start
+
+### In-Process Gateway
+
+```typescript
+import { SecurityGateway, createDefaultPacks } from '@veridex/agent-security';
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  defaultAction: 'block', // block | warn | allow
+});
+
+// Evaluate an agent action before execution
+const result = await gateway.evaluate({
+  type: 'tool_call',
+  toolName: 'execute_sql',
+  arguments: { query: 'DROP TABLE users; --' },
+  agentId: 'data-agent',
+  turnIndex: 3,
+});
+
+if (result.verdict === 'block') {
+  console.log('Blocked:', result.reasons);
+  // → ['Injection detected: SQL injection pattern in tool arguments']
+}
+```
+
+### Remote Gateway (HTTP)
+
+Deploy as a standalone service:
+
+```typescript
+// server.ts
+import { createSecurityServer } from '@veridex/agent-security/server';
+
+const server = createSecurityServer({
+  packs: createDefaultPacks(),
+  port: 4600,
+  authToken: process.env.SECURITY_GATEWAY_TOKEN,
+});
+
+await server.start();
+```
+
+Connect from any agent:
+
+```typescript
+import { SecurityClient } from '@veridex/agent-security';
+
+const client = new SecurityClient({
+  baseUrl: 'https://security.example.com',
+  authToken: process.env.SECURITY_GATEWAY_TOKEN,
+});
+
+const result = await client.evaluate({
+  type: 'tool_call',
+  toolName: 'send_email',
+  arguments: { to: 'user@example.com', body: emailContent },
+  agentId: 'comms-agent',
+});
+```
+
+## Built-in Security Packs
+
+12 packs ship out of the box. Use `createDefaultPacks()` for all of them, or pick individually:
+
+| Pack | Detects |
+|------|---------|
+| `injectionDetectionPack` | Prompt injection, SQL injection, command injection in tool arguments |
+| `toolPoisoningPack` | Malicious tool chains, circular tool references, suspicious tool sequences |
+| `secretDetectionPack` | Leaked API keys, passwords, JWTs, private keys in arguments or outputs |
+| `budgetCeilingPack` | Spending exceeding configured limits per run or per day |
+| `shellCommandSafetyPack` | Dangerous shell commands (`rm -rf`, `chmod 777`, privilege escalation) |
+| `endpointAllowlistPack` | HTTP requests to non-allowlisted domains |
+| `handoffSafetyPack` | Unsafe agent-to-agent handoffs (cycles, untrusted targets) |
+| `financialSafetyPack` | Financial transactions exceeding limits or targeting suspicious addresses |
+| `crossTurnAnomalyPack` | Behavioral anomalies across turns (goal drift, sudden capability escalation) |
+| `llmResponseGuardPack` | Filtering model responses for harmful or policy-violating content |
+| `dataSovereigntyPack` | PII detection and jurisdictional enforcement (GDPR, CCPA, PIPEDA) |
+
+### Data Sovereignty Pack
+
+The data sovereignty pack detects PII in tool arguments and enforces jurisdictional transfer rules:
+
+```typescript
+import { dataSovereigntyPack } from '@veridex/agent-security';
+
+const pack = dataSovereigntyPack({
+  defaultJurisdiction: 'US',
+  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
+  jurisdictionRules: [
+    {
+      from: 'EU',
+      to: 'US',
+      verdict: 'block',
+      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
+      regulations: ['GDPR Art. 44-49'],
+    },
+    {
+      from: 'CA',
+      to: '*',
+      verdict: 'flag',
+      reason: 'PIPEDA requires consent for cross-border PII transfer',
+      regulations: ['PIPEDA Principle 4.1.3'],
+    },
+  ],
+  toolJurisdictions: {
+    'store_in_eu_db': 'EU',
+    'send_to_us_api': 'US',
+    'log_to_ca_service': 'CA',
+  },
+});
+```
+
+## Framework Adapters
+
+### LangChain
+
+```typescript
+import { SecurityGateway } from '@veridex/agent-security';
+import { VeridexSecurityCallback } from '@veridex/agent-security/adapters/langchain';
+
+const gateway = new SecurityGateway({ packs: createDefaultPacks() });
+const callback = new VeridexSecurityCallback(gateway);
+
+// Attach to any LangChain agent
+const agent = new AgentExecutor({
+  agent: myAgent,
+  tools: myTools,
+  callbacks: [callback],
+});
+```
+
+### CrewAI
+
+```typescript
+import { VeridexCrewAIGuard } from '@veridex/agent-security/adapters/crewai';
+
+const guard = new VeridexCrewAIGuard(gateway);
+
+// Wrap crew execution with security evaluation
+const result = await guard.evaluate(crewAction);
+```
+
+## Telemetry
+
+```typescript
+import { TelemetryReporter } from '@veridex/agent-security';
+
+const reporter = new TelemetryReporter({
+  endpoint: 'https://telemetry.example.com/events',
+  batchSize: 50,
+  flushIntervalMs: 10_000,
+});
+
+const gateway = new SecurityGateway({
+  packs: createDefaultPacks(),
+  telemetry: reporter,
+});
+
+// Every evaluation is automatically recorded for observability
+```
+
+## Key Types
+
+```typescript
+interface SecurityVerdict {
+  verdict: 'allow' | 'block' | 'escalate' | 'flag';
+  reasons: string[];
+  packId: string;
+  confidence: number;
+}
+
+interface SecurityEvalResult {
+  overall: 'allow' | 'block' | 'escalate';
+  verdicts: SecurityVerdict[];
+  metadata: Record<string, unknown>;
+}
+
+interface JurisdictionConfig {
+  defaultJurisdiction: string;
+  piiCategories: string[];
+  jurisdictionRules: JurisdictionRule[];
+  toolJurisdictions: Record<string, string>;
+}
+```
+
+## Related
+
+- [Security Guide: Agent Security Gateway](/security/agent-security) — Deployment patterns and best practices
+- [Security Guide: Data Sovereignty](/security/data-sovereignty) — Jurisdictional compliance
+- [Governance: Sovereignty Compliance](/governance/sovereignty) — Audit trail for violations
+- [API Reference](/api-reference/agent-security) — Full type signatures

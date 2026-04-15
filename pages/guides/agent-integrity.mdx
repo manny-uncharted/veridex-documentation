@@ -1,0 +1,137 @@
+---
+title: Agent Integrity & Response Seals
+description: Tamper-evident LLM response provenance with HMAC chain-of-custody seals
+---
+
+import { Callout, Steps, Step, CodeGroup } from '../../components/mdx'
+
+# Agent Integrity & Response Seals
+
+Response seals provide cryptographic tamper-evidence for every LLM response in the Veridex agent runtime. They ensure that model outputs haven't been modified between the provider and your application.
+
+<Callout type="info">
+  Response seals are created **automatically** by all built-in model providers. No configuration required.
+</Callout>
+
+## How It Works
+
+<Steps>
+  <Step title="Model Response">
+    The model provider (OpenAI, Anthropic, Gemini, etc.) returns a raw response.
+  </Step>
+  <Step title="Seal Creation">
+    The provider adapter captures the raw response bytes, derives a signing key via HKDF from the API key, and computes HMAC-SHA256.
+  </Step>
+  <Step title="Seal Attachment">
+    The seal is attached to the `ModelResponse._seal` field and forwarded through the response envelope.
+  </Step>
+  <Step title="Verification">
+    Downstream consumers (control plane, audit system, or client) can verify the seal using the same API key.
+  </Step>
+</Steps>
+
+## Verifying Response Seals
+
+```typescript
+import { verifyResponseSeal } from '@veridex/agents';
+
+// From a ResponseEnvelope
+const envelope = result.envelope;
+
+if (envelope.chainOfCustodySeal) {
+  const isValid = verifyResponseSeal(
+    envelope.chainOfCustodySeal,
+    rawResponseBytes,
+    apiKeyBytes,
+  );
+
+  if (!isValid) {
+    console.error('Response may have been tampered with!');
+  }
+}
+```
+
+## ResponseEnvelope Structure
+
+Every agent run turn produces a `ResponseEnvelope`:
+
+```typescript
+interface ResponseEnvelope {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  provider: string;
+  output: string;
+  tokensUsed: {
+    prompt: number;
+    completion: number;
+  };
+  chainOfCustodySeal?: {
+    algorithm: 'HMAC-SHA256';
+    seal: string;      // hex-encoded HMAC
+    rawHash: string;   // SHA-256 of raw response bytes
+    timestamp: number; // Unix ms when seal was created
+  };
+}
+```
+
+## Seal Cryptography
+
+| Component | Algorithm | Purpose |
+|-----------|-----------|---------|
+| Key Derivation | HKDF-SHA256 | Derive signing key from API key |
+| Signing | HMAC-SHA256 | Produce tamper-evident seal |
+| Raw Hash | SHA-256 | Fingerprint of raw response bytes |
+
+The signing key is derived using:
+- **IKM**: API key bytes
+- **Salt**: `"veridex-response-seal-v1"`
+- **Info**: `"hmac-signing-key"`
+
+## Supported Providers
+
+All built-in model providers automatically create seals:
+
+| Provider | Seal Support |
+|----------|-------------|
+| `OpenAIProvider` | Automatic |
+| `AnthropicProvider` | Automatic |
+| `GeminiProvider` | Automatic |
+| `OpenAICompatibleProvider` | Automatic |
+| `GroqProvider` | Automatic |
+| `TogetherAIProvider` | Automatic |
+| `FireworksProvider` | Automatic |
+| `DeepSeekProvider` | Automatic |
+| `PerplexityProvider` | Automatic |
+| `MistralProvider` | Automatic |
+
+## Agent Integrity Bindings
+
+Beyond response seals, agents can bind their identity to a specific code + config snapshot:
+
+```typescript
+interface AgentIntegrityBinding {
+  agentId: string;
+  identityClaims: AgentIdentityClaims;
+  codeHash: string;           // SHA-256 of agent code
+  configHash: string;         // SHA-256 of agent configuration
+  toolManifestHash: string;   // SHA-256 of registered tools
+  timestamp: number;
+}
+```
+
+This allows auditors to verify that an agent's behavior matches its declared capabilities at the time of execution.
+
+## Integration with Audit Trail
+
+Response seals are automatically:
+- Logged by `RawResponseHashLogger` for offline verification
+- Included in trace records via the control plane
+- Available in evidence bundles via `generateEvidenceBundle()`
+
+## Related
+
+- [Agents Framework](/sdks/agents-framework) — ResponseSeal API
+- [API Reference](/api-reference/agents-framework#response-integrity) — Full type signatures
+- [Governance: Traces](/governance/traces) — Audit trail
+- [Security: Response Integrity](/security/response-integrity) — Security implications

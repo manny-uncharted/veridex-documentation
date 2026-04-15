@@ -1,0 +1,248 @@
+---
+title: Agents Control Plane
+description: "@veridex/agents-control-plane — multi-tenant agent governance, policy packs, traces, and approval workflows"
+---
+
+import { Callout } from '../../components/Callout'
+
+# Agents Control Plane (`@veridex/agents-control-plane`)
+
+Multi-tenant agent governance for production deployments — policy pack management, approval workflows, trace storage, audit export, and a Workforce OS for fleet operations.
+
+## Installation
+
+```bash
+npm install @veridex/agents-control-plane
+```
+
+## Quick Start
+
+### In-Process Service
+
+```typescript
+import { ControlPlaneService, PolicyPackManager, TraceStore, InMemoryTraceStore } from '@veridex/agents-control-plane';
+
+const service = new ControlPlaneService({
+  policyPackManager: new PolicyPackManager(),
+  traceStore: new TraceStore(new InMemoryTraceStore()),
+});
+```
+
+### HTTP Server
+
+```typescript
+import { startControlPlaneServer } from '@veridex/agents-control-plane';
+
+const server = await startControlPlaneServer({
+  port: 4500,
+  storageBackend: 'postgres',
+  postgres: { connectionString: process.env.DATABASE_URL },
+  authRequired: true,
+  bootstrapTokens: [
+    { token: process.env.ADMIN_TOKEN, role: 'admin' },
+  ],
+  traceRetentionDays: 90,
+});
+```
+
+### Remote Client
+
+```typescript
+import { RemoteControlPlaneClient } from '@veridex/agents-control-plane';
+
+const client = new RemoteControlPlaneClient({
+  baseUrl: 'https://cp.example.com',
+  token: process.env.CP_TOKEN,
+  tenantId: 'tenant-acme',
+});
+```
+
+## Policy Pack Manager
+
+Versioned, composable collections of rules that can be applied to agents at the tenant or system level.
+
+```typescript
+import { PolicyPackManager } from '@veridex/agents-control-plane';
+
+const manager = new PolicyPackManager();
+
+// Create a versioned policy pack
+const pack = manager.create({
+  name: 'production-safety',
+  description: 'Standard safety rules for production agents',
+  version: '1.0.0',
+  rules: [
+    { type: 'block_safety_class', params: { classes: ['destructive', 'privileged'] }, enabled: true },
+    { type: 'max_spend', params: { limitUSD: 100 }, enabled: true },
+    { type: 'require_approval', params: { classes: ['financial'] }, enabled: true },
+  ],
+  tags: ['production', 'safety'],
+});
+
+// System packs are immutable — cannot be modified by tenants
+manager.registerSystemPack({
+  name: 'core-safety',
+  description: 'Core safety rules that cannot be modified',
+  version: '1.0.0',
+  rules: [
+    { type: 'block_safety_class', params: { classes: ['privileged'] }, enabled: true },
+  ],
+});
+```
+
+## Approval Workflows
+
+Multi-step approval workflows with escalation chains, timeouts, and auto-approval.
+
+```typescript
+import { ApprovalWorkflowEngine } from '@veridex/agents-control-plane';
+
+const engine = new ApprovalWorkflowEngine();
+
+engine.registerWorkflow({
+  id: 'high-risk',
+  name: 'High Risk Approval',
+  description: 'Two-step escalation for high-risk actions',
+  escalationChain: [
+    { name: 'Team Lead', approvers: ['lead@company.com'], timeoutSeconds: 300, minApprovals: 1 },
+    { name: 'VP Engineering', approvers: ['vp@company.com'], timeoutSeconds: 600, minApprovals: 1 },
+  ],
+  defaultMode: 'block',
+});
+
+// Start an approval process
+const approval = engine.startApproval('high-risk', 'run-001', 'agent-x', 'Transfer $10K', 0.9);
+
+// Cast votes
+engine.vote(approval.id, 'lead@company.com', true, 'Amount within limits');
+
+// Process timeouts periodically
+const timedOut = engine.processTimeouts();
+```
+
+## Trace Storage
+
+Ingest, query, and verify run traces with content hashing for tamper detection.
+
+```typescript
+import { TraceStore, InMemoryTraceStore } from '@veridex/agents-control-plane';
+
+const store = new TraceStore(new InMemoryTraceStore());
+
+// Ingest a trace
+const record = await store.ingest({
+  runId: 'run-001',
+  agentId: 'ops-agent',
+  tenantId: 'tenant-acme',
+  startedAt: Date.now() - 5000,
+  completedAt: Date.now(),
+  state: 'completed',
+  turnCount: 3,
+  totalTokens: 1500,
+  totalCostUSD: 0.02,
+  events: traceEvents,
+});
+
+// Query traces
+const traces = await store.query({
+  agentId: 'ops-agent',
+  state: 'completed',
+  startAfter: Date.now() - 86_400_000,
+  limit: 50,
+});
+
+// Verify content hash for tamper detection
+const valid = await store.verify(record.id);
+```
+
+### Persistent Backends
+
+```typescript
+import { PostgresTraceStoreBackend, FileTraceStoreBackend } from '@veridex/agents-control-plane';
+
+// Postgres
+const pgStore = new TraceStore(new PostgresTraceStoreBackend({
+  connectionString: process.env.DATABASE_URL,
+}));
+
+// File (JSON on disk)
+const fileStore = new TraceStore(new FileTraceStoreBackend({
+  directory: './traces',
+}));
+```
+
+## Tenant Management
+
+Isolate agents by tenant with per-tenant configuration.
+
+```typescript
+import { TenantManager } from '@veridex/agents-control-plane';
+
+const tenants = new TenantManager();
+
+const tenant = tenants.create({
+  name: 'Acme Corp',
+  config: {
+    maxConcurrentRuns: 10,
+    dailySpendLimitUSD: 500,
+    allowedProviders: ['openai'],
+    auditEnabled: true,
+    traceRetentionDays: 90,
+    deploymentMode: 'managed',
+  },
+});
+```
+
+## Audit Export
+
+Export traces for compliance in JSON, JSONL, or CSV format with tamper-evident hashing.
+
+```typescript
+import { exportTraces, generateEvidenceBundle } from '@veridex/agents-control-plane';
+
+const result = await exportTraces(traces, 'jsonl', {
+  includeMetadata: true,
+  startTime: Date.now() - 86_400_000,
+});
+// result.data — exported string
+// result.contentHash — SHA-256 hash for verification
+
+const bundle = await generateEvidenceBundle(traceId, policyDecisions, approvalDecisions);
+// bundle.contentHash — combined hash for tamper detection
+```
+
+## Workforce OS Types
+
+The control plane models a complete fleet management domain:
+
+| Type | Purpose |
+|------|---------|
+| `AgentManifest` | Full agent registration with capabilities, dependencies, and resource requirements |
+| `Workspace` | Logical grouping of agents, tasks, and deployments |
+| `Task` | Unit of work assignable to an agent |
+| `Deployment` | Agent deployment target (environment, version, replicas) |
+| `Incident` | Tracked incident with timeline and resolution |
+| `EvalSuite` | Evaluation suite for benchmarking agent performance |
+| `PolicyBinding` | Policy pack bound to a tenant, workspace, or agent |
+| `Assignment` | Agent assignment to a task with priority and constraints |
+| `MaintenanceJob` | Scheduled maintenance operation |
+
+## CLI
+
+```bash
+# Start control plane server
+npx veridex-control-plane start --port 4500 --storage postgres
+
+# List tenants
+npx veridex-control-plane tenants list
+
+# Export traces
+npx veridex-control-plane traces export --format jsonl --since 24h
+```
+
+## Related
+
+- [Guide: Enterprise Control Plane](/guides/veridex-agents#enterprise-control-plane) — Deployment walkthrough
+- [Governance: Traces](/governance/traces) — Trace audit trail
+- [Governance: Evidence Export](/governance/evidence) — Compliance bundles
+- [API Reference](/api-reference/agents-control-plane) — Full type signatures
