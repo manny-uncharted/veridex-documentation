@@ -3,9 +3,15 @@ title: Data Sovereignty
 description: Jurisdictional compliance policies for PII in agent operations
 ---
 
+import { Callout } from 'nextra/components'
+
 # Data Sovereignty
 
-Data sovereignty policies enforce jurisdictional rules for PII (Personally Identifiable Information) processed by AI agents. These policies ensure compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+<Callout type="warning" emoji="⚠️">
+**Roadmap item — not yet shipped.** `dataSovereigntyPack` is not currently exported from `@veridex/agent-security`. This page describes the designed API for jurisdictional/PII enforcement so integrators can plan ahead. Until the pack ships, approximate its behaviour with `secretDetectionPack` + a custom `SecurityPack` that enforces jurisdiction rules on `action.arguments`. Track progress in the [roadmap](/roadmap).
+</Callout>
+
+Data sovereignty policies enforce jurisdictional rules for PII (Personally Identifiable Information) processed by AI agents. These policies are designed to support compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
 
 ## Policy Configuration
 

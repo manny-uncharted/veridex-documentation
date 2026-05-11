@@ -1,4 +1,5 @@
 {
+  "threat-model": "Threat Model",
   "audits": "Audits",
   "best-practices": "Best Practices",
   "recovery": "Recovery",

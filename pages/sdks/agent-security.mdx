@@ -83,55 +83,22 @@ const result = await client.evaluate({
 
 ## Built-in Security Packs
 
-12 packs ship out of the box. Use `createDefaultPacks()` for all of them, or pick individually:
+The `@veridex/agent-security` package exports **10 pack factories**. `createDefaultPacks()` returns 9 of them — `endpointAllowlistPack` is excluded from the default set because it requires an explicit allowlist and must be constructed by the caller.
 
-| Pack | Detects |
-|------|---------|
-| `injectionDetectionPack` | Prompt injection, SQL injection, command injection in tool arguments |
-| `toolPoisoningPack` | Malicious tool chains, circular tool references, suspicious tool sequences |
-| `secretDetectionPack` | Leaked API keys, passwords, JWTs, private keys in arguments or outputs |
-| `budgetCeilingPack` | Spending exceeding configured limits per run or per day |
-| `shellCommandSafetyPack` | Dangerous shell commands (`rm -rf`, `chmod 777`, privilege escalation) |
-| `endpointAllowlistPack` | HTTP requests to non-allowlisted domains |
-| `handoffSafetyPack` | Unsafe agent-to-agent handoffs (cycles, untrusted targets) |
-| `financialSafetyPack` | Financial transactions exceeding limits or targeting suspicious addresses |
-| `crossTurnAnomalyPack` | Behavioral anomalies across turns (goal drift, sudden capability escalation) |
-| `llmResponseGuardPack` | Filtering model responses for harmful or policy-violating content |
-| `dataSovereigntyPack` | PII detection and jurisdictional enforcement (GDPR, CCPA, PIPEDA) |
+| Pack | In `createDefaultPacks()` | Detects |
+|------|---------------------------|---------|
+| `injectionDetectionPack` | ✓ | Prompt injection, SQL injection, command injection in tool arguments |
+| `toolPoisoningPack` | ✓ | Malicious tool chains, circular tool references, suspicious tool sequences |
+| `secretDetectionPack` | ✓ | Leaked API keys, passwords, JWTs, private keys in arguments or outputs |
+| `budgetCeilingPack` | ✓ | Spending exceeding configured limits per run or per day |
+| `shellCommandSafetyPack` | ✓ | Dangerous shell commands (`rm -rf`, `chmod 777`, privilege escalation) |
+| `handoffSafetyPack` | ✓ | Unsafe agent-to-agent handoffs (cycles, untrusted targets) |
+| `financialSafetyPack` | ✓ | Financial transactions exceeding limits or targeting suspicious addresses |
+| `crossTurnAnomalyPack` | ✓ | Behavioral anomalies across turns (goal drift, sudden capability escalation) |
+| `llmResponseGuardPack` | ✓ | Filtering model responses for harmful or policy-violating content |
+| `endpointAllowlistPack` |   | HTTP requests to non-allowlisted domains (opt-in — requires `allowedEndpoints`) |
 
-### Data Sovereignty Pack
-
-The data sovereignty pack detects PII in tool arguments and enforces jurisdictional transfer rules:
-
-```typescript
-import { dataSovereigntyPack } from '@veridex/agent-security';
-
-const pack = dataSovereigntyPack({
-  defaultJurisdiction: 'US',
-  piiCategories: ['email', 'phone', 'ssn', 'name', 'address', 'dob', 'financial'],
-  jurisdictionRules: [
-    {
-      from: 'EU',
-      to: 'US',
-      verdict: 'block',
-      reason: 'GDPR prohibits PII transfer to US without adequacy decision',
-      regulations: ['GDPR Art. 44-49'],
-    },
-    {
-      from: 'CA',
-      to: '*',
-      verdict: 'flag',
-      reason: 'PIPEDA requires consent for cross-border PII transfer',
-      regulations: ['PIPEDA Principle 4.1.3'],
-    },
-  ],
-  toolJurisdictions: {
-    'store_in_eu_db': 'EU',
-    'send_to_us_api': 'US',
-    'log_to_ca_service': 'CA',
-  },
-});
-```
+> **Note on data sovereignty.** A jurisdictional/PII enforcement pack is on the roadmap but is not yet shipped in `@veridex/agent-security`. Track progress in the [roadmap](/roadmap).
 
 ## Framework Adapters
 

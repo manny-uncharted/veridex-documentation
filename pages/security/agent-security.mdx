@@ -64,15 +64,16 @@ Single gateway serving multiple agent teams:
 
 ### Pack Selection
 
-Not every agent needs all 12 packs. Select based on your threat model:
+The `@veridex/agent-security` package ships 10 pack factories today. Select based on your threat model:
 
 | Agent Type | Recommended Packs |
 |-----------|------------------|
 | Read-only data agents | `injectionDetection`, `secretDetection`, `endpointAllowlist` |
 | Financial agents | All above + `budgetCeiling`, `financialSafety`, `crossTurnAnomaly` |
 | Tool-using agents | All above + `toolPoisoning`, `shellCommandSafety`, `handoffSafety` |
-| Multi-jurisdiction agents | All above + `dataSovereignty` |
-| Production fleet | `createDefaultPacks()` (all 12) |
+| Production fleet | `createDefaultPacks()` (ships 9 defaults) + `endpointAllowlistPack` configured with your allowed domains |
+
+> Jurisdictional / data-sovereignty enforcement is on the roadmap but is not yet exposed as a shipped pack.
 
 ### Custom Packs
 

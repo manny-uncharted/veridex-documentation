@@ -1,0 +1,589 @@
+---
+title: Threat Model
+description: Veridex Protocol trust boundaries, threat analysis, and mitigations
+---
+
+import { Callout } from 'nextra/components'
+
+# Threat Model
+
+<Callout type="info" emoji="🔒">
+This page is the public, canonical threat model for the Veridex Protocol. It covers what Veridex defends against, what is explicitly out of scope, and the cryptographic and operational assumptions each layer relies on. The internal engineering version lives at `docs/architecture/security-model.md`; both are kept in sync as the protocol evolves.
+</Callout>
+
+This document describes the security model, threat analysis, and mitigations in the Veridex Protocol.
+
+## Trust Model
+
+### Trust Boundaries
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         FULLY TRUSTED                                    │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Device Secure Element                                           │   │
+│  │  - Hardware isolation                                            │   │
+│  │  - Key never exported                                            │   │
+│  │  - Biometric/PIN protection                                      │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                         TRUST WITH VERIFICATION                        │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Wormhole Guardian Network                                      │   │
+│  │  - 13/19 threshold                                              │   │
+│  │  - Diverse operators                                            │   │
+│  │  - On-chain signature verification                              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Smart Contracts (Hub + Vaults)                                 │   │
+│  │  - Audited code                                                 │   │
+│  │  - Immutable after deployment                                   │   │
+│  │  - On-chain verification                                        │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                         UNTRUSTED (Verified)                           │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Relayer Service                                                │   │
+│  │  - Cannot forge signatures                                      │   │
+│  │  - Can only submit valid VAAs                                   │   │
+│  │  - Liveness assumption only                                     │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Frontend / SDK                                                 │   │
+│  │  - Can be malicious                                             │   │
+│  │  - User verifies on device                                      │   │
+│  │  - Challenge validated on-chain                                 │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+## Threat Analysis
+
+### 1. Key Compromise Attacks
+
+| Threat | Mitigation |
+|--------|-----------|
+| Private key extraction | Hardware secure element prevents export |
+| Side-channel attacks | Secure element has hardware countermeasures |
+| Malware keylogger | Private key never leaves secure element |
+| Phishing for seed phrase | No seed phrase exists |
+| Social engineering | Biometric required for each signature |
+
+### 2. Signature Attacks
+
+| Threat | Mitigation |
+|--------|-----------|
+| Signature forgery | P-256 ECDSA cryptographically secure |
+| Replay attacks | Per-user nonce incremented on-chain |
+| Signature malleability | Does not affect security (nonce-based) |
+| Cross-chain replay | Chain ID in payload, verified by spoke |
+
+### 3. Smart Contract Attacks
+
+| Threat | Mitigation |
+|--------|-----------|
+| Reentrancy | ReentrancyGuard, checks-effects-interactions |
+| Integer overflow | Solidity 0.8+ built-in checks |
+| Access control bypass | Owner checks, signature verification |
+| Proxy upgrade attack | Immutable implementation contracts |
+| Storage collision | No proxy pattern used |
+
+### 4. Cross-Chain Attacks
+
+| Threat | Mitigation |
+|--------|-----------|
+| Forged VAA | 13/19 guardian signatures required |
+| Emitter spoofing | Emitter address verified on spoke |
+| Chain ID manipulation | Chain ID verified in spoke contract |
+| Double spending | VAA hash tracked to prevent reuse |
+| Message ordering | Sequence numbers for ordering |
+
+### 5. Frontend/SDK Attacks
+
+| Threat | Mitigation |
+|--------|-----------|
+| Malicious challenge | Challenge shown on device before signing |
+| Wrong recipient | User verifies transaction details |
+| Hidden payload | Payload hash visible in challenge |
+| Origin mismatch | rpId verified by authenticator |
+
+## Security Mechanisms
+
+### 1. WebAuthn Security
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WebAuthn Security Layers                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  1. User Presence (UP Flag)                             │    │
+│  │     - Physical interaction required                     │    │
+│  │     - Prevents remote attacks                           │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  2. User Verification (UV Flag)                         │    │
+│  │     - Biometric or PIN required                         │    │
+│  │     - Proves user identity                              │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  3. Origin Binding                                      │    │
+│  │     - rpId must match origin                            │    │
+│  │     - Prevents phishing                                 │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  4. Challenge Binding                                   │    │
+│  │     - Challenge embedded in clientDataJSON              │    │
+│  │     - Prevents replay                                   │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Nonce Management
+
+```solidity
+// Hub contract nonce management
+mapping(bytes32 => uint256) public userNonces;
+
+function _verifyAndIncrementNonce(
+    bytes32 userKeyHash,
+    uint256 providedNonce
+) internal {
+    uint256 expectedNonce = userNonces[userKeyHash];
+    require(providedNonce == expectedNonce, "Invalid nonce");
+    userNonces[userKeyHash] = expectedNonce + 1;
+}
+```
+
+### 3. Rate Limiting
+
+```solidity
+struct RateLimitConfig {
+    uint256 maxActionsPerPeriod;  // e.g., 10
+    uint256 periodDuration;       // e.g., 1 hour
+    uint256 actionCount;          // current count
+    uint256 periodStart;          // period start time
+}
+
+function _checkRateLimit(bytes32 userKeyHash) internal {
+    RateLimitConfig storage config = rateLimits[userKeyHash];
+    
+    if (block.timestamp >= config.periodStart + config.periodDuration) {
+        // New period
+        config.actionCount = 1;
+        config.periodStart = block.timestamp;
+    } else {
+        // Same period
+        require(
+            config.actionCount < config.maxActionsPerPeriod,
+            "Rate limit exceeded"
+        );
+        config.actionCount++;
+    }
+}
+```
+
+### 4. VAA Verification
+
+```solidity
+function _verifyVAA(bytes calldata encodedVAA) internal returns (bytes memory) {
+    // 1. Parse and verify with Wormhole
+    (IWormhole.VM memory vm, bool valid, string memory reason) = 
+        wormhole.parseAndVerifyVM(encodedVAA);
+    require(valid, reason);
+    
+    // 2. Verify emitter chain
+    require(vm.emitterChainId == hubChainId, "Invalid source chain");
+    
+    // 3. Verify emitter address
+    require(vm.emitterAddress == hubEmitter, "Invalid emitter");
+    
+    // 4. Verify consistency level
+    require(vm.consistencyLevel >= MIN_CONSISTENCY, "Insufficient finality");
+    
+    // 5. Check replay protection
+    bytes32 vaaHash = keccak256(encodedVAA);
+    require(!processedVAAs[vaaHash], "VAA already processed");
+    processedVAAs[vaaHash] = true;
+    
+    return vm.payload;
+}
+```
+
+### 5. Query Response Verification
+
+For Wormhole Queries (CCQ), additional staleness checks are required:
+
+```solidity
+// Maximum age for query responses
+uint256 public constant MAX_QUERY_AGE = 60 seconds;
+
+function _verifyQueryResponse(
+    bytes calldata queryResponse
+) internal view returns (QueryResult memory) {
+    // 1. Parse query response
+    QueryResult memory result = parseQueryResponse(queryResponse);
+    
+    // 2. Verify Guardian signatures (13/19 threshold)
+    require(
+        verifyGuardianSignatures(result.signatures),
+        "Insufficient guardian signatures"
+    );
+    
+    // 3. Verify chain ID matches Hub
+    require(result.chainId == HUB_CHAIN_ID, "Invalid source chain");
+    
+    // 4. Verify staleness
+    require(
+        block.timestamp <= result.blockTime + MAX_QUERY_AGE,
+        "Query response too stale"
+    );
+    
+    // 5. Verify block is finalized
+    // (Query Proxy only returns finalized blocks, but we verify anyway)
+    require(result.blockNumber > 0, "Invalid block");
+    
+    return result;
+}
+```
+
+**Staleness Thresholds:**
+
+| Operation Type | Max Staleness | Rationale |
+|----------------|---------------|-----------|
+| Balance queries | 120 seconds | Display only, not security critical |
+| Nonce for action | 60 seconds | Must be fresh for replay protection |
+| Session validation | 30 seconds | Active session, high frequency |
+| High-value transfer | 15 seconds | Security critical |
+
+### 6. Session Key Security
+
+Session keys provide UX optimization with scoped, time-limited authority:
+
+```solidity
+struct SessionKey {
+    bytes32 keyHash;           // Hash of secp256k1 public key
+    uint256 expiry;            // Unix timestamp
+    uint256 maxValue;          // Maximum transaction value
+    uint64 chainScopes;        // Bitfield of allowed Wormhole chain IDs
+    uint256 usageCount;        // Number of uses
+    uint256 maxUsages;         // Maximum allowed uses (0 = unlimited)
+}
+
+function _validateSession(
+    bytes32 userKeyHash,
+    bytes32 sessionKeyHash,
+    ActionPayload calldata action
+) internal view {
+    SessionKey storage session = sessions[userKeyHash][sessionKeyHash];
+    
+    // 1. Check expiry
+    require(block.timestamp < session.expiry, "Session expired");
+    
+    // 2. Check value limit
+    require(action.value <= session.maxValue, "Value exceeds session limit");
+    
+    // 3. Check chain scope
+    uint64 chainBit = uint64(1 << action.targetChainId);
+    require(session.chainScopes & chainBit != 0, "Chain not authorized");
+    
+    // 4. Check usage limit
+    if (session.maxUsages > 0) {
+        require(session.usageCount < session.maxUsages, "Session usage exceeded");
+    }
+}
+```
+
+**Session Key Security Properties:**
+
+| Property | Implementation |
+|----------|----------------|
+| Time-bounded | Configurable expiry (max 24 hours) |
+| Value-bounded | Per-session maximum value |
+| Chain-scoped | Bitfield of allowed destination chains |
+| Usage-limited | Optional maximum usage count |
+| Revocable | Owner can revoke via Hub |
+| Non-extractable | Private key encrypted in browser storage |
+
+**Session Key Threat Mitigations:**
+
+| Threat | Mitigation |
+|--------|------------|
+| Session key theft | Time expiry limits exposure window |
+| Replay attack | Nonce increment per action |
+| Cross-chain abuse | Chain scope restriction |
+| High-value theft | Per-session value limits |
+| Persistent access | Maximum usage limits |
+
+#### `maxValue = 0` is a deliberate sentinel — and a foot-gun
+
+The on-chain Hub accepts `maxValue = 0` at `registerSession` time and treats it as **"no per-transaction limit imposed by the session object"**. In that mode the session is bounded only by:
+
+1. The vault's daily cap (`VeridexVault.dailyLimit`), and
+2. Any off-chain relayer policies that apply to the calling app.
+
+This is a deliberate protocol choice so callers can opt into vault-level bounding (e.g., one daily cap shared across many short-lived sessions). It is **not** an error path.
+
+However, it is a foot-gun for most integrations:
+
+- If the vault daily cap is generous (or effectively unlimited) and the caller bypasses the Veridex relayer, a compromised session key can drain the vault up to the daily cap before revocation propagates.
+- Off-chain policies cannot be assumed to apply when a third-party relayer is in use.
+
+**SDK guardrail (v1.2.0+).** `SessionManager.createSession({ maxValue: 0n })` throws at the SDK boundary unless the caller sets `allowUnboundedMaxValue: true`. This makes the trade-off explicit and forces the caller to acknowledge that the vault daily cap is the authoritative bound.
+
+**Recommendation.** Set a finite `maxValue` sized to the largest single transaction the session is expected to perform (not the daily budget — the vault daily cap handles that). Use `allowUnboundedMaxValue: true` only for trusted, short-duration sessions against a vault with a known-safe daily cap.
+
+### 7. Multi-Signature Support
+
+```solidity
+struct MultiSigConfig {
+    address[] signers;
+    uint256 threshold;
+    mapping(bytes32 => uint256) approvals;
+}
+
+function _checkMultiSig(
+    bytes32 userKeyHash,
+    bytes32 actionHash
+) internal returns (bool) {
+    MultiSigConfig storage config = multiSigConfigs[userKeyHash];
+    
+    if (config.threshold == 0) {
+        // Single-sig mode
+        return true;
+    }
+    
+    // Record approval
+    config.approvals[actionHash]++;
+    
+    // Check threshold
+    return config.approvals[actionHash] >= config.threshold;
+}
+```
+
+## Attack Scenarios and Responses
+
+### Scenario 1: Compromised Frontend
+
+**Attack**: Malicious frontend shows user one transaction but sends another.
+
+**Defense**:
+1. Challenge contains hash of actual payload
+2. User sees challenge on device screen (if supported)
+3. Smart contract verifies challenge matches payload
+
+**Response**: User should verify transaction details match expectations.
+
+### Scenario 2: Stolen Device
+
+**Attack**: Attacker steals user's phone with Passkey.
+
+**Defense**:
+1. Device requires biometric/PIN to use Passkey
+2. Multiple failed attempts lock device
+3. User can remotely wipe device
+4. Trusted signers can pause account
+
+**Response**: 
+1. Remote wipe device
+2. Contact support to freeze account
+3. Use trusted signer to transfer assets
+
+### Scenario 3: Guardian Network Compromise
+
+**Attack**: 13+ Wormhole guardians collude.
+
+**Defense**:
+1. Guardians are diverse organizations
+2. Public monitoring of guardian behavior
+3. Economic incentives aligned with security
+4. Time-delayed execution for large amounts
+
+**Response**: Protocol can migrate to new bridge if compromised.
+
+### Scenario 4: Smart Contract Bug
+
+**Attack**: Undiscovered vulnerability in contracts.
+
+**Defense**:
+1. Multiple security audits
+2. Bug bounty program
+3. Formal verification (where applicable)
+4. Pausable contracts for emergencies
+
+**Response**:
+1. Pause affected contracts
+2. Assess damage
+3. Deploy patched contracts
+4. Migrate user state
+
+### Scenario 5: Stale Query Response Attack
+
+**Attack**: Attacker captures a valid Query response and replays it later to exploit an outdated nonce.
+
+**Defense**:
+1. Query responses include block timestamp
+2. Spoke contracts enforce MAX_QUERY_AGE (60 seconds default)
+3. Nonce in action must match queried nonce exactly
+4. Block number validation ensures finality
+
+**Response**: Stale responses are rejected on-chain. No user action required.
+
+```solidity
+// On-chain validation
+require(
+    block.timestamp <= queryResponse.blockTime + MAX_QUERY_AGE,
+    "Query response stale"
+);
+require(
+    action.nonce == queryResponse.userNonce,
+    "Nonce mismatch"
+);
+```
+
+### Scenario 6: Session Key Compromise
+
+**Attack**: Attacker gains access to session key private key (e.g., XSS, malware).
+
+**Defense**:
+1. Session keys have maximum 24-hour expiry
+2. Value limits cap potential loss
+3. Chain scope limits attack surface
+4. Usage limits prevent sustained abuse
+5. Owner can revoke session via Hub immediately
+
+**Response**:
+1. Revoke session key immediately via Hub
+2. Review transaction history
+3. If significant loss, contact support
+
+**Exposure Calculation**:
+```
+Max Exposure = min(session.maxValue * session.maxUsages, time_remaining * tx_rate)
+```
+
+### Scenario 7: Query Proxy Manipulation
+
+**Attack**: Attacker compromises Query Proxy to return false state.
+
+**Defense**:
+1. Query responses require 13/19 Guardian signatures
+2. Guardians independently verify state against their own RPC nodes
+3. Query Proxy is stateless relay; cannot forge signatures
+4. Multiple Query Proxy endpoints available
+
+**Response**: Invalid Guardian signatures rejected on-chain. Protocol monitors for anomalies.
+
+## Security Checklist
+
+### For Developers
+
+- [ ] Use latest SDK version
+- [ ] Verify origin matches expected domain
+- [ ] Display transaction details to user
+- [ ] Handle errors gracefully
+- [ ] Implement proper session management
+
+### For Operators
+
+- [ ] Monitor contract events
+- [ ] Set up alerts for unusual activity
+- [ ] Regular security audits
+- [ ] Incident response plan ready
+- [ ] Key management procedures documented
+
+### For Users
+
+- [ ] Only use official frontend
+- [ ] Verify transaction details before signing
+- [ ] Keep device updated
+- [ ] Enable device lock
+- [ ] Set up recovery options
+
+## Audit Reports
+
+| Auditor | Date | Scope | Report |
+|---------|------|-------|--------|
+| TBD | TBD | Smart Contracts | [Link] |
+| TBD | TBD | SDK | [Link] |
+| TBD | TBD | Cryptography | [Link] |
+
+## Bug Bounty
+
+See [SECURITY.md](../../SECURITY.md) for bug bounty details.
+
+| Severity | Reward |
+|----------|--------|
+| Critical | Up to $100,000 |
+| High | Up to $25,000 |
+| Medium | Up to $5,000 |
+| Low | Up to $1,000 |
+
+## Incident Response
+
+### Audit Log Tamper-Evidence
+
+Every write to `audit_logs` extends a per-app **hash chain**: each row stores `prev_hash` (the `entry_hash` of the previous row for that app) and `entry_hash = SHA-256(canonical(row fields || prev_hash))`. Appends run under `SERIALIZABLE` isolation so concurrent writers can't fork the chain.
+
+**What this catches:**
+
+- A DBA (or a compromised relayer operator) mutating a row after the fact — `entry_hash` no longer matches the canonical payload.
+- A row deleted mid-chain — the next row's `prev_hash` no longer matches the expected tail.
+- A row inserted out of band without updating downstream hashes — same failure mode.
+
+**How to check.** Admin-only endpoint `GET /api/v1/apps/:appId/audit-logs/verify` replays the chain and returns `{ ok, totalEntries, violations }`. A healthy app has zero violations. Pre-chain legacy rows surface as `missing_hash` (not tampering — backfill or seed from a known point).
+
+**Scope of the guarantee.** The chain is tamper-**evident**, not tamper-**proof** — a sufficiently-capable attacker with long-lived DB write access can rewrite the entire chain to be internally consistent. To lift this to full non-repudiation we also plan to (a) periodically seal the chain head with an RFC 3161 Timestamp Authority, and (b) publish the sealed head to an external anchor. Both are additive on top of the chain and tracked as follow-ups.
+
+### Kill Switch
+
+The relayer supports a **global kill switch** for emergency containment. Setting the environment variable `VERIDEX_RELAYER_KILL_SWITCH=1` and rolling pods causes the relayer to reject every mutating request (`POST`/`DELETE`/`PATCH`/`PUT`) with a `503 RELAYER_KILL_SWITCH_ENGAGED` response. Read paths (`GET`/`HEAD`/health/info/status) stay live so operators retain observability.
+
+| Property | Value |
+|----------|-------|
+| Trigger | Set `VERIDEX_RELAYER_KILL_SWITCH=1` and redeploy relayer pods |
+| Scope | All mutating routes in the relayer tier (submit, execute, bridge, session create/revoke, policy writes) |
+| Exempt | `GET`/`HEAD`/`OPTIONS`, plus `/health`, `/api/v1/info`, `/api/v1/status`, `/api/v1/kill-switch/status` |
+| Status check | `GET /api/v1/kill-switch/status` returns `{ engaged: boolean, checkedAt }` |
+| Bypass | None — the kill switch runs as the first middleware, before auth and rate limiting |
+
+**What the kill switch does NOT stop.** On-chain sessions and vault daily caps are enforced by the smart contracts themselves. If a caller routes around the Veridex relayer (third-party relayer, direct Hub call), only the on-chain limits apply. Engage the kill switch together with session revocation and — in a worst-case scenario — on-chain pause of affected vaults.
+
+### Contact
+
+- Security Email: security@veridex.network
+- PGP Key: [Link to PGP key]
+- Response Time: 24 hours
+
+### Process
+
+1. Report received and acknowledged
+2. Severity assessment
+3. Immediate mitigation if needed
+4. Root cause analysis
+5. Fix development and testing
+6. Coordinated disclosure
+7. Post-mortem published
+
+## Known Gaps & Roadmap
+
+We prefer to state open security gaps explicitly rather than let them hide in backlogs. The items below are known, bounded, and tracked — they do not affect on-chain fund safety (which is enforced by the Hub and user signatures) but they narrow the blast radius of certain compromise scenarios.
+
+| Gap | Current state | Why it's deferred | Planned fix |
+|-----|---------------|-------------------|-------------|
+| Cross-operator audit-log anchoring | Per-app hash chain is live and tamper-evident (see above). A long-lived DB compromise could still rewrite the whole chain consistently. | RFC 3161 TSA integration has external dependencies and is strictly additive on top of the chain we just shipped. | Periodic TSA seal of the chain head + external anchor. |
+| Signed persisted approvals | `PendingApproval` decisions are stored in Postgres and protected by the audit-log hash chain. For on-chain actions the approval is not authoritative — the user's signature is what the Hub verifies — so DB tampering cannot move funds. The gap is purely for off-chain, approval-gated flows (webhooks, x402, agent handoffs). | A correct implementation requires the approver's session key to sign `H(approvalId ‖ decision ‖ actionHash ‖ decidedAt)`, which touches both the portal UX and the approver-key plumbing. Shipping a half-signed schema would create a false sense of security (most rows unsigned). | Land portal signing UX + `approval_signature` column + verification helper together. |
+| Cumulative on-chain session budget | Sessions currently enforce a per-transaction cap plus a vault-level daily cap. There is no cumulative budget across transactions inside a single session object. | Adding cumulative accounting is a breaking contract change; the 6 live testnet deployments would need a coordinated redeployment. The per-tx cap + vault daily cap combination covers the current threat model. | Design pass for V2 contracts; enable behind a new session-type flag for forward compatibility. |
+| Policy DSL expressiveness | Current policy engine supports typed rules: allow/block lists, spending caps, chain scopes, approval triggers, and rate limits. Complex compositions require multiple rules. | Not a security gap — policies cannot be bypassed, decisions are logged, and changes go through the audit chain. This is product scope. | Tracked on the product roadmap, not the security roadmap. |
+| Block-explorer source verification | None of the six testnet deployments currently have verified source on their respective block explorers (`verified: false` in [`packages/contracts/evm/deployments/testnet.json`](https://github.com/Veridex-Protocol/demo/blob/dev/packages/contracts/evm/deployments/testnet.json)). Bytecode matches the audited source in the repo, but independent verifiers cannot confirm this via the explorer today. | Source verification was blocked on multi-chain compiler/metadata parity across Sepolia-family and Monad explorers. It is a transparency gap, not an exploit path — the Hub only trusts deployments listed in the signed deployments manifest. | Verify all spokes on their explorers and flip `verified: true` in `testnet.json` before mainnet launch; mirror bytecode hashes on Sourcify. |

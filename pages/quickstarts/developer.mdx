@@ -10,73 +10,104 @@ Get from zero to a working session-backed request in five steps.
 ## Prerequisites
 
 - Node.js 18+ or Bun
-- A Veridex Developer Platform account
+- A browser supporting WebAuthn/Passkeys (Chrome 108+, Safari 16+, Firefox 118+)
+- A Veridex Developer Portal account — sign up at [app.veridex.network](https://app.veridex.network) (beta)
 
 ## Step 1: Install the SDK
 
 ```bash
-npm install @veridex/sdk
+npm install @veridex/sdk ethers
+# or
+bun add @veridex/sdk ethers
 ```
 
-## Step 2: Register Your App
+> Current published version: `@veridex/sdk@1.1.1`. The SDK targets the live EVM testnets today — Base Sepolia (hub), Ethereum Sepolia, Optimism Sepolia, Arbitrum Sepolia, Monad Testnet, and Polygon Amoy. Mainnet is not yet enabled.
 
-Sign in to the [Developer Platform](/platform) and register a new app. You'll receive an **API key** — copy it immediately (it's shown only once).
+## Step 2: Get a Relayer API Key (optional, enables gasless)
 
-Set it as an environment variable:
+1. Sign in to [app.veridex.network](https://app.veridex.network).
+2. Open the **Developer** tab → **API Keys**.
+3. Click **Create key**, pick a label, and copy the key — it is shown only once.
+4. Store it as an environment variable:
+
 ```bash
-export VERIDEX_API_KEY=vdx_...
+export VERIDEX_RELAYER_API_KEY=vdx_live_...
 ```
 
-## Step 3: Initialize the Client
+The API key is only required if you want the Veridex relayer to sponsor gas. Direct-to-chain usage works without one.
+
+## Step 3: Initialize the SDK
+
+The `createSDK` factory defaults to `testnet`. Pick a chain name; everything else has sane defaults.
 
 ```typescript
-import { VeridexClient } from '@veridex/sdk';
+import { createSDK } from '@veridex/sdk';
 
-const client = new VeridexClient({
-  apiKey: process.env.VERIDEX_API_KEY,
-  chain: 'base',          // or 'solana', 'ethereum'
-  rpcUrl: 'https://...',  // your chain RPC
+// Minimal: Base Sepolia, no relayer
+const sdk = createSDK('base');
+
+// Or with gasless relayer (testnet)
+const sdkWithRelayer = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://relayer.veridex.network',
+  relayerApiKey: process.env.VERIDEX_RELAYER_API_KEY,
 });
 ```
 
-## Step 4: Create a Session
+> `new VeridexClient({...})` is **not** a supported entry point. Always use `createSDK` (or one of the `createHubSDK` / `createSessionSDK` variants) so the SDK can resolve the correct contract addresses for each chain.
 
-Sessions are the core primitive. Each session is a scoped, time-limited authorization.
+## Step 4: Register a Passkey & Create a Session
+
+Session creation runs in the browser — it triggers a WebAuthn prompt on the user's device. Use the React hooks in [`@veridex/react`](/sdks/react) for a production flow; the snippet below shows the raw SDK calls.
 
 ```typescript
-const session = await client.createSession({
-  label: 'my-first-session',
-  spendingLimit: '100',        // 100 USDC max
-  validUntil: Date.now() + 3600_000, // 1 hour
+import { createSessionSDK, SessionManager } from '@veridex/sdk';
+import { ethers } from 'ethers';
+
+const sdk = createSessionSDK('base');
+const manager = new SessionManager({ sdk });
+
+// One-time Passkey registration
+await sdk.passkey.register('user@example.com', 'My Wallet');
+
+// Create a scoped, time-limited session key
+const session = await manager.createSession({
+  duration: 3600,                       // 1 hour
+  maxValue: ethers.parseEther('0.05'),  // per-tx cap — see note below
+  requireUV: true,
 });
 
-console.log('Session created:', session.sessionKeyHash);
+console.log('Session key hash:', session.sessionKeyHash);
 ```
 
-## Step 5: Execute a Request
+> **About `maxValue`.** The on-chain Hub accepts `maxValue: 0n` as "no per-tx limit — bounded only by the vault daily cap." That is deliberate, but for most apps it is a foot-gun: a compromised session key can drain the vault up to the daily cap. The SDK therefore throws when `maxValue === 0n` unless you explicitly set `allowUnboundedMaxValue: true` on the config. Prefer a finite `maxValue` sized to the largest single transaction you expect. See [Threat Model → Session Key Security](/security/threat-model) for the full rationale.
+
+## Step 5: Execute a Session-Authorized Transfer
 
 ```typescript
-const result = await client.execute({
-  session: session.sessionKeyHash,
-  action: {
-    type: 'transfer',
-    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
-    amount: '10',
-    token: 'USDC',
+const result = await manager.executeWithSession(
+  {
+    targetChain: 10005,                 // Optimism Sepolia Wormhole Chain ID
+    token: 'native',
+    recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
+    amount: ethers.parseEther('0.01'),
   },
-});
+  session,
+);
 
-console.log('Transaction:', result.txHash);
+console.log('Transaction:', result.transactionHash);
 ```
 
-## Verify in the Dashboard
+## Verify in the Developer Portal
 
-Open the Developer Platform and check:
-1. **Sessions** — your session appears with label and status
-2. **Activity** — the execution appears with transaction hash and timestamp
+Open [app.veridex.network](https://app.veridex.network) and check:
+1. **Sessions** — your session appears with label, expiry, and `maxValue`.
+2. **Activity** — the transfer appears with chain, transaction hash, and policy decision (`allowed`).
+3. **Policies** — any violations are surfaced here with the rule that blocked them.
 
 ## What's Next
 
 - [Multi-Session Management](/guides/multi-session) — manage multiple concurrent sessions
 - [Agent SDK](/sdks/agent) — build autonomous agents with session keys
 - [Session Studio](/platform/session-studio) — visual session management
+- [Threat Model](/security/threat-model) — what Veridex protects against (and what it does not)

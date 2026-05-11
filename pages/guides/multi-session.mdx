@@ -3,7 +3,13 @@ title: Multi-Session Management
 description: Create, list, label, and manage multiple concurrent sessions for apps and agents
 ---
 
+import { Callout } from 'nextra/components'
+
 # Multi-Session Management
+
+<Callout type="warning" emoji="⚠️">
+**API drift — rewrite in progress.** The `VeridexClient` examples on this page do not match the published SDK (`@veridex/sdk@1.1.1`). The real entry point is `createSDK` / `createSessionSDK`, and session lifecycle runs through `SessionManager`. See the [Developer Quickstart](/quickstarts/developer) for the current API. This guide is being rewritten; use the Core SDK snippets only as a conceptual reference until then.
+</Callout>
 
 Veridex supports multiple concurrent sessions per app and per agent. This guide covers when to use multiple sessions, how to manage them with both the Core SDK and Agent SDK, and patterns for production use.
 

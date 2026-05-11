@@ -62,16 +62,15 @@ Veridex uses a hub-and-spoke model for cross-chain operations.
 ```mermaid
 flowchart TD
     Hub["Base (Hub + Spoke)\nPasskey Registry + Vault"]
-    Hub -- "Wormhole" --> Eth["Ethereum\nVault"]
+    Hub -- "Wormhole" --> Eth["Ethereum Sepolia\nVault"]
     Hub -- "Wormhole" --> Op["Optimism\nVault"]
     Hub -- "Wormhole" --> Arb["Arbitrum\nVault"]
-    Hub -- "Wormhole" --> Sei["Sei\nVault"]
-    Hub -- "Wormhole" --> Apt["Aptos\nVault"]
-    Hub -- "Wormhole" --> Sui["Sui\nVault"]
-    Hub -- "Wormhole" --> Sol["Solana\nVault"]
-    Hub -- "Wormhole" --> Stark["Starknet\nVault"]
-    Hub -- "Direct Relay" --> Stx["Stacks\nVault"]
+    Hub -- "Wormhole" --> Mon["Monad\nVault"]
+    Hub -- "Wormhole" --> Poly["Polygon Amoy\nVault"]
+    Hub -. "Planned (Hub-dispatched)" .-> NonEVM["Solana / Aptos / Sui / Starknet / Stacks"]
 ```
+
+> Live testnet deployments today: Base Sepolia (hub), Ethereum Sepolia, Optimism Sepolia, Arbitrum Sepolia, Monad Testnet, Polygon Amoy. Non-EVM spokes are wired through Hub-dispatched Wormhole messages; direct client dispatch on Solana/Aptos/Sui/Starknet/Stacks is not yet supported.
 
 ### Hub (Base)
 

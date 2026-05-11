@@ -7,7 +7,11 @@ import { Callout, Steps, Step } from '../../components/mdx'
 
 # Data Sovereignty
 
-The Veridex agent framework detects PII in tool arguments and enforces jurisdictional transfer rules, ensuring compliance with GDPR, CCPA, PIPEDA, and other data protection regulations.
+<Callout type="warning">
+**Roadmap item — `dataSovereigntyPack` is not yet shipped in `@veridex/agent-security`.** The tool-level `piiTags` field described below is live and already respected by custom packs, but the out-of-the-box jurisdictional pack is still in design. Use the pattern shown here to plan integrations; approximate enforcement today with `secretDetectionPack` plus a hand-rolled `SecurityPack`.
+</Callout>
+
+The Veridex agent framework is designed to detect PII in tool arguments and enforce jurisdictional transfer rules, helping teams align with GDPR, CCPA, PIPEDA, and other data protection regulations.
 
 ## Overview
 

@@ -3,92 +3,90 @@ title: Security Audits
 description: Veridex security audit information and reports
 ---
 
+import { Callout } from 'nextra/components'
+
 # Security Audits
 
-Information about Veridex security audits, bug bounty program, and security practices.
+Information about Veridex security reviews, bug bounty program, and security practices.
+
+<Callout type="warning" emoji="⚠️">
+**Testnet only.** Veridex contracts are currently deployed to six EVM testnets (Base Sepolia, Optimism Sepolia, Arbitrum Sepolia, Ethereum Sepolia, Monad Testnet, Polygon Amoy). **No contracts are deployed to mainnet, and none of the testnet deployments are explorer-verified yet** (see [Threat Model — Known Gaps](/security/threat-model)). A clean third-party audit report is a hard gate before any mainnet launch — see the [Threat Model](/security/threat-model) for current trust boundaries.
+</Callout>
 
 ## Audit Status
 
-| Component | Auditor | Status | Date |
-|-----------|---------|--------|------|
-| Smart Contracts | TBD | Planned | Q1 2025 |
-| SDK | Internal | Ongoing | - |
-| Relayer | Internal | Ongoing | - |
+| Component | Reviewer | Scope | Status |
+|-----------|----------|-------|--------|
+| SDK (`@veridex/sdk`) | Internal | Signing, VAA construction, relayer client, session key storage | Continuous internal review |
+| Relayer (`@veridex/relayer`) | Internal | API auth, policy engine, signature verification, replay protection | Continuous internal review |
+| Agent Runtime (`@veridex/agents`) | Internal | Policy enforcement, tool safety classes, budget engine | Continuous internal review |
 
-## Planned Audits
 
-### Smart Contract Audit
+## Focus Areas
 
-We are planning a comprehensive audit of our EVM smart contracts:
+**EVM Contracts**
+- P-256 / secp256r1 Passkey signature verification (`WebAuthn.sol`)
+- Session key registration, revocation, and per-tx value bounds
+- Wormhole VAA authenticity and replay protection
+- Account abstraction and vault ownership transitions
+- Reentrancy, access control, and storage layout safety
 
-**Scope:**
-- VaultFactory.sol
-- PasskeyVault.sol
-- Paymaster.sol
-- Session key management
-- Cross-chain bridge integration
+**SDK**
+- WebAuthn credential handling and origin pinning
+- Session key storage (browser, React Native, Node)
+- Deterministic transaction construction
+- Relayer client retry and failure isolation
 
-**Focus Areas:**
-- Passkey signature verification (P-256/secp256r1)
-- Account abstraction implementation
-- Session key constraints
-- Cross-chain message handling
-- Reentrancy protection
-- Access control
-
-### SDK Security Review
-
-**Scope:**
-- WebAuthn credential handling
-- Signature generation
-- Transaction construction
-- State management
+**Relayer**
+- API key authentication and rate limiting
+- Policy engine evaluation and cumulative budget tracking
+- VAA signature verification before submission
+- Audit log integrity
 
 ## Security Practices
 
 ### Development
 
-- **Code Review**: All code changes require peer review
-- **Testing**: Comprehensive unit and integration tests
-- **Static Analysis**: Automated security scanning
-- **Dependencies**: Regular dependency audits and updates
+- **Code Review**: All changes require peer review; security-sensitive changes require a second reviewer.
+- **Testing**: Unit, integration, and fuzz tests (see [`packages/contracts/evm/test/`](https://github.com/Veridex-Protocol/demo/tree/dev/packages/contracts/evm/test)).
+- **Static Analysis**: Slither, solhint, and ESLint run in CI on every PR.
+- **Dependencies**: Weekly automated audits of npm and Foundry dependencies.
 
 ### Cryptography
 
-- **P-256 (secp256r1)**: Standard curve used by WebAuthn
-- **No custom cryptography**: Using well-audited libraries
-- **Secure random**: Platform-provided secure random number generation
+- **P-256 (secp256r1)**: WebAuthn-standard curve for Passkey signatures.
+- **No custom cryptography**: All primitives come from audited libraries (OpenZeppelin, Wormhole SDK, @simplewebauthn).
+- **Secure random**: Platform-provided CSPRNGs only.
 
 ### Infrastructure
 
-- **HTTPS only**: All API communication encrypted
-- **Rate limiting**: Protection against abuse
-- **Monitoring**: Real-time security monitoring
-- **Incident response**: Documented incident response plan
+- **TLS 1.3** on all public endpoints.
+- **API-key rate limiting** at the relayer edge.
+- **Structured audit logging** with tamper-evident hash chaining (see [Threat Model](/security/threat-model)).
+- **Documented incident response** with 24-hour acknowledgement SLA.
 
 ## Bug Bounty Program
 
-### Overview
+<Callout type="info" emoji="🐞">
+The formal bounty program launches alongside the Trail of Bits report. Until then, we pay discretionary bounties for valid findings — email `security@veridex.network` with a PoC and we will respond within 24 hours.
+</Callout>
 
-We are launching a bug bounty program to reward security researchers who help us identify vulnerabilities.
+### Planned Scope (post-mainnet)
 
-**Status:** Coming Soon
-
-### Scope (Planned)
-
-**In Scope:**
+**In Scope**
 - Smart contracts on mainnet
 - SDK security issues
 - Relayer API vulnerabilities
 - Cross-chain bridge logic
+- Agent runtime policy bypasses
 
-**Out of Scope:**
+**Out of Scope**
 - Third-party services
 - Social engineering
-- DoS attacks
-- Issues already reported
+- DoS / volumetric attacks
+- Issues already publicly disclosed
 
-### Rewards (Planned)
+### Planned Rewards
 
 | Severity | Reward |
 |----------|--------|
@@ -96,6 +94,8 @@ We are launching a bug bounty program to reward security researchers who help us
 | High | Up to $20,000 |
 | Medium | Up to $5,000 |
 | Low | Up to $1,000 |
+
+Severity is determined by Veridex using the Immunefi classification system. Interim discretionary bounties use the same table, prorated for testnet scope.
 
 ### Responsible Disclosure
 
@@ -164,9 +164,13 @@ flowchart TD
 
 ### Standards
 
-- **WebAuthn Level 2**: W3C standard for web authentication
-- **FIDO2**: Cross-platform authentication standard
-- **EIP-4337**: Account abstraction standard
+Veridex implements against — but has not yet been formally certified for — the following standards:
+
+- **WebAuthn Level 2** (W3C): web authentication and passkey signature verification
+- **FIDO2**: cross-platform authentication
+- **EIP-4337**: account abstraction
+
+Conformance claims will be updated once third-party certification is complete.
 
 ### Privacy
 

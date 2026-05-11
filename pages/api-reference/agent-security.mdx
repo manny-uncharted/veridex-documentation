@@ -101,7 +101,7 @@ const reporter = new TelemetryReporter({
 
 ### `createDefaultPacks()`
 
-Returns all 12 built-in packs with default configuration.
+Returns the 9 packs recommended for the default set. `endpointAllowlistPack` is exported separately because it requires an explicit `allowedEndpoints` option.
 
 ```typescript
 const packs: SecurityPack[] = createDefaultPacks();
@@ -116,12 +116,11 @@ const packs: SecurityPack[] = createDefaultPacks();
 | `secretDetectionPack(options?)` | Pack detecting leaked secrets |
 | `budgetCeilingPack(options?)` | Pack enforcing spend limits |
 | `shellCommandSafetyPack(options?)` | Pack blocking dangerous shell commands |
-| `endpointAllowlistPack(options?)` | Pack restricting HTTP endpoints |
+| `endpointAllowlistPack(options)` | Pack restricting HTTP endpoints (requires `allowedEndpoints`) |
 | `handoffSafetyPack(options?)` | Pack validating agent handoffs |
 | `financialSafetyPack(options?)` | Pack enforcing financial limits |
 | `crossTurnAnomalyPack(options?)` | Pack detecting behavioral anomalies |
 | `llmResponseGuardPack(options?)` | Pack filtering model responses |
-| `dataSovereigntyPack(options)` | Pack enforcing jurisdictional compliance |
 
 ### `SecurityPack` Interface
 
@@ -137,6 +136,8 @@ interface SecurityPack {
 ---
 
 ## `dataSovereigntyPack` Options
+
+> **Planned API — not shipped.** `dataSovereigntyPack` is a roadmap item and is not currently exported from `@veridex/agent-security`. The types below reflect the designed shape so integrators can prepare.
 
 ```typescript
 interface DataSovereigntyPackOptions {
