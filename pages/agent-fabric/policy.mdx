@@ -1,0 +1,139 @@
+---
+title: Policy
+description: Priority-ordered, replayable rules — guardrails that survive audit.
+---
+
+# Policy
+
+Guardrails as a prompt block (`"Don't transfer more than $1000"`) are bypassable by anyone who reads a prompt-injection paper. Guardrails as an ACL ("tools = [a, b, c]") can't express the rules compliance actually writes ("transfers over $10k between 6pm–6am UTC require dual approval"). Veridex's answer is a **PolicyEngine** that evaluates every consequential proposal against a **priority-ordered list of pure rules**.
+
+## A rule is a function
+
+```ts
+import { policyRule } from '@veridex/agents';
+
+const businessHoursOnlyForLargeTransfers = policyRule({
+  id: 'large-transfer-business-hours',
+  priority: 10,
+  evaluate(ctx) {
+    if (ctx.proposal.kind !== 'tool') return { kind: 'allow' };
+    if (ctx.proposal.contract.safetyClass !== 'financial') return { kind: 'allow' };
+    const amount = BigInt(ctx.proposal.arguments.amount ?? '0');
+    if (amount < 10_000_00n) return { kind: 'allow' };
+    const hour = new Date().getUTCHours();
+    if (hour < 13 || hour >= 21) {
+      return { kind: 'escalate', route: 'dual_approval',
+        reason: 'Large transfers outside business hours require dual approval.' };
+    }
+    return { kind: 'allow' };
+  },
+});
+```
+
+Three verdicts:
+
+- **`allow`** — proceed.
+- **`deny`** — abort the proposal; the model sees a structured error and may retry or apologise.
+- **`escalate`** — route to the [ApprovalManager](./approvals); the run suspends and checkpoints.
+
+## Priority ordering
+
+Rules evaluate in priority order. **First non-allow wins.** Deny short-circuits everything. Escalate short-circuits unless a later deny exists.
+
+```ts
+const agent = createAgent({
+  name: '...', instructions: '...', tools: [...],
+  policies: [
+    sanctionsBlock,                 // priority 1   — deny if counterparty sanctioned
+    counterpartyListCheck,          // priority 5
+    chainAllowlist,                 // priority 8
+    maxPerTransfer,                 // priority 10
+    spendCeilings,                  // priority 15
+    businessHoursOnlyForLargeTransfers, // priority 20
+    timeLockTrigger,                // priority 25
+    reputationFloor,                // priority 30
+  ],
+});
+```
+
+Veridex lints obviously-shadowed rules at registration time ("`blockSafetyClass('financial')` at priority 100 will never fire — `requireApproval` at priority 10 escalates first").
+
+## Policy packs
+
+Versioned bundles of rules ship as packs. Example: `@veridex/agents-treasury` ships the treasury pack:
+
+```ts
+import { treasuryPolicyPack } from '@veridex/agents-treasury';
+
+const agent = createAgent({
+  name: 'treasury-bot',
+  tools: [...],
+  policies: treasuryPolicyPack({
+    sanctions:     compositeScreener,
+    ceilings:      ceilingsStore,
+    timeLock:      timeLockManager,
+    reputation:    sbtProvider,
+    dualApprovalAbove: { amountUsdMicro: 10_000_000_000n },
+  }),
+});
+```
+
+The control plane ([ADR-0061](/agent-fabric/adrs/0061-multi-tenancy-control-plane)) composes packs per tenant and versions them. Operators can stage rollouts (canary → 10% → full) and diff pack versions in a UI.
+
+## Pure rules + side-effecting pre-checks
+
+`PolicyRule.evaluate` is **pure**. Side-effecting checks (sanctions API, KYC) are performed by `beforePolicy` hooks that stamp `ctx.metadata`:
+
+```ts
+hooks: {
+  async beforePolicy(ctx) {
+    if (ctx.proposal.kind === 'tool' && ctx.proposal.name === 'transfer') {
+      const screening = await sanctionsApi.check(ctx.proposal.arguments.to);
+      ctx.metadata.sanction = screening; // rules read this
+    }
+  },
+},
+```
+
+The rule reads the stamped result; replays are deterministic given the recorded context.
+
+## Built-in factories
+
+```ts
+import {
+  blockSafetyClass, requireApproval, capSpend, capTokens,
+  restrictTimeWindow, rateLimit, denylist, allowlist,
+} from '@veridex/agents/policy';
+
+policies: [
+  blockSafetyClass('privileged'),
+  capSpend({ window: 'day', usdMicro: 1_000_000_000n, scope: 'tenant' }),
+  rateLimit({ tool: 'fetch_url', perMinute: 30 }),
+  requireApproval({ when: ctx => ctx.proposal.kind === 'tool'
+                              && ctx.proposal.contract.safetyClass === 'financial' }),
+],
+```
+
+## Every decision is auditable
+
+Every evaluation emits a `policy_decision` event:
+
+```jsonc
+{
+  "type": "policy_decision",
+  "payload": {
+    "ruleId": "large-transfer-business-hours",
+    "verdict": { "kind": "escalate", "route": "dual_approval", "reason": "..." },
+    "proposalId": "...",
+    "evidence": { "amount": "1500000", "hourUtc": 22 }
+  }
+}
+```
+
+Replay-based tests assert specific verdicts; golden traces catch regressions.
+
+## Related
+
+- [ADR-0053](/agent-fabric/adrs/0053-policy-engine-rule-composition)
+- [Approvals](./approvals)
+- [Treasury policy pack](./treasury/policy)

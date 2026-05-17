@@ -1,0 +1,62 @@
+---
+title: ADR-0063 · Monorepo Package Split
+description: Seven sharply-scoped packages — core, React, adapters, OpenClaw, control plane, security, treasury — that depend down, never sideways.
+---
+
+# ADR-0063 · Monorepo Package Split
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Single-package frameworks (LangChain) become impossible to evolve — every change risks every
+consumer. Over-fragmented monorepos lose coherence — every feature requires picking five
+packages. The Agent Fabric needs a split that mirrors the architecture (core, presentation,
+interop, governance, capability) and lets users adopt incrementally.
+
+## Decision
+
+Seven packages with sharply defined responsibilities:
+
+| Package | Responsibility | Depends on |
+|---|---|---|
+| **`@veridex/agents`** | Core runtime: tools, hooks, memory, context compiler, policy, approvals, checkpoints, events, sandbox, transports, evals | — |
+| **`@veridex/agents-react`** | React provider + focused hooks; SSE/WebSocket client | `agents` (types only) |
+| **`@veridex/agents-adapters`** | Import / export for OpenAI, LangGraph, PydanticAI, OpenAPI; live bridges | `agents` |
+| **`@veridex/agents-openclaw`** | OpenClaw / Pi-style context files & skills bridge | `agents` |
+| **`@veridex/agents-control-plane`** | Multi-tenancy, policy packs, approval workflows, durable trace storage, fleet API | `agents` |
+| **`@veridex/agent-security`** | Framework-agnostic security gateway, packs (injection, tool poisoning, secrets, endpoint allowlist, budget, shell safety, handoff), LangChain/CrewAI adapters | `agents` |
+| **`@veridex/agents-treasury`** | Money-movement capability layer: idempotency, ceilings, time-lock, sanctions, evidence bundles, treasury policy pack, red-team eval suite | `agents`, optionally `agentic-payments` |
+
+### Rules
+
+1. **Core is dependency-free** (apart from `zod` and a tokenizer). It must run in Node, Bun,
+   Deno, and Edge runtimes.
+2. **Packages depend down, never sideways.** `agents-treasury` depends on `agents`;
+   `agents-react` depends on `agents` types only.
+3. **Subpath exports.** Each package exposes its surface via subpaths
+   (`@veridex/agents/policy`, `@veridex/agents/tools`, …) so tree-shaking is real.
+4. **Capability packages are plugins.** `agents-treasury`, `agent-security` register tools,
+   policies, and hooks via the `RuntimePlugin` contract — no monkey-patching, no global state.
+5. **One README + one entry in the public docs per package.** The split must be legible to a
+   new developer.
+
+### What is intentionally *not* in core
+
+- Payments (lives in `agents-treasury` / `agentic-payments`).
+- React (lives in `agents-react`).
+- Multi-tenancy / fleet admin (lives in `agents-control-plane`).
+- Specific security packs beyond the runtime PEP (live in `agent-security`).
+
+## Consequences
+
+**Positive.** A developer can start with `@veridex/agents` alone and add capabilities as
+needed. Releases are independent; a control-plane change does not version-bump the core. The
+split mirrors the architecture, so docs and code stay coherent.
+
+**Negative.** Seven packages is more to publish, version, and document — mitigated by shared
+tooling (tsup, vitest, changesets).
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0063-monorepo-package-split.md`

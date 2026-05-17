@@ -1,0 +1,34 @@
+---
+title: Agent Fabric ADR Index
+description: Public-facing summaries of the architectural decisions behind the Veridex Agent Fabric.
+---
+
+# Architectural Decision Records
+
+These ADRs document the load-bearing decisions behind the Veridex Agent Fabric — why the runtime
+is event-sourced, why context is a budgeted resource, why memory has tiers, how the policy and
+approval systems compose, and how the monorepo is split.
+
+The pages here are **public, sanitised summaries**. Each one ends with a link to the original
+ADR in the internal `docs/architecture/decisions/` tree for teams who want the full reasoning,
+alternatives, and references.
+
+| # | Title | Topic |
+|---|---|---|
+| [0049](./0049-event-sourced-runtime-loop) | Event-Sourced, Policy-Gated Runtime Loop | Runtime |
+| [0050](./0050-context-compilation-effective-window) | Context Compilation & the Effective Window $V_e$ | Context |
+| [0051](./0051-tiered-memory-lifecycle) | Tiered Memory with Homeostatic Lifecycle | Memory |
+| [0052](./0052-tool-sandboxing-and-safety-classes) | Tool Sandboxing & Safety Classes | Tools |
+| [0053](./0053-policy-engine-rule-composition) | Policy Engine — Priority-Ordered Rule Composition | Policy |
+| [0054](./0054-approvals-checkpoint-resume) | Human-in-the-Loop Approvals with Checkpoint/Resume | Approvals |
+| [0055](./0055-checkpoint-persistence-resumability) | Checkpoint Persistence & Resumability | Durability |
+| [0056](./0056-immutable-event-log-signed-audit) | Immutable Event Log & Signed Audit Emitter | Audit |
+| [0057](./0057-mcp-transport-security-hardening) | MCP Transport Security Hardening | Transports |
+| [0058](./0058-a2a-acp-transport-design) | A2A & ACP Transport Design | Transports |
+| [0059](./0059-react-hooks-architecture) | React Hooks Architecture | UI |
+| [0060](./0060-framework-adapter-strategy) | Framework Adapter Strategy | Interop |
+| [0061](./0061-multi-tenancy-control-plane) | Multi-Tenancy & Control Plane | Governance |
+| [0062](./0062-stateful-evaluation-harness) | Stateful Evaluation Harness | Quality |
+| [0063](./0063-monorepo-package-split) | Monorepo Package Split | Packaging |
+
+All decisions are **Accepted** unless otherwise noted on the individual page.

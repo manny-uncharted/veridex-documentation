@@ -1,0 +1,46 @@
+---
+title: Veridex vs LlamaIndex
+description: Indexes vs agents.
+---
+
+# Veridex vs LlamaIndex
+
+LlamaIndex is the best-in-class **data framework** for LLMs. It excels at building indexes, retrieval pipelines, and Q&A over documents. It is **not** primarily an agent framework.
+
+| Dimension | LlamaIndex | Veridex |
+|---|---|---|
+| Primary purpose | Index + retrieval | Agent runtime |
+| Tools | Yes, but secondary | First-class typed contracts |
+| Policy | Ad-hoc | Engine + packs |
+| Memory | Index-shaped | Tiered + reconciler |
+| Approvals | None | First-class |
+| Audit | Logs | Hash-chained, signed bundles |
+
+## Compose them
+
+LlamaIndex sits behind a Veridex tool:
+
+```ts
+import { tool } from '@veridex/agents';
+import { z } from 'zod';
+// import { VectorStoreIndex, Settings } from 'llamaindex';
+
+const search = tool({
+  name: 'search_kb',
+  safetyClass: 'read',
+  description: 'Search the corporate knowledge base.',
+  input:  z.object({ q: z.string() }),
+  output: z.object({ chunks: z.array(z.string()) }),
+  async execute({ input }) {
+    const result = await llamaIndexQuery(input.q); // returns chunks
+    return { success: true, llmOutput: { chunks: result } };
+  },
+});
+```
+
+The agent gets retrieval; we keep the governance, sandbox, audit.
+
+## Choose
+
+- **Just retrieval / RAG?** LlamaIndex.
+- **Agentic workflow with retrieval as one tool?** Veridex + LlamaIndex behind a tool.

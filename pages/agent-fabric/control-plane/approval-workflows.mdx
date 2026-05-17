@@ -1,0 +1,72 @@
+---
+title: Approval Workflows
+description: Escalation chains, SLAs, on-call rotation.
+---
+
+# Approval Workflows
+
+Approval routes (set per-tool or per-rule) can resolve to **workflows** managed by the control plane. A workflow is a sequence of tiers; each tier has approvers, an SLA, and a fallback.
+
+## Define a workflow
+
+```ts
+await cp.workflows.create({
+  id: 'treasury-high-value',
+  tenantId: 'acme-corp',
+  tiers: [
+    {
+      id: 'tier1',
+      approvers: { role: 'treasury-ops', count: 1 },
+      slaMinutes: 30,
+      onTimeout: 'escalate',
+    },
+    {
+      id: 'tier2',
+      approvers: { role: 'cfo', count: 1 },
+      slaMinutes: 240,
+      onTimeout: 'escalate',
+    },
+    {
+      id: 'tier3',
+      approvers: { role: 'board', count: 2, disjoint: true },
+      slaMinutes: 1440,
+      onTimeout: 'deny',
+    },
+  ],
+  notifications: {
+    channels: ['email', 'slack'],
+    breachAlerts: { afterMinutes: 60, to: 'on-call' },
+  },
+});
+```
+
+## Use it
+
+```ts
+const tool = tool({
+  name: 'transfer',
+  approval: { route: 'policy_pack', pack: 'treasury-high-value' },
+  // ...
+});
+```
+
+Or via a rule:
+
+```ts
+policyRule({
+  id: 'big-transfer',
+  evaluate(ctx) {
+    if (amountFrom(ctx) >= 100_000_00n)
+      return { kind: 'escalate', route: 'policy_pack:treasury-high-value' };
+    return { kind: 'allow' };
+  },
+});
+```
+
+## SLA monitoring
+
+The control plane tracks median time-to-decide, breach count, and outstanding queues per tier. The React inbox surfaces SLAs in approver UIs.
+
+## Audit trail
+
+Every tier outcome emits an `approval_resolved` event; the full chain is part of the Evidence Bundle when the workflow finishes.

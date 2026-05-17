@@ -1,0 +1,60 @@
+---
+title: Ceilings
+description: Rolling-window spend ceilings — probe before, record after.
+---
+
+# Ceilings
+
+`SpendCeilings` enforces rolling-window spend limits across `hour | day | month | lifetime`, scoped by an aggregation key (agent id, app id, session key, route, etc.). The treasury policy pack probes ceilings before a transfer is allowed and records the amount after the transfer succeeds.
+
+## Configure
+
+```ts
+import { SpendCeilings } from '@veridex/agents-treasury';
+
+const ceilings = new SpendCeilings([
+  { window: 'day',   currency: 'USDC', decimals: 6, limit: '50000000000' },   // $50,000
+  { window: 'month', currency: 'USDC', decimals: 6, limit: '500000000000' },  // $500,000
+]);
+
+// Add or replace a limit at runtime:
+ceilings.setLimit({ window: 'hour', currency: 'USDC', decimals: 6, limit: '5000000000' });
+```
+
+Limits are stored as **string-encoded integers in the asset's smallest unit**. `Money` values flowing through the kit use the same representation, so no floating-point math touches the ceiling path.
+
+## Probe and record
+
+```ts
+import type { CeilingProbe } from '@veridex/agents-treasury';
+
+const probe: CeilingProbe = {
+  scope: 'finance-bot',
+  amount: { currency: 'USDC', decimals: 6, value: '25000000000' }, // $25,000
+};
+
+const verdict = ceilings.probe(probe);
+if (!verdict.allowed) {
+  return { kind: 'deny', reason: verdict.reason };
+}
+
+// Only after the underlying transfer succeeds:
+ceilings.record(probe);
+```
+
+The treasury policy pack wires `probe` into rule evaluation and `record` into the post-execution hook of the transfer tool. You write the limits, not the bookkeeping.
+
+## Pluggable storage
+
+The default `SpendCeilings` is in-memory and intended for single-process use. For production deployments, implement the same `probe` / `record` / `setLimit` shape against Postgres, Redis, or another transactional store and pass it to `createTreasuryKit` in place of the default.
+
+## React inspector
+
+```tsx
+import { useBudget } from '@veridex/agents-react';
+// Renders current utilisation per (scope, currency, window).
+```
+
+## Audit
+
+Every probe outcome and every `record` call surfaces as an event on the run trace and, when an evidence bundle is sealed for a transfer, the ceiling state is captured in the bundle.

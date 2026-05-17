@@ -1,0 +1,10 @@
+{
+  "overview": "Overview",
+  "agents-core": "@veridex/agents",
+  "agents-react": "@veridex/agents-react",
+  "agents-adapters": "@veridex/agents-adapters",
+  "agents-openclaw": "@veridex/agents-openclaw",
+  "agents-control-plane": "@veridex/agents-control-plane",
+  "agent-security": "@veridex/agent-security",
+  "agents-treasury": "@veridex/agents-treasury"
+}

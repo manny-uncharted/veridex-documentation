@@ -1,0 +1,64 @@
+---
+title: Context Files
+description: Declarative, versioned bundles of personas, instructions, and tools.
+---
+
+# Context Files
+
+A **context file** is a JSON/YAML bundle that declares a reusable agent capability — persona, instructions, tool references, default skills.
+
+## Schema
+
+```jsonc
+{
+  "version": 1,
+  "name": "research-agent",
+  "persona": "You are a careful researcher who cites sources.",
+  "instructions": "Use search_web first, then synthesise.",
+  "tools": [
+    { "$ref": "veridex:tools/search_web" },
+    { "$ref": "veridex:tools/summarise" }
+  ],
+  "skills": [
+    { "id": "deep-research", "default": true },
+    { "id": "code-review",   "default": false }
+  ],
+  "memory": { "semantic": { "namespace": "research" } },
+  "signature": "ed25519:..."
+}
+```
+
+## Loading
+
+```ts
+import { loadContextFile } from '@veridex/agents-openclaw';
+
+const ctx = await loadContextFile('./research.openclaw.yaml', {
+  verifySignature: true,
+  trustedKeys: [opsPublicKey],
+});
+```
+
+Unsigned or untrusted context files are accepted only in `dev` mode; production refuses to load them.
+
+## Hot reload
+
+```ts
+const handle = await ctx.attach(agent);
+// later:
+await ctx.reload();
+```
+
+Tool changes are validated against the PEP; new tools must pass the same ingress checks as MCP imports.
+
+## Composition
+
+```ts
+import { mergeContexts } from '@veridex/agents-openclaw';
+
+const merged = mergeContexts([baseCtx, treasuryCtx, complianceCtx], {
+  conflictResolution: 'last-wins-with-warning',
+});
+```
+
+Conflicting persona/instructions surface as warnings; conflicting tool names raise an error (homoglyph and case-folded check).

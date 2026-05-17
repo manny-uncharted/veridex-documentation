@@ -1,0 +1,43 @@
+---
+title: Veridex vs OpenAI Agents SDK
+description: A provider SDK vs a runtime.
+---
+
+# Veridex vs OpenAI Agents SDK
+
+The OpenAI Agents SDK is a **provider SDK** that wraps OpenAI's function-calling loop with handoffs and a UI runner. It is tightly coupled to OpenAI's models.
+
+| Dimension | OpenAI Agents SDK | Veridex |
+|---|---|---|
+| Provider | OpenAI-only | Multi-provider via `ModelProvider` |
+| Tools | OpenAI function schema | Typed contract + safety class + sandbox |
+| Policy | None | Engine + packs |
+| Memory | Minimal | Tiered + reconciler |
+| Approvals | None | First-class |
+| Checkpoints | Run-thread (OpenAI-side) | Differential, durable, portable |
+| Audit | OpenAI trace UI | Hash-chained, signed, portable |
+| Adversarial proofs | None | Built-in |
+| Self-host | No (OpenAI infra) | Yes |
+
+## Compose
+
+A Veridex agent can call an OpenAI Assistant as a tool, or an Assistant can hand off to Veridex via the adapter:
+
+```ts
+import { handoffToVeridex } from '@veridex/agents-adapters/openai';
+
+case 'process_payment':
+  return handoffToVeridex({ agent: treasuryAgent, input: args.userIntent });
+```
+
+## When to use the OpenAI SDK
+
+- OpenAI-only, simple workflows.
+- Prototypes that benefit from the Assistants UI.
+
+## When to use Veridex
+
+- Multi-provider (OpenAI + Anthropic + open-source models).
+- Compliance requirements.
+- Multi-tenant.
+- Adversarial threats.

@@ -1,0 +1,139 @@
+---
+title: Hooks Reference
+description: Full signatures for every hook in @veridex/agents-react.
+---
+
+# Hooks Reference
+
+## `useRun`
+
+Submit input to an agent and observe the run.
+
+```ts
+function useRun(opts?: {
+  agentId?: string;
+  runId?: string;                  // attach to an existing run
+}): {
+  status: 'idle' | 'running' | 'suspended' | 'completed' | 'failed';
+  output: string;                  // streamed tokens
+  runId?: string;
+  approvalId?: string;             // present when status === 'suspended'
+  error?: Error;
+  submit(input: string, options?: { metadata?: Record<string, unknown> }): Promise<void>;
+  resume(runId: string, approvalId: string, decision: ApprovalDecision): Promise<void>;
+  cancel(): Promise<void>;
+};
+```
+
+## `useApprovals`
+
+```ts
+function useApprovals(opts?: {
+  scope?: { tenantId?: string; userId?: string; mine?: boolean };
+  status?: 'pending' | 'all';
+}): {
+  pending: ApprovalRequest[];
+  decide(id: string, decision: ApprovalDecision): Promise<void>;
+  refresh(): Promise<void>;
+};
+```
+
+`ApprovalRequest` carries the full proposal envelope, the rule that triggered, and a filtered chain of agent reasoning leading up to the request.
+
+## `useTrace`
+
+```ts
+function useTrace(opts: {
+  runId: string;
+  types?: TraceEventType[];        // filter
+  since?: string;                  // event id
+}): {
+  events: TraceEvent[];
+  paused: boolean;
+  pause(): void;
+  resume(): void;
+};
+```
+
+## `useMemory`
+
+```ts
+function useMemory(opts: {
+  tier?: 'working' | 'episodic' | 'semantic' | 'procedural';
+  scope?: { tenantId?: string };
+  q?: string;
+}): {
+  entries: MemoryEntry[];
+  promote(id: string, opts?: { toTier?: 'semantic' | 'procedural'; confidence?: number }): Promise<void>;
+  revoke(id: string, reason: string): Promise<void>;
+  pin(id: string): Promise<void>;
+};
+```
+
+## `useContextHealth`
+
+```ts
+function useContextHealth(opts: { runId: string }): {
+  V_e: number;
+  totalTokens: number;
+  utilisation: number;             // 0..1
+  sections: Record<string, number>;
+  lastActions: CompressionAction[];
+};
+```
+
+## `useSkills`
+
+```ts
+function useSkills(opts?: { runId?: string }): {
+  available: SkillDescriptor[];
+  enabled: string[];
+  enable(skillId: string): Promise<void>;
+  disable(skillId: string): Promise<void>;
+};
+```
+
+## `useBudget`
+
+```ts
+function useBudget(opts: {
+  scope: { runId?: string; tenantId?: string; window?: 'run' | 'hour' | 'day' | 'month' };
+}): {
+  tokensIn: number;
+  tokensOut: number;
+  dollars: number;
+  toolCalls: number;
+  byTool: Record<string, { calls: number; dollars: number }>;
+};
+```
+
+## `useCheckpoint`
+
+```ts
+function useCheckpoint(opts: { runId: string }): {
+  checkpoints: CheckpointMeta[];
+  current?: CheckpointMeta;
+  restore(checkpointId: string): Promise<{ runId: string }>;
+};
+```
+
+## `useSandboxStatus`
+
+```ts
+function useSandboxStatus(opts?: { runId?: string }): {
+  running: Array<{ toolName: string; startedAt: string; cpuMs: number; memoryMb: number }>;
+  totals: { cpuMs: number; memoryMbPeak: number };
+};
+```
+
+## `useAgent` (aggregator)
+
+A convenience hook for simple cases — wraps `useRun` + `useApprovals` + `useBudget`.
+
+```ts
+function useAgent(): {
+  run: ReturnType<typeof useRun>;
+  approvals: ReturnType<typeof useApprovals>;
+  budget: ReturnType<typeof useBudget>;
+};
+```

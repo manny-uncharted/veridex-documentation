@@ -1,0 +1,43 @@
+---
+title: OpenClaw — Overview
+description: Pi-style context files, skills, and ACP interop for Veridex.
+---
+
+# `@veridex/agents-openclaw`
+
+OpenClaw / Pi-style **context files** and **skills**, plus ACP transport polish. This package gives Veridex first-class compatibility with the OpenClaw ecosystem while keeping every ingress under our PEP and sandbox.
+
+```bash
+npm install @veridex/agents-openclaw
+```
+
+## What's inside
+
+- **Context files**: declarative bundles of personas, instructions, and tools that can be hot-loaded into a run.
+- **Skills**: progressive-disclosure tool bundles toggled per-turn via `skill_manage`.
+- **ACP**: signed-envelope routing as a peer to MCP/A2A.
+
+## Quick start
+
+```ts
+import { loadContextFile, skillRegistry } from '@veridex/agents-openclaw';
+
+const ctx = await loadContextFile('./contexts/research.openclaw.json');
+
+const agent = createAgent({
+  name: ctx.name,
+  instructions: ctx.instructions,
+  tools: ctx.tools,
+  skills: skillRegistry(ctx.skills),
+});
+```
+
+## Why context files
+
+A persona + skill-set is a unit of agent capability. Shipping them as a versioned file (rather than ad-hoc TypeScript) makes them shareable, reviewable, and pinnable.
+
+See:
+
+- [Context files](./context-files)
+- [Skills](./skills)
+- [ACP](./acp)

@@ -1,0 +1,59 @@
+---
+title: Agent Fabric — Overview
+description: The only TypeScript agent runtime that gives you safe, stateful, long-context autonomy without the framework magic.
+---
+
+# The Veridex Agent Fabric
+
+> **The only TypeScript agent runtime that gives you safe, stateful, long-context autonomy without the framework magic.**
+
+Veridex is a TypeScript-first agent runtime designed around a single thesis: **every consequential thing an agent does must be typed, gated, observable, and resumable**. We didn't add safety as a feature; we built the loop around it.
+
+## Why another agent framework?
+
+Every team building agents in production hits the same wall:
+
+| Pain | Where it bites | What competitors do | What Veridex does |
+|---|---|---|---|
+| The framework rewrites prompts behind your back | Debugging is impossible | LangChain/LangGraph mutate state in reducers | **Event-sourced loop** — every transition is a typed event you can read ([ADR-0049](/agent-fabric/adrs/0049-event-sourced-runtime-loop)) |
+| Long conversations degrade | Quality cliff after ~30k tokens | Buffer + summarise on overflow | **Strict effective window $V_e$** with per-section budgets and homeostatic compression ([ADR-0050](/agent-fabric/adrs/0050-context-compilation-effective-window)) |
+| "Memory" is just transcript replay | Cost bloat, staleness, drift | Vector store as a tool | **Four tiers + reconciler** — promotion, decay, conflict resolution ([ADR-0051](/agent-fabric/adrs/0051-tiered-memory-lifecycle)) |
+| Tools are functions with API keys | TPA, prompt injection, traversal | "Trust the developer" | **Typed contracts + sandbox + safety classes** ([ADR-0052](/agent-fabric/adrs/0052-tool-sandboxing-and-safety-classes)) |
+| No human-in-the-loop without rewriting | Treasury, healthcare, legal | External workflow engine | **Approvals + checkpoint/resume** as a first-class loop primitive ([ADR-0054](/agent-fabric/adrs/0054-approvals-checkpoint-resume)) |
+| "Ship on vibes" | Production regressions | Manual prompt eval | **Stateful eval harness** with golden traces and red-team corpus ([ADR-0062](/agent-fabric/adrs/0062-stateful-evaluation-harness)) |
+
+## What you get
+
+- **`@veridex/agents`** — the core runtime: tools, policy, memory, checkpoints, transports, evals. Zero magic; one well-documented loop.
+- **`@veridex/agents-react`** — focused hooks: `useRun`, `useApprovals`, `useTrace`, `useContextHealth`, `useMemory`, `useSkills`, `useBudget`.
+- **`@veridex/agents-adapters`** — incremental migration from LangChain, LangGraph, OpenAI Agents SDK, OpenAPI, PydanticAI.
+- **`@veridex/agents-openclaw`** — OpenClaw / Pi-style context files and skills.
+- **`@veridex/agents-control-plane`** — multi-tenancy, policy packs, approval workflows, durable trace storage.
+- **`@veridex/agent-security`** — framework-agnostic security gateway, packs (injection, tool poisoning, secrets, endpoint allowlist, budget, shell safety, handoff), and adapters for LangChain and CrewAI.
+- **`@veridex/agents-treasury`** — money-movement capability layer: idempotency, ceilings, time-lock, sanctions, signed evidence bundles, red-team eval suite.
+
+## Quick comparison
+
+| Dimension | Veridex | LangChain / LangGraph | OpenAI Agents SDK | Mastra |
+|---|---|---|---|---|
+| Event-sourced loop | ✅ first-class | ❌ opaque reducers | ❌ black box | partial |
+| Strict context budget $V_e$ | ✅ enforced per-turn | ❌ overflow → summarise | ❌ raw window | ❌ |
+| Tiered memory + reconciler | ✅ 4 tiers, lifecycle | partial (vector add-on) | ❌ minimal | partial |
+| Tool sandbox + safety classes | ✅ default | ❌ | ❌ | partial |
+| Policy engine | ✅ priority-ordered rules | ❌ ad-hoc | ❌ | partial |
+| Human approvals + checkpoint/resume | ✅ first-class | bolt-on | ❌ | partial |
+| Signed audit / evidence bundles | ✅ HMAC + Ed25519 | ❌ | ❌ | ❌ |
+| Stateful eval + red-team corpus | ✅ built-in | external | external | partial |
+| Multi-tenant control plane | ✅ opt-in package | external | ❌ | ❌ |
+
+## Start here
+
+1. [Quick Start](./quick-start) — five minutes to a production-shaped agent.
+2. [Context Compilation](./context-compilation) — the engine that keeps long-running agents coherent.
+3. [Tools](./tools) — typed contracts and safety classes.
+4. [Policy](./policy) — priority-ordered, replayable rules.
+5. [Approvals](./approvals) — humans in the loop, durably.
+
+## First principles, not framework magic
+
+Every choice in this docs site is derived from a concrete failure mode of existing frameworks and a concrete piece of research. We cite both. If you ever wonder "why is Veridex doing it this way?", click through to the relevant ADR.

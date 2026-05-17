@@ -1,0 +1,87 @@
+---
+title: ADR-0056 · Immutable Event Log and Signed Audit Emitter
+description: Every runtime action emits a typed, hash-chained event; evidence bundles for external disclosure are cryptographically signed.
+---
+
+# ADR-0056 · Immutable Event Log and Signed Audit Emitter
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Auditability is the difference between "we think the agent did the right thing" and "we can
+prove what the agent did, and prove nobody changed the record." Existing frameworks emit
+unstructured logs at best; at worst, nothing. Regulated industries (finance, healthcare,
+government) require a chronological record of every consequential event, tamper evidence,
+replayability, and selective disclosure.
+
+## Decision
+
+Every runtime action emits a typed, immutable event onto the `TraceEventBus`. Events are
+written to an append-only `EventLog`. The audit emitter cryptographically signs evidence
+bundles for external disclosure.
+
+### Event shape
+
+```ts
+type TraceEvent = {
+  id: string;                     // ULID; monotonic per run
+  runId: string;
+  turnId?: string;
+  timestamp: string;              // ISO-8601
+  type: TraceEventType;           // discriminated union
+  payload: Record<string, unknown>;
+  contentHash: string;            // sha256(canonical(payload))
+  parentHash?: string;            // sha256 of previous event in the run
+};
+```
+
+The `parentHash` field forms a hash chain: tampering with any event breaks the chain at that
+point and at every subsequent event.
+
+### Event taxonomy (non-exhaustive)
+
+`run_started`, `run_completed`, `turn_started`, `turn_completed`, `context_compiled`,
+`model_call_started`, `model_call_completed`, `tool_proposed`, `policy_decision`,
+`approval_requested`, `approval_resolved`, `tool_executed`, `memory_proposed`,
+`memory_written`, `memory_retrieved`, `checkpoint_saved`, `handoff`, `policy_violation`,
+`security_event`, `error`.
+
+### Evidence bundles
+
+For external disclosure, an `EvidenceBundler` (shipped with `@veridex/agents-treasury` and
+generalised in core) collects the relevant events for a workflow, canonicalises them,
+computes a content hash, and signs:
+
+- **HMAC-SHA256** for shared-secret deployments.
+- **Ed25519** for public verifiability.
+- Pluggable `EvidenceSigner` interface.
+
+```jsonc
+{
+  "version": 1,
+  "workflowId": "transfer-...",
+  "events": [/* relevant trace events with hash chain */],
+  "policyVerdicts": [...],
+  "approvals": [...],
+  "proposals": [...],
+  "chainTransactions": [...],
+  "contentHash": "sha256:...",
+  "signature": { "alg": "ed25519", "value": "hex...", "keyId": "..." }
+}
+```
+
+`verifyEvidenceBundle(bundle, publicKey)` recomputes the hash and verifies the signature;
+tampering at any layer throws.
+
+## Consequences
+
+**Positive.** Forensic-grade audit trail with cryptographic guarantees. Selective disclosure
+to auditors without leaking adjacent runs.
+
+**Negative.** Operators must manage signing keys and a retention policy. Defaults are
+production-sensible.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0056-immutable-event-log-signed-audit.md`

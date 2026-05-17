@@ -1,0 +1,136 @@
+---
+title: Observability
+description: Event-sourced trace, signed audit, tamper-evident export.
+---
+
+# Observability
+
+The runtime emits a typed event for every state transition. The event log is **append-only, hash-chained, and signable**. Every other observability concern — debugging, replay, audit, BI — is a projection.
+
+## The event bus
+
+```ts
+agent.events.on('*', (event) => {
+  console.log(event.type, event.runId, event.turnId, event.payload);
+});
+
+// Filtered:
+agent.events.on('policy_decision', (e) => alert(e.payload.verdict));
+agent.events.on('tool_executed',    (e) => metrics.inc('tool.calls'));
+```
+
+Event taxonomy (non-exhaustive):
+
+```
+run_started, run_completed, run_failed
+turn_started, turn_completed
+context_compiled
+model_call_started, model_call_completed
+tool_proposed, tool_executed
+policy_decision, policy_violation
+approval_requested, approval_resolved
+memory_proposed, memory_written, memory_retrieved
+checkpoint_saved
+handoff, transport_request
+security_event, error
+```
+
+Every event has:
+
+```ts
+{ id, runId, turnId?, timestamp, type, payload, contentHash, parentHash? }
+```
+
+`parentHash = sha256(canonical(previousEvent))` creates a hash chain — tampering with any event breaks subsequent verification.
+
+## Streaming to a UI
+
+```tsx
+import { useTrace } from '@veridex/agents-react';
+
+function TraceView({ runId }: { runId: string }) {
+  const { events } = useTrace({ runId, types: ['tool_proposed', 'tool_executed', 'policy_decision'] });
+  return events.map(e => <Row key={e.id} event={e} />);
+}
+```
+
+The provider streams over SSE (default) or WebSocket. High-frequency events (token deltas) are batched.
+
+## Signed Evidence Bundles
+
+For external disclosure, the `EvidenceBundler` (in `@veridex/agents-treasury`, generalised in core) collects the relevant events for a workflow and signs them:
+
+```ts
+import { EvidenceBundler, Ed25519EvidenceSigner } from '@veridex/agents-treasury';
+
+const bundler = new EvidenceBundler({
+  signer: new Ed25519EvidenceSigner({ privateKey, publicKey, keyId: 'ops-2026' }),
+  portal: portalTelemetry,
+});
+
+bundler.recordTrace(traceEvent);
+bundler.recordPolicyVerdict(verdict);
+bundler.recordApproval(approval);
+bundler.recordProposal(proposal);
+bundler.recordChainTx(receipt);
+
+const bundle = await bundler.finalize({ workflowId: 'transfer-...', submit: true });
+```
+
+Verification:
+
+```ts
+import { verifyEvidenceBundle } from '@veridex/agents-treasury';
+
+await verifyEvidenceBundle(bundle, { publicKey });
+// throws on signature mismatch or content tamper
+```
+
+Signers: `NoopEvidenceSigner` (dev), `HmacEvidenceSigner` (shared-secret), `Ed25519EvidenceSigner` (public-verifiable), or your own.
+
+## Filtering, retention, export
+
+```ts
+// Filter the log:
+const audit = await agent.trace.query({
+  runId, types: ['policy_decision', 'approval_resolved', 'tool_executed'],
+});
+
+// Export:
+const jsonl = await agent.exportRun(runId);
+fs.writeFileSync('run.jsonl', jsonl);
+```
+
+The control plane ([ADR-0061](/agent-fabric/adrs/0061-multi-tenancy-control-plane)) enforces per-tenant retention; events past retention are summarised, hash-anchored, and deleted.
+
+## Tamper detection
+
+A single event's `contentHash` mismatch invalidates every later event's `parentHash`. Verifying the chain is a single linear pass:
+
+```ts
+import { verifyEventChain } from '@veridex/agents';
+
+const { ok, brokenAt } = verifyEventChain(events);
+if (!ok) throw new Error(`Tamper detected at event ${brokenAt}`);
+```
+
+Optional transparency-log anchoring (periodic chain roots committed to an external log) defends against compromise of the log storage itself.
+
+## Cost & metrics
+
+```tsx
+import { useBudget } from '@veridex/agents-react';
+
+function Budget({ runId }: { runId: string }) {
+  const { tokensIn, tokensOut, dollars, toolCalls } = useBudget({ runId });
+  return <Card cost={dollars} tokens={tokensIn + tokensOut} calls={toolCalls} />;
+}
+```
+
+Per-tenant, per-policy-pack-version aggregates surface in the control plane.
+
+## Related
+
+- [ADR-0056](/agent-fabric/adrs/0056-immutable-event-log-signed-audit)
+- [Checkpoints](./checkpoints)
+- [Treasury Evidence Bundles](./treasury/evidence-bundles)

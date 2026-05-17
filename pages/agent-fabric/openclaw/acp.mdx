@@ -1,0 +1,52 @@
+---
+title: ACP
+description: Agent Communication Protocol routing with signed envelopes.
+---
+
+# ACP — Agent Communication Protocol
+
+Multi-hop agent message routing over the same signed envelope used by A2A ([Transports](../transports)). Each hop preserves the original `runId`; trace inspectors render the full path.
+
+## Server
+
+```ts
+import { acpRouter, mountAcp } from '@veridex/agents-openclaw/acp';
+
+const router = acpRouter({
+  identity: ourAgentId,
+  signer:   ourSigner,
+});
+
+router.register('billing.refund',   billingAgent);
+router.register('support.escalate', supportAgent);
+router.register('research.deep',    researchAgent);
+
+mountAcp(app, router, { auth: jwtAuth });
+```
+
+## Client
+
+```ts
+import { acpClient } from '@veridex/agents-openclaw/acp';
+
+const client = acpClient({
+  hub: 'https://acp.example.com',
+  signer: ourSigner,
+});
+
+const result = await client.invoke({
+  to:     'billing.refund',
+  payload: { orderId: '...', amount: '1000' },
+});
+```
+
+## Routing semantics
+
+- **Hop limit** — envelopes carry a TTL; exceeded → dropped + audit event.
+- **Replay protection** — nonce store with TTL at each hop.
+- **Identity binding** — every hop adds a signed claim; receiver verifies the full chain.
+- **Cross-tenant** — explicit grants required (control plane).
+
+## Trace correlation
+
+Every hop emits a `handoff` event with `from`, `to`, `runId`, `parentEventId`. The full path is visible in `useTrace` and the trace inspector.

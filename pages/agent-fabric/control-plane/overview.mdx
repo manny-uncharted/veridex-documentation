@@ -1,0 +1,30 @@
+---
+title: Control Plane — Overview
+description: Multi-tenancy, policy packs, approval workflows, durable trace.
+---
+
+# `@veridex/agents-control-plane`
+
+The control plane is **opt-in**. `@veridex/agents` runs standalone on a laptop. When you need fleet-wide governance, multi-tenancy, durable trace storage, and an approval inbox API, you add the control plane.
+
+```bash
+npm install @veridex/agents-control-plane
+```
+
+## What it adds
+
+- **Tenants** — isolated event log namespaces, signing keys, policy compositions, budgets, retention.
+- **Policy packs** — versioned bundles managed centrally, rolled out in stages.
+- **Approval workflows** — escalation chains, SLAs, on-call rotation, multi-tier approvers.
+- **Durable trace storage** — Postgres-backed event log with hash-chain validation.
+- **Fleet API** — REST/GraphQL for runs, approvals, packs, tenants, metrics.
+
+See [ADR-0061](/agent-fabric/adrs/0061-multi-tenancy-control-plane).
+
+## Pages
+
+- [Tenants](./tenants)
+- [Policy Packs](./policy-packs)
+- [Approval Workflows](./approval-workflows)
+- [Trace Storage](./trace-storage)
+- [Deployment](./deployment)

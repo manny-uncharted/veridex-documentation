@@ -1,0 +1,47 @@
+---
+title: Veridex vs Mastra
+description: Two TypeScript agent frameworks, two different bets.
+---
+
+# Veridex vs Mastra
+
+Mastra is a TypeScript agent framework with workflows, agents, and integrations. It overlaps the most with Veridex of any current framework.
+
+| Dimension | Mastra | Veridex |
+|---|---|---|
+| Language | TypeScript-first | TypeScript-first |
+| Workflow model | Step-graph | Event-sourced loop + optional handoff |
+| Tools | Typed (Zod) | Typed (Zod) + safety class + sandbox + idempotency |
+| Memory | Storage backends; partial tiering | Four tiers + reconciler + anti-drift strict mode |
+| Policy | Hooks | Priority-ordered rule engine + packs + staged rollout |
+| Approvals | Bolt-on | First-class verdict + workflow tiers + SLAs |
+| Audit | Logging | Hash-chained, signed Evidence Bundles |
+| Context budget | Manual | Strict $V_e$ enforcement |
+| Adversarial proofs | DIY | Built-in red-team corpus |
+| Multi-tenancy | Out of scope | Control plane |
+
+## Where Mastra wins
+
+- **Lower learning curve** for simple agents.
+- **Step-graph workflows** for non-agentic orchestration.
+- **Strong default UX** for prototypes.
+
+## Where Veridex wins
+
+- **High-stakes domains** (treasury, healthcare).
+- **Multi-tenant fleets** with central governance.
+- **Adversarial threat models** (TPA, replay, prompt injection).
+- **Auditable proof** (signed bundles, transparency log).
+
+## Compose
+
+Use Mastra steps for orchestration; delegate high-stakes steps to a Veridex agent via the adapter:
+
+```ts
+import { veridexStep } from '@veridex/agents-adapters/mastra';
+
+const workflow = workflow()
+  .step(classifyStep)
+  .step(veridexStep({ agent: treasuryAgent, idAs: 'pay' }))
+  .step(notifyStep);
+```

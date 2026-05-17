@@ -1,0 +1,40 @@
+---
+title: API Reference — Overview
+description: Generated TSDoc and curated entry points for every package.
+---
+
+# API Reference
+
+The full generated API surface lives in the package READMEs and `dist/*.d.ts` declarations. This section curates the **entry points** you actually call — and links to the source.
+
+| Package | Curated entry points | Source |
+|---|---|---|
+| [`@veridex/agents`](./agents-core) | `createAgent`, `tool`, `policyRule`, `ContextCompiler`, `EventBus`, `CheckpointManager`, `ApprovalManager` | [`packages/agents`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents) |
+| [`@veridex/agents-react`](./agents-react) | `AgentProvider`, `useRun`, `useApprovals`, `useTrace`, `useMemory`, `useContextHealth`, `useSkills`, `useBudget`, `useCheckpoint`, `useSandboxStatus` | [`packages/agents-react`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-react) |
+| [`@veridex/agents-adapters`](./agents-adapters) | `fromOpenAPI`, `fromLangChainTool`, `fromMcpServer`, `toMcpServer`, `toOpenAIFunctions`, `veridexNode`, `veridexStep` | [`packages/agents-adapters`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-adapters) |
+| [`@veridex/agents-openclaw`](./agents-openclaw) | `loadContextFile`, `skill`, `skillRegistry`, `acpClient`, `acpRouter`, `mountAcp` | [`packages/agents-openclaw`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-openclaw) |
+| [`@veridex/agents-control-plane`](./agents-control-plane) | `ControlPlane`, `ControlPlaneClient`, `PostgresCheckpointStore`, `PostgresMemoryStore` | [`packages/agents-control-plane`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-control-plane) |
+| [`@veridex/agent-security`](./agent-security) | `SecurityGateway`, `SecurityClient`, `createSecureFetch`, `TokenBucketRateLimiter`, `TelemetryReporter`, `createDefaultPacks`, `injectionDetectionPack`, `toolPoisoningPack`, `secretDetectionPack`, `endpointAllowlistPack`, `budgetCeilingPack`, `shellCommandSafetyPack`, `handoffSafetyPack` | [`packages/agents-security`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-security) |
+| [`@veridex/agents-treasury`](./agents-treasury) | `createTreasuryKit`, `treasuryPolicyPack`, `EvidenceBundler`, `Ed25519EvidenceSigner`, `HmacEvidenceSigner`, `verifyEvidenceBundle`, `InMemoryIdempotencyStore`, `SpendCeilings`, `TimeLockManager`, `NoopSanctionScreener`, `DenylistSanctionScreener`, `AllowlistSanctionScreener`, `CompositeSanctionScreener`, `PortalTelemetry`, `runRedTeamSuite` | [`packages/agents-treasury`](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-treasury) |
+
+## Type discipline
+
+- All public APIs are TypeScript-typed; runtime payloads round-trip through Zod schemas.
+- Breaking changes follow semver. Pre-1.0 packages document breakage in `CHANGELOG.md`.
+- Internal symbols are prefixed `_` and excluded from the public surface.
+
+## TSDoc
+
+Every public symbol has a TSDoc comment. Generated docs (e.g., TypeDoc) are not yet published; for now, pull the `.d.ts` from `node_modules/@veridex/agents/dist/` for the authoritative signatures.
+
+## Stability
+
+| Package | Status |
+|---|---|
+| `@veridex/agents` | beta — semver stable from `1.0.0` (planned) |
+| `@veridex/agents-react` | beta |
+| `@veridex/agents-adapters` | beta |
+| `@veridex/agents-openclaw` | alpha — names subject to refinement |
+| `@veridex/agents-control-plane` | alpha |
+| `@veridex/agent-security` | beta |
+| `@veridex/agents-treasury` | beta |

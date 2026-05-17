@@ -1,0 +1,65 @@
+---
+title: Skills
+description: Progressive-disclosure tool bundles, toggled per turn.
+---
+
+# Skills
+
+A **skill** is a named bundle of tools, prompts, and (optionally) policy rules that can be enabled and disabled per turn — so the model only sees the schemas relevant to the active task.
+
+## Why
+
+Tool schemas are *expensive context*. A registry of 40 tools eats 8–12k tokens. Most turns need 2–5 tools. Skills + progressive disclosure cut the tools section by 60–80% without losing capability.
+
+## Define a skill
+
+```ts
+import { skill } from '@veridex/agents-openclaw';
+
+const codeReview = skill({
+  id: 'code-review',
+  description: 'Tools for reviewing pull requests.',
+  tools: [readDiff, runLint, summariseFile, postReviewComment],
+  policies: [pleaseDontDeleteRepo],
+});
+```
+
+## Register and toggle
+
+```ts
+const agent = createAgent({
+  name: '...',
+  instructions: '...',
+  skills: [codeReview, deepResearch, treasuryReports],
+});
+
+// The agent itself can toggle via the built-in tool:
+//   skill_manage({ action: 'enable', skillId: 'code-review' })
+```
+
+`skill_manage` is itself a tool (`safetyClass: 'read'`). Its calls are policy-gated and audited like any other.
+
+## React inspector
+
+```tsx
+import { useSkills } from '@veridex/agents-react';
+
+function SkillToggle({ runId }: { runId: string }) {
+  const { available, enabled, enable, disable } = useSkills({ runId });
+  return available.map(s => (
+    <Toggle key={s.id} label={s.id}
+      on={enabled.includes(s.id)}
+      onChange={v => v ? enable(s.id) : disable(s.id)} />
+  ));
+}
+```
+
+## Skill packs
+
+Skills can ship as packs:
+
+```ts
+import { devopsSkillPack } from '@veridex/agents-openclaw/packs';
+
+const agent = createAgent({ skills: devopsSkillPack({ kubeConfig: '...' }) });
+```

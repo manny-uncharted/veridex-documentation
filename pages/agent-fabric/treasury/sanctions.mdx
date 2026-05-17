@@ -1,0 +1,64 @@
+---
+title: Sanctions Screening
+description: Counterparty screening with allowlist, denylist, and composite providers.
+---
+
+# Sanctions Screening
+
+A pluggable counterparty screener. Built-in providers cover the common cases (no-op for tests, allowlist for whitelist-only flows, denylist for blocklists, composite for chaining); real deployments plug in a vendor (Chainalysis, TRM, Elliptic, internal lists) by implementing the `SanctionScreener` interface. Screening runs **before policy evaluation** for any treasury tool that names a counterparty.
+
+## Built-in providers
+
+```ts
+import {
+  NoopSanctionScreener,
+  AllowlistSanctionScreener,
+  DenylistSanctionScreener,
+  CompositeSanctionScreener,
+} from '@veridex/agents-treasury';
+
+const screener = new CompositeSanctionScreener([
+  new DenylistSanctionScreener(new Set(['0xbadactor', 'sanctioned.example'])),
+  new AllowlistSanctionScreener(new Set(['acme.com', '0xabc...'])),
+]);
+```
+
+The composite evaluates providers in order; **the first non-`clear` verdict short-circuits**.
+
+## Screen a counterparty
+
+```ts
+const result = await screener.screen({
+  id: 'acme.com',
+  address: '0xabc...',
+  // ...other fields from your Counterparty type
+});
+
+// result: { verdict: 'clear' | 'blocked' | 'review', reasons: string[], provider: string, evaluatedAt: number }
+```
+
+The treasury policy pack runs the configured screener for any transfer-shaped tool input and emits the verdict on the run trace.
+
+## Custom providers
+
+```ts
+import type { SanctionScreener } from '@veridex/agents-treasury';
+
+class TrmSanctionScreener implements SanctionScreener {
+  readonly id = 'trm';
+  async screen(cp) {
+    // call TRM API, map response to SanctionScreening
+    return { verdict: 'clear', reasons: [], provider: this.id, evaluatedAt: Date.now() };
+  }
+}
+```
+
+Wrap your provider in a `CompositeSanctionScreener` to chain it with the built-ins.
+
+## Caching and list versions
+
+Provider implementations are responsible for caching their own lookups. When implementing a vendor adapter, record the upstream list version in the returned `reasons` so cached allows can be invalidated when the underlying list updates.
+
+## Audit
+
+Every `screen` outcome — allow or block — is emitted as a `sanctions_checked` event on the run trace and captured in the evidence bundle sealed for the transfer.

@@ -7,7 +7,7 @@
 > GitHub: https://github.com/veridex-protocol/
 > llms.txt index: https://docs.veridex.network/llms.txt
 
-> Generated: 2026-04-22T22:07:23.102Z
+> Generated: 2026-05-17T14:32:02.595Z
 > Pages: 66
 
 ## Table of Contents
@@ -19068,7 +19068,18 @@ Creates a typed, validated tool contract. Every tool has a `safetyClass` that po
 
 const searchOrders = tool({
   name: 'search_orders',
-  description: 'Search orders by customer email.',
+  guidance: {
+    summary: 'Search orders by customer email.',
+    whenToUse: [
+      'The user asks "find my orders" or "show order history".',
+      'Before drafting a refund or status update.',
+    ],
+    whenNotToUse: [
+      'You only need a single order by ID — use `get_order_by_id`.',
+      'You need orders across customers — use `search_orders_by_status`.',
+    ],
+    successExample: '{ "count": 3, "orders": [{ "id": "ord_1", "total": "12.50" }] }',
+  },
   input: z.object({
     email: z.string().email(),
     limit: z.number().int().min(1).max(100).default(10),
@@ -19077,6 +19088,13 @@ const searchOrders = tool({
   timeoutMs: 5000,
   retries: 2,
   idempotent: true,
+  errorTemplates: {
+    byCode: {
+      not_found: 'No orders for {email}. Verify the email is correct or try `search_orders_by_status`.',
+      rate_limited: 'Order DB rate-limited. Retry after {retryAfter}s.',
+    },
+    default: 'search_orders failed: {message}',
+  },
   async execute({ input }) {
     const orders = await db.orders.findByEmail(input.email, input.limit);
     return {
@@ -19094,6 +19112,7 @@ const searchOrders = tool({
 interface ToolContract {
   name: string;
   description: string;
+  guidance?: ToolDescriptionGuidance;
   input: z.ZodType | Record;
   output?: z.ZodType | Record;
   safetyClass: ToolSafetyClass;
@@ -19103,7 +19122,20 @@ interface ToolContract {
   idempotent?: boolean;
   permissions?: string[];
   costEstimate?: (input: TInput) => CostEstimate;
+  errorTemplates?: ToolErrorTemplates;
   metadata?: Record;
+}
+
+interface ToolDescriptionGuidance {
+  summary?: string;
+  whenToUse?: string[];
+  whenNotToUse?: string[];
+  successExample?: string;
+}
+
+interface ToolErrorTemplates {
+  byCode?: Record;
+  default?: string;
 }
 
 type ToolSafetyClass = 'read' | 'write' | 'network' | 'financial' | 'destructive' | 'privileged';
@@ -19115,6 +19147,32 @@ interface ToolResult {
   error?: string;
   metadata?: Record;
 }
+```
+
+#### Tool description discipline
+
+`guidance` is compiled into the prose the model sees and is the recommended way to author descriptions. It encodes Anthropic's "writing tools for agents" rules: a one-sentence summary, concrete *when to use*, explicit *when NOT to use* (anti-patterns + sibling-tool pointers), and a successful-result example.
+
+`errorTemplates` turn opaque errors into instructions the model can act on. Apply them with `formatToolError(tool, code, ctx)`:
+
+```ts
+
+
+return {
+  success: false,
+  llmOutput: '',
+  error: formatToolError(searchOrders, 'rate_limited', { retryAfter: 30 }),
+};
+```
+
+`lintToolContract(contract)` runs the same heuristics the framework uses at construction time and returns diagnostics (`description_short`, `guidance_missing_when_to_use`, `no_error_templates`, `destructive_without_idempotency_signal`, …). Wire it into your CI to block tools that the model will fumble.
+
+```ts
+
+
+const issues = lintToolContract(searchOrders);
+const errors = issues.filter((i) => i.severity === 'error');
+if (errors.length > 0) throw new Error(errors.map((e) => e.message).join('\n'));
 ```
 
 **Safety classes explained:**
@@ -19151,6 +19209,89 @@ Executes tool calls with validation, timeout, and retry logic.
 ### `ToolValidator`
 
 Validates tool input against a Zod schema or JSON schema before execution.
+
+---
+
+### Sandbox runtime
+
+Some tasks are easier to express as code than to reason about (parsing, math, regex experimentation). The framework exposes a typed `SandboxRuntime` interface and ships two reference implementations plus a tool factory.
+
+```ts
+
+  DenyAllSandbox,
+  LocalProcessSandbox,
+  createSandboxedExecTool,
+} from '@veridex/agents';
+
+// Default: refuse every request, with an actionable error.
+const fallback = new DenyAllSandbox();
+
+// Local development: run in a child process with strict resource caps.
+// Production deployments should plug in an isolated backend (Firecracker,
+// gVisor, e2b, …) by implementing `SandboxRuntime` directly.
+const local = new LocalProcessSandbox({
+  allowedBinaries: { python: 'python3', node: process.execPath },
+  defaultTimeoutMs: 10_000,
+  defaultMaxOutputBytes: 64_000,
+  network: { mode: 'deny' },
+});
+
+const runCode = createSandboxedExecTool({
+  runtime: local,
+  name: 'run_python_sandbox',
+  defaultTimeoutMs: 15_000,
+});
+
+agent.tools.register(runCode);
+```
+
+The factory wires the right defaults so the model can use the tool without footguns:
+
+- `safetyClass: 'destructive'` and `idempotent: false` — every run is observable, so policies and approvals see it for what it is.
+- Structured `guidance` (when to reach for codegen, when not to) compiled into the description.
+- `errorTemplates` for `timeout`, `output_truncated`, `network_denied`, `language_unsupported`, `denied`, and `runtime_error` — each one tells the model exactly how to recover.
+- Input schema bounds: code ≤ 64 KiB, stdin ≤ 64 KiB, `timeoutMs` ≤ 120 s, `maxOutputBytes` ≤ 1 MiB.
+
+**Interfaces:**
+
+```ts
+type SandboxLanguage = 'python' | 'node' | 'bash' | 'typescript';
+type SandboxNetworkPolicy =
+  | { mode: 'deny' }
+  | { mode: 'allow' }
+  | { mode: 'allowlist'; hosts: string[] };
+
+interface SandboxExecuteRequest {
+  code: string;
+  language: SandboxLanguage;
+  stdin?: string;
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+  network?: SandboxNetworkPolicy;
+}
+
+interface SandboxExecuteResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode?: number;
+  durationMs: number;
+  errorCode?:
+    | 'timeout'
+    | 'output_truncated'
+    | 'language_unsupported'
+    | 'network_denied'
+    | 'denied'
+    | 'runtime_error';
+}
+
+interface SandboxRuntime {
+  capabilities(): SandboxCapabilities;
+  execute(req: SandboxExecuteRequest): Promise;
+}
+```
+
+**Operational guidance.** `LocalProcessSandbox` is intentionally a thin wrapper for development — it relies on OS-level isolation only. Treat code execution like any other production-class concern: pin the runtime to an isolated environment (Firecracker microVM, gVisor, e2b, modal, etc.), enforce the network policy at the boundary (not in the child process), and pass that backend in via the `runtime` option. The interface is stable, so swapping implementations is a one-line change.
 
 ---
 
@@ -19349,6 +19490,72 @@ interface MemoryEntry {
 | `getProceduralMemory` | `(tags?) => Promise` | Get routine entries |
 | `compact` | `() => Promise` | Remove expired entries |
 | `clear` | `(scope?) => Promise` | Clear entries by scope |
+
+---
+
+### `LongHorizonMemory`
+
+Letta-tier durable memory for agents that need to keep working across days, sessions, and contexts. Three composable surfaces:
+
+- **Episodic store** — append-only ledger of summarised work units (one per session / run / task). Replaces "stuff every transcript turn into the prompt" with "fetch the relevant 5 episodes."
+- **Entity registry** — canonical facts about people, accounts, products, etc., with confidence + provenance. Replaces ad-hoc string matching against a transcript.
+- **Temporal graph** — typed `(subject, predicate, object, validFrom, validTo)` edges so the agent can reason about *when* a fact was true, not just whether it is.
+
+```ts
+
+
+const lhm = createInMemoryLongHorizonMemory();
+
+// Episodes — one per finished unit of work
+await lhm.episodes.append({
+  agentId: 'support-bot',
+  sessionId: 'sess_42',
+  summary: 'Resolved billing dispute for Acme Corp; refunded $120.',
+  highlights: ['refund issued', 'dispute closed'],
+  outcomes: { ticketStatus: 'closed' },
+  startedAt: Date.now() - 600_000,
+  endedAt: Date.now(),
+  tags: ['billing', 'acme'],
+});
+
+// Pull the most relevant past episodes back into context
+const recent = await lhm.episodes.search({
+  agentId: 'support-bot',
+  tags: ['acme'],
+  limit: 5,
+});
+
+// Entities — durable facts with provenance
+await lhm.entities.upsert({
+  type: 'customer',
+  canonicalId: 'acme-corp',
+  attributes: { tier: 'enterprise', mrr: 12_500 },
+  confidence: 0.95,
+  provenance: 'crm-sync',
+});
+
+// Temporal graph — facts with validity windows
+await lhm.temporal.add({
+  subject: 'acme-corp',
+  predicate: 'plan',
+  object: 'enterprise',
+  validFrom: Date.parse('2025-01-01'),
+});
+const planAt = await lhm.temporal.query({
+  subject: 'acme-corp',
+  predicate: 'plan',
+  asOf: Date.now(),
+});
+```
+
+The default `createInMemoryLongHorizonMemory()` keeps everything in process for tests and local dev. Production deployments swap in their own `EpisodicMemoryStore`, `EntityRegistry`, and `TemporalGraph` implementations (Postgres, Redis, vector DB) — each surface is a single interface with no hidden coupling.
+
+| Type | Purpose |
+|------|---------|
+| `Episode` / `EpisodeQuery` / `EpisodicMemoryStore` | Summarised work units |
+| `Entity` / `EntityRegistry` | Canonical facts + provenance |
+| `TemporalEdge` / `TemporalGraph` | Time-windowed relationships |
+| `EpisodeSummariser` (`HighlightConcatenatingSummariser`) | Compact long transcripts into one episode entry |
 
 ---
 

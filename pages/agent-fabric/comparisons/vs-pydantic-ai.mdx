@@ -1,0 +1,42 @@
+---
+title: Veridex vs PydanticAI
+description: Python's typed agent framework — and where TypeScript-first Veridex fits.
+---
+
+# Veridex vs PydanticAI
+
+PydanticAI is **the** typed Python agent framework. If you're Python-shop, it's a strong default. Veridex is its TypeScript-first peer, with deeper governance.
+
+| Dimension | PydanticAI | Veridex |
+|---|---|---|
+| Language | Python | TypeScript / Node / Bun |
+| Tool typing | Pydantic models | Zod schemas |
+| Validation | First-class | First-class |
+| Policy engine | Light | Priority-ordered rules + packs |
+| Approvals | Manual | First-class verdict |
+| Memory tiers | Out of scope | Four tiers + reconciler |
+| Sandbox | Out of scope | Built-in |
+| Audit | Logging | Hash-chained, signed bundles |
+| Multi-tenancy | Out of scope | Control plane |
+
+## Cross-language interop
+
+PydanticAI exposes tools over HTTP/MCP; Veridex imports them via `fromMcpServer` or `fromOpenAPI`. Veridex exposes its own tools the same way for PydanticAI agents to consume.
+
+```ts
+import { fromMcpServer } from '@veridex/agents/transports';
+
+const pythonTools = await fromMcpServer({
+  url: 'https://python-services.example.com/mcp',
+  auth: { tokenProvider },
+  trust: 'imported',
+});
+```
+
+The PEP enforces our safety guarantees regardless of source language.
+
+## Choose
+
+- **Backend is Python-only and stays that way?** PydanticAI.
+- **TypeScript / Node / browser, or polyglot fleet?** Veridex.
+- **Compliance-heavy workflows in either ecosystem?** Veridex + PydanticAI behind tools.

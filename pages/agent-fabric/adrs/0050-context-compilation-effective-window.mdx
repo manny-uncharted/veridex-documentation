@@ -1,0 +1,55 @@
+---
+title: ADR-0050 · Context Compilation and the Effective Window V_e
+description: Why the Agent Fabric treats context as a budgeted, signal-to-token-optimised resource — not a window to be filled.
+---
+
+# ADR-0050 · Context Compilation and the Effective Window $V_e$
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+The vendor-advertised context window is a marketing number. Output quality degrades
+*monotonically* with token volume and falls off a cliff well before the theoretical limit.
+Models with 1M-token windows routinely lose accuracy past ~30–50k tokens; tool-heavy agents
+lose it sooner. The engineering objective is to maximise the signal-to-token ratio
+
+$$\Phi = \frac{S(C)}{T(C)}$$
+
+over the compiled context $C$, not to fill the window.
+
+Existing frameworks fail this through transcript replay, late summarisation-on-overflow, and
+unbudgeted tool schemas that can eat 8–12k tokens before the task even starts.
+
+## Decision
+
+`@veridex/agents` ships a first-class `ContextCompiler` that enforces an **effective window**
+$V_e$ which is strictly smaller than the model's raw limit and is **the active constraint**.
+
+- **Explicit budget allocation per section** per call: `systemBudget`, `memoryBudget`,
+  `historyBudget`, `toolsBudget`, `headroomBudget`. Their sum is $\le V_e$; over-budget
+  sections are compressed or dropped before the model is called.
+- **Section-aware compression.** History: rolling summarisation of stale turns, embedding-based
+  redundancy detection, keep-last-N invariants for tool round-trips. Memory: top-$k$ retrieval
+  scoring recency × relevance × confidence × density. Tools: progressive disclosure — only
+  tools relevant to the live task are surfaced.
+- **Homeostatic cycle.** The compiler runs every turn; compression is the steady state, not a
+  garbage-collection mode that fires when the window fills.
+- **Inspectable, deterministic output.** Each compile emits a `context_compiled` event with
+  per-section token counts, admitted memory IDs, and compression actions. Tests can assert
+  *"this run never exceeded $V_e = 24000$"*.
+- **$V_e$ is per-model, per-deployment configurable.** Defaults are conservative
+  (~0.4 × raw window for frontier models, lower for tool-heavy agents).
+
+## Consequences
+
+**Positive.** Predictable quality on long-horizon runs, measurable token economics, no
+catastrophic degradation cliff.
+
+**Negative.** Developers must think in budgets, not in "I'll just pass the full history."
+The compiler API and the `useContextHealth` React hook are designed to make this concrete
+rather than scary.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0050-context-compilation-effective-window.md`

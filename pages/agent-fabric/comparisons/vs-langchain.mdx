@@ -1,0 +1,52 @@
+---
+title: Veridex vs LangChain
+description: Why a typed, event-sourced loop beats a chain.
+---
+
+# Veridex vs LangChain
+
+LangChain is the most popular Python/JS framework for LLM apps. It excels at prototyping. We have repeatedly hit ceilings when taking LangChain apps to production:
+
+| Dimension | LangChain | Veridex |
+|---|---|---|
+| **Loop** | `AgentExecutor` reducer; opaque state mutation | Event-sourced; every transition is a typed event ([ADR-0049](/agent-fabric/adrs/0049-event-sourced-runtime-loop)) |
+| **Context** | `ConversationBufferMemory` (replay) → manual summarise | Strict $V_e$, per-section budgets, deterministic compiler ([Context Compilation](../context-compilation)) |
+| **Memory** | Vector store as a tool | Four tiers + reconciler with provenance, confidence, lifecycle ([Memory](../memory)) |
+| **Tools** | `Tool` (function + name + schema) | Typed contract + safety class + sandbox + idempotency ([Tools](../tools)) |
+| **Policy** | Ad-hoc try/except, prompt-based guardrails | Priority-ordered, replayable rules; policy packs ([Policy](../policy)) |
+| **Approvals** | `human_input` tool; no durable suspension | First-class `escalate` verdict; checkpoint/resume ([Approvals](../approvals)) |
+| **Audit** | Callbacks; structured but not signed | Hash-chained, signed Evidence Bundles ([Observability](../observability)) |
+| **Evals** | LangSmith (good, external) | Built-in stateful harness + red-team corpus |
+| **Multi-tenancy** | Bring-your-own | Opt-in control plane |
+| **Type discipline (TS)** | Mixed | First-class TypeScript |
+
+## "But I have a working LangChain app"
+
+You don't have to rewrite it.
+
+```ts
+import { fromLangChainTool, veridexNode } from '@veridex/agents-adapters';
+
+// Import existing LangChain tools:
+const tools = existingTools.map(t => fromLangChainTool(t));
+
+// Or run a Veridex agent inside an existing LangGraph:
+const graph = new StateGraph(MyState)
+  .addNode('treasury', veridexNode({ agent: treasuryAgent, /* ... */ }));
+```
+
+See [Live Bridges](../adapters/live-bridges) for the migration playbook.
+
+## When to stay on LangChain
+
+- Prototypes that don't need policy/audit/checkpoints.
+- Pure data-processing pipelines.
+- Teams already deep in LangChain whose use case doesn't justify migration.
+
+## When to choose Veridex
+
+- High-stakes domains (treasury, healthcare, legal).
+- Long-running agents (>30 turns; hours-to-days workflows).
+- Compliance requirements (auditable trail, signed evidence).
+- Multi-tenant fleets.
+- Adversarial threat models (TPA, prompt injection, replay).

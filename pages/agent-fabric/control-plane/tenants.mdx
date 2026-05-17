@@ -1,0 +1,62 @@
+---
+title: Tenants
+description: The unit of isolation in a Veridex fleet.
+---
+
+# Tenants
+
+A **tenant** is the unit of isolation. Separate event log, separate signing keys, separate policies, separate budgets, separate approvers, separate retention.
+
+## Create a tenant
+
+```ts
+import { ControlPlane } from '@veridex/agents-control-plane';
+
+const cp = new ControlPlane({ db, kms });
+
+const tenant = await cp.tenants.create({
+  id: 'acme-corp',
+  displayName: 'Acme Corp',
+  signingKey: { alg: 'ed25519', source: 'kms' },
+  budgets: {
+    day:   { usd: 500, tokens: 10_000_000 },
+    month: { usd: 10_000, tokens: 300_000_000 },
+  },
+  retention: {
+    'policy_decision': '7y',
+    'tool_executed':   '7y',
+    'context_compiled':'30d',
+  },
+});
+```
+
+## Attach a runtime to a tenant
+
+```ts
+const agent = createAgent(def, {
+  modelProviders: { default: provider },
+  controlPlane: cp.attach({ tenantId: 'acme-corp' }),
+});
+```
+
+The attachment hooks the runtime's `EventBus` into the tenant's durable log, applies the tenant's policy composition, and routes approvals to the tenant's workflow.
+
+## Cross-tenant invocation
+
+A2A calls across tenants require explicit grants:
+
+```ts
+await cp.grants.create({
+  from: 'acme-corp',
+  to:   'partner-bank',
+  skills: ['payment.initiate'],
+  expiry: '2026-12-31',
+  approvedBy: 'cfo@acme.com',
+});
+```
+
+Without a grant, the call is denied at the PEP.
+
+## Per-tenant dashboards
+
+The Fleet API exposes per-tenant metrics: spend, tool calls, policy denials, approval SLA, top failing runs. The React control-plane UI (in `enterprise-platform`) consumes these.

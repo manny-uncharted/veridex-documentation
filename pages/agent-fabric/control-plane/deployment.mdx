@@ -1,0 +1,69 @@
+---
+title: Deployment
+description: Self-host or managed.
+---
+
+# Deployment
+
+The control plane is self-hostable or available as a managed service.
+
+## Self-host
+
+Minimum:
+
+- Node 20+ (or Bun) for the control-plane service.
+- Postgres 15+ for trace and checkpoint storage.
+- KMS or HSM for tenant signing keys (AWS KMS, GCP KMS, HashiCorp Vault, or local file in dev).
+- An object store for evidence bundle archives (S3, GCS, MinIO).
+
+### Docker compose (dev)
+
+```yaml
+services:
+  postgres:
+    image: postgres:15
+    environment: { POSTGRES_PASSWORD: dev }
+    ports: ['5432:5432']
+  control-plane:
+    image: ghcr.io/veridex/agents-control-plane:latest
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: postgres://postgres:dev@postgres:5432/cp
+      VERIDEX_KMS: file:///keys
+      VERIDEX_OBJECT_STORE: file:///data/evidence
+    ports: ['4000:4000']
+    volumes:
+      - ./keys:/keys
+      - ./data:/data
+```
+
+### Kubernetes
+
+Helm chart at `deploy/k8s/control-plane`. Required values: `postgres.connectionString`, `kms.provider`, `objectStore.bucket`, `auth.jwks`. See [`deploy/k8s/control-plane/README.md`](https://github.com/veridex-protocol/veridex/tree/main/deploy/k8s).
+
+## Managed
+
+Hosted control plane available at `https://cp.veridex.io`. JWT auth via your IdP (OIDC). SLAs, regional residency, and BYOK on the enterprise tier.
+
+## Runtime attach
+
+```ts
+import { ControlPlaneClient } from '@veridex/agents-control-plane';
+
+const cp = new ControlPlaneClient({
+  endpoint: 'https://cp.veridex.io',
+  tokenProvider: () => session.controlPlaneToken,
+});
+
+const agent = createAgent(def, {
+  modelProviders: { default: provider },
+  controlPlane: cp.attach({ tenantId: 'acme-corp' }),
+});
+```
+
+## Health & operations
+
+- `GET /healthz` — liveness.
+- `GET /readyz` — DB + KMS + object store reachability.
+- Metrics: Prometheus at `/metrics`; OpenTelemetry traces if `OTEL_EXPORTER_OTLP_ENDPOINT` set.
+- Backups: standard Postgres PITR + object-store versioning.

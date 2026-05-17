@@ -1,0 +1,76 @@
+---
+title: ADR-0061 · Multi-Tenancy and Control Plane Design
+description: The runtime is control-plane-optional. Tenants, policy packs, approval workflows, and durable trace storage live in an opt-in deployment.
+---
+
+# ADR-0061 · Multi-Tenancy and Control Plane Design
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+A single agent on a laptop is a different system from a fleet of agents serving multiple
+customers across regions with different policies, budgets, and retention requirements.
+Enterprises want centralised governance; developers want a runtime that doesn't drag in a
+control plane just to say hello.
+
+## Decision
+
+The runtime is **control-plane-optional**. `@veridex/agents` runs standalone;
+`@veridex/agents-control-plane` is an opt-in deployment that adds multi-tenancy, policy packs,
+approval workflows, durable trace storage, and a fleet API.
+
+### Tenants
+
+A tenant is the unit of isolation:
+
+- Separate event-log namespace and signing keys.
+- Separate policy pack composition.
+- Separate budgets and rate limits.
+- Separate approval routing (own approvers, own SLAs).
+- Separate retention configuration.
+
+Cross-tenant invocations require explicit grants (ADR-0058).
+
+### Policy packs
+
+Versioned bundles of policy rules. The control plane manages:
+
+- Pack catalog (built-in `treasury`, `pii-strict`, `external-tools-untrusted`, plus custom
+  packs uploaded by operators).
+- Per-tenant pack composition (ordered list of packs + per-tenant rule overrides).
+- Pack versioning; rollouts can be staged (canary → 10% → full).
+- Pack diffing — operators see exactly which rules differ from the previous version.
+
+### Approval workflows
+
+Generalised escalation chains: route by safety class, amount, counterparty, or tag; chain of
+approvers; SLA; auto-deny / auto-allow on timeout. Approvers can be humans (via the React
+inbox), other agents, or downstream policy packs.
+
+### Trace storage and retention
+
+Postgres-backed event log with hash-chain validation. Per-tenant retention policies
+(e.g., financial events: 7 years, read-only events: 90 days). Transparency-log anchoring
+(ADR-0056) is configurable per tenant.
+
+### Fleet API
+
+A REST/GraphQL API for run inspection, replay and bulk export, approval inbox, policy-pack
+management, tenant administration, and budget/metrics dashboards.
+
+### Deployment posture
+
+The control plane is self-hostable (Postgres + a Node service) or available as a managed
+service. The runtime communicates with it via signed JWTs over HTTPS.
+
+## Consequences
+
+**Positive.** Single-developer runtime stays trivial; enterprise concerns are addressed
+without polluting the core. Audit, compliance, and reporting roll up across the fleet.
+
+**Negative.** Two packages to learn for enterprise users. Documented and demoed.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0061-multi-tenancy-control-plane.md`

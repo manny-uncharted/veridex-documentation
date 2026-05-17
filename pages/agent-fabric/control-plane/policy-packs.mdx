@@ -1,0 +1,68 @@
+---
+title: Policy Packs
+description: Versioned rule bundles, staged rollouts, diff review.
+---
+
+# Policy Packs
+
+A **policy pack** is a versioned bundle of policy rules. The control plane manages a catalog, per-tenant composition, versioning, and staged rollouts.
+
+## Catalog
+
+Built-in packs:
+
+| Pack | Source | What it does |
+|---|---|---|
+| `treasury` | `@veridex/agents-treasury` | Sanctions, ceilings, time-lock, dual-approval |
+| `injection-detection` | `@veridex/agent-security` | Heuristic + pattern detection on untrusted inputs and tool outputs |
+| `tool-poisoning` | `@veridex/agent-security` | Flags imported/untrusted tools; forces downgrade to `read` safety class |
+| `secret-detection` | `@veridex/agent-security` | Scans inputs, outputs, and fetch bodies for secrets, JWTs, private keys |
+| `endpoint-allowlist` | `@veridex/agent-security` | Restricts outbound HTTP to a per-tenant allowlist |
+| `budget-ceiling` | `@veridex/agent-security` | Token / call / cost ceilings per run and per tenant |
+| `shell-command-safety` | `@veridex/agent-security` | Blocks dangerous shell patterns for shell-execution tools |
+| `handoff-safety` | `@veridex/agent-security` | Validates inter-agent handoff envelopes; blocks tainted context propagation |
+
+Custom packs are uploaded via the Fleet API or CLI.
+
+## Compose for a tenant
+
+```ts
+await cp.packs.compose({
+  tenantId: 'acme-corp',
+  packs: [
+    { id: 'secret-detection',  version: '1.4' },
+    { id: 'treasury',          version: '2.1', overrides: {
+      'cap-spend-day': { params: { usdMicro: 5_000_000_000n } },
+    }},
+    { id: 'endpoint-allowlist', version: '1.0' },
+  ],
+  order: ['secret-detection', 'treasury', 'endpoint-allowlist'],
+});
+```
+
+## Staged rollout
+
+```ts
+await cp.packs.rollout({
+  tenantId: 'acme-corp',
+  packId: 'treasury',
+  toVersion: '2.2',
+  stages: [
+    { trafficPercent: 5,  durationHours: 24 },
+    { trafficPercent: 25, durationHours: 24 },
+    { trafficPercent: 100 },
+  ],
+  abortIf: { policyDenialRateIncrease: 0.5 },
+});
+```
+
+The control plane automatically aborts if denial rate increases beyond threshold.
+
+## Diff review
+
+```ts
+const diff = await cp.packs.diff('treasury', { from: '2.1', to: '2.2' });
+// → structured diff: rules added/removed/changed, with param diffs
+```
+
+The control-plane UI renders this for ops review on every version bump.

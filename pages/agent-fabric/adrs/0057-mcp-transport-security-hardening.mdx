@@ -1,0 +1,77 @@
+---
+title: ADR-0057 · MCP Transport Security Hardening
+description: How the Agent Fabric integrates MCP — as server and as client — without inheriting its threat surface.
+---
+
+# ADR-0057 · MCP Transport Security Hardening
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+The Model Context Protocol (MCP) is becoming the de-facto interop layer for agent tooling.
+It is also a flatly insecure default for production:
+
+- Tool descriptions and schemas come from arbitrary remote servers — tool poisoning as a
+  service.
+- Most MCP clients run with broad filesystem and network privileges.
+- Authentication is "bring your own"; many deployments ship long-lived bearer tokens.
+- Homoglyph attacks on tool names can shadow legitimate tools.
+
+The Agent Fabric must integrate MCP — both as server (exposing our tools) and as client
+(consuming remote tools) — without inheriting MCP's threat surface.
+
+## Decision
+
+### As MCP server (Agent Fabric exposes tools to hosts)
+
+- The MCP server is mounted **behind the policy engine**: even an authenticated host cannot
+  call a tool whose safety class the policy denies for that host's identity.
+- Connections require explicit, scoped tokens issued by the control plane; tokens carry
+  tenant, allowed tool set, rate limits, and expiry.
+- Per-connection sandbox: filesystem and network access of executed tools is constrained per
+  the connecting host's grant.
+- Every MCP request emits a `transport_request` event; abuse trips a `CircuitBreaker`.
+- Schemas exposed are content-hashed; hosts can pin the hash.
+
+### As MCP client (Agent Fabric consumes remote tools)
+
+All ingress tool definitions traverse a `TransportBoundaryPEP` (Policy Enforcement Point) that:
+
+1. **Validates and sanitises** schemas — Zod parse, reject oversized descriptions, strip
+   hidden Unicode.
+2. **Hashes and labels** the definition with `trust: untrusted` until promoted by operator
+   review.
+3. **Detects name collisions** with existing tools (case-folded, NFC-normalised,
+   confusable-aware homoglyph check).
+4. **Enforces a network allowlist** and short-lived, scoped credentials per server.
+
+A remote tool's description is rendered to the model with a clear
+`[from untrusted MCP server: <name>]` prefix — a context-engineering mitigation against TPA:
+the model is told the source. Outputs from remote tools traverse the same sanitisation
+pipeline as local tools (ADR-0052).
+
+### Identity binding (anti-confused-deputy)
+
+Every outbound MCP call carries an explicit `agent_identity` claim and a `run_id` correlation.
+Remote servers that honour identity can enforce least-privilege from their side.
+
+### Operator workflow
+
+1. Operator registers a remote MCP server.
+2. The fabric fetches the schema, content-hashes it, and presents it for review.
+3. Operator approves (optionally pinning the hash); tools become available, labelled
+   `trust: pinned`.
+4. Schema changes break the pin; the next ingress requires re-approval.
+
+## Consequences
+
+**Positive.** MCP interop without inheriting MCP's defaults. Tool poisoning, confused deputy,
+homoglyph, and credential-leak risks are all mitigated structurally.
+
+**Negative.** Operators must review and pin remote schemas. The control-plane UI is designed
+to make this routine.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0057-mcp-transport-security-hardening.md`

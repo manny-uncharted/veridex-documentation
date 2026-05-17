@@ -1,0 +1,151 @@
+---
+title: Quick Start
+description: Production-shaped agent in five minutes — tools, policy, audit trace.
+---
+
+# Quick Start
+
+Five minutes from `npm install` to a working agent with typed tools, a policy gate, and a signed audit trace.
+
+## 1. Install
+
+```bash
+npm install @veridex/agents zod
+# or
+pnpm add @veridex/agents zod
+# or
+bun add @veridex/agents zod
+```
+
+## 2. Define a tool
+
+```ts
+import { tool } from '@veridex/agents';
+import { z } from 'zod';
+
+const getWeather = tool({
+  name: 'get_weather',
+  description: 'Look up the current weather for a city.',
+  safetyClass: 'read',
+  input: z.object({ city: z.string().min(2).max(64) }),
+  output: z.object({ tempC: z.number(), summary: z.string() }),
+  async execute({ input }) {
+    // any I/O here goes through the sandbox in production
+    return { success: true, llmOutput: { tempC: 18, summary: 'partly cloudy' } };
+  },
+});
+```
+
+Every tool declares its `safetyClass` (`read | write | network | financial | privileged`). The runtime uses it to decide policy, approval, and sandbox defaults. See [Tools](./tools).
+
+## 3. Compose the agent
+
+```ts
+import { createAgent, OpenAIProvider } from '@veridex/agents';
+
+const agent = createAgent(
+  {
+    name: 'weather-assistant',
+    instructions: 'You answer weather questions. Use the get_weather tool. Be concise.',
+    tools: [getWeather],
+  },
+  {
+    modelProviders: {
+      default: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+    },
+  },
+);
+```
+
+## 4. Run it
+
+```ts
+const result = await agent.run("What's the weather in Tokyo?");
+console.log(result.output);
+// → "Tokyo is partly cloudy, around 18°C."
+```
+
+## 5. Add a policy rule
+
+Block all `financial` tools outside business hours:
+
+```ts
+import { createAgent, policyRule } from '@veridex/agents';
+
+const businessHoursOnly = policyRule({
+  id: 'business-hours-financial',
+  priority: 10,
+  evaluate(ctx) {
+    if (ctx.proposal.kind !== 'tool') return { kind: 'allow' };
+    if (ctx.proposal.contract.safetyClass !== 'financial') return { kind: 'allow' };
+    const hour = new Date().getUTCHours();
+    return hour >= 13 && hour < 21
+      ? { kind: 'allow' }
+      : { kind: 'deny', reason: 'Financial tools allowed only 13–21 UTC.' };
+  },
+});
+
+const agent = createAgent(
+  { name: '...', instructions: '...', tools: [...], policies: [businessHoursOnly] },
+  { modelProviders: { default: provider } },
+);
+```
+
+Every evaluation emits a `policy_decision` event you can inspect. See [Policy](./policy).
+
+## 6. Read the trace
+
+```ts
+agent.events.on('*', (event) => {
+  console.log(event.type, event.payload);
+});
+
+// Or after the run:
+console.log(result.trace.events.length, 'events emitted');
+```
+
+You will see at minimum:
+
+```
+run_started → turn_started → context_compiled → model_call_started → model_call_completed
+→ tool_proposed → policy_decision → tool_executed → turn_completed → run_completed
+```
+
+Every event is content-hashed and chained with the previous event's hash. See [Observability](./observability).
+
+## 7. (Optional) human approval
+
+Set a route on the tool and add an approval handler:
+
+```ts
+const transfer = tool({
+  name: 'transfer',
+  safetyClass: 'financial',
+  approval: { route: 'human_required', timeoutMs: 24 * 60 * 60_000 },
+  input: z.object({ to: z.string(), amount: z.string() }),
+  async execute({ input, secrets }) { /* ... */ },
+});
+```
+
+When the model proposes a transfer, the run **suspends**, the checkpoint is saved, and you resume after a human decides:
+
+```ts
+const run = await agent.run("Send $100 to alice@example.com");
+if (run.status === 'suspended') {
+  // …days later, in any process:
+  const final = await agent.resume(run.runId, run.approvalId, {
+    decision: 'allow', approver: 'manny', reason: 'verified counterparty',
+  });
+}
+```
+
+See [Approvals](./approvals) and [Checkpoints](./checkpoints).
+
+## What you just got
+
+- A typed tool that cannot be called with the wrong arguments.
+- A policy that gates consequential calls — replayably.
+- An audit trace that proves what happened.
+- A run that survives a redeploy.
+
+That is what production-shaped means. Continue to [Context Compilation](./context-compilation) to learn how Veridex keeps the agent coherent over hours and days.

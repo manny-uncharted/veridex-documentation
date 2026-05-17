@@ -1,0 +1,101 @@
+---
+title: Transports
+description: MCP, A2A, ACP — interop without lowering the security floor.
+---
+
+# Transports
+
+Agents will increasingly call other agents and consume remote tools. Veridex supports the three serious protocols — **MCP**, **A2A**, **ACP** — and runs every ingress through a `TransportBoundaryPEP` so we never silently lower the floor.
+
+## MCP (Model Context Protocol)
+
+### Expose your tools as an MCP server
+
+```ts
+import { mountMcpServer } from '@veridex/agents/transports';
+
+mountMcpServer({
+  app,
+  agent,
+  auth: { issuer: controlPlaneJwks, audience: 'mcp:our-fleet' },
+  toolFilter: (tool) => tool.safetyClass !== 'privileged',
+});
+```
+
+Tokens are control-plane-issued JWTs carrying tenant, allowed tool set, rate limits, and expiry. Every MCP request emits a `transport_request` event; abuse trips a circuit breaker.
+
+### Consume remote MCP servers
+
+```ts
+import { fromMcpServer } from '@veridex/agents/transports';
+
+const remoteTools = await fromMcpServer({
+  url: 'https://partner.example.com/mcp',
+  auth: { tokenProvider: ourTokenProvider },
+  trust: 'imported', // becomes 'pinned' after operator review
+});
+
+const agent = createAgent({ tools: [...localTools, ...remoteTools] }, { ... });
+```
+
+Every ingress definition is:
+
+1. Schema-validated (Zod parse; reject oversized descriptions; strip hidden Unicode).
+2. Content-hashed and labelled (`trust: untrusted | imported | pinned | internal`).
+3. Name-collision-checked (NFC + case-folded + confusable-aware homoglyph detection).
+4. Rendered to the model with a `[from untrusted MCP server: <name>]` prefix when not pinned — a context-engineering mitigation against TPA.
+
+See [ADR-0057](/agent-fabric/adrs/0057-mcp-transport-security-hardening).
+
+## A2A (Agent-to-Agent)
+
+```ts
+import { a2aClient } from '@veridex/agents/transports';
+
+const partner = a2aClient({
+  agentCard: await fetchAgentCard('https://partner.example.com/.well-known/agent.json'),
+  signer: ourSigner,
+});
+
+// Used as a tool:
+const handoffToPartner = tool({
+  name: 'ask_partner',
+  safetyClass: 'network',
+  input: z.object({ query: z.string() }),
+  async execute({ input }) {
+    return partner.invoke({ skill: 'research', input });
+  },
+});
+```
+
+Every invocation carries a signed envelope `(senderAgentId, runId, turnId, nonce, timestamp, payload)`. The receiver verifies signature, rejects replays (nonce store with TTL), and binds the call to its own run for traceability.
+
+A circuit breaker per remote agent tracks error rate and latency; persistent failures open it and emit `transport_circuit_open`.
+
+## ACP (Agent Communication Protocol)
+
+Multi-hop message routing over the same envelope; each hop emits a `handoff` event preserving the original `runId` for end-to-end traceability.
+
+```ts
+import { acpRouter } from '@veridex/agents/transports';
+
+const router = acpRouter({ identity: ourAgentId, signer: ourSigner });
+router.register('billing.refund', billingAgent);
+router.register('support.escalate', supportAgent);
+mountAcp(app, router);
+```
+
+## Security checklist for any transport
+
+- [ ] Tokens scoped per-tool and per-tenant
+- [ ] Network allowlist on outbound HTTP clients
+- [ ] PEP enforced at ingress (we ship the default)
+- [ ] Trust labels rendered to the model when not `pinned` or `internal`
+- [ ] Circuit breakers configured
+- [ ] Audit events streamed to the trace store
+
+## Related
+
+- [ADR-0057](/agent-fabric/adrs/0057-mcp-transport-security-hardening)
+- [ADR-0058](/agent-fabric/adrs/0058-a2a-acp-transport-design)
+- [Tools](./tools)

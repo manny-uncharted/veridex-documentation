@@ -1,0 +1,84 @@
+---
+title: Import & Export
+description: Translate tool definitions in and out of Veridex.
+---
+
+# Import & Export
+
+## Import
+
+### OpenAPI
+
+```ts
+import { fromOpenAPI } from '@veridex/agents-adapters';
+
+const tools = await fromOpenAPI('./stripe.openapi.yaml', {
+  baseUrl:    'https://api.stripe.com',
+  safetyClassByMethod: 'auto',           // GET → read, POST/PUT/DELETE → write|network
+  authHeader: () => `Bearer ${secrets.get('STRIPE_KEY')}`,
+  sandbox:    { networkAllowlist: ['api.stripe.com'] },
+});
+```
+
+Generates Zod schemas, classifies safety per HTTP method, wraps each operation in a sandboxed `HttpClient` call. Imported tools are labelled `trust: imported` and traverse the [`TransportBoundaryPEP`](/agent-fabric/transports).
+
+### LangChain / LangGraph
+
+```ts
+import { fromLangChainTool, fromLangGraphNode } from '@veridex/agents-adapters';
+
+const t = fromLangChainTool(existingTool, { safetyClass: 'read' });
+const node = fromLangGraphNode(someNode);
+```
+
+Description, schema (via `zod-from-json-schema`), and `_call` are wrapped in a sandboxed executor.
+
+### OpenAI functions
+
+```ts
+import { fromOpenAIFunction } from '@veridex/agents-adapters';
+const t = fromOpenAIFunction(openAiFnDef, { execute: async (args) => { ... } });
+```
+
+### PydanticAI
+
+```ts
+import { fromPydanticAITool } from '@veridex/agents-adapters';
+const t = fromPydanticAITool(pydanticToolJson);
+```
+
+## Export
+
+### Veridex → MCP server
+
+```ts
+import { toMcpServer } from '@veridex/agents-adapters';
+const handler = toMcpServer({ agent, filter: t => t.safetyClass !== 'privileged' });
+app.use('/mcp', handler);
+```
+
+### Veridex → OpenAI function list
+
+```ts
+import { toOpenAIFunctions } from '@veridex/agents-adapters';
+const fns = toOpenAIFunctions(agent.tools);
+// pass directly to openai.chat.completions.create({ tools: fns })
+```
+
+### Veridex → LangChain `Tool` array
+
+```ts
+import { toLangChainTools } from '@veridex/agents-adapters';
+const tools = toLangChainTools(agent.tools);
+```
+
+## Trust labels
+
+Every imported tool carries a trust label rendered in trace events and (optionally) in the model's view of the description:
+
+| Label | Meaning | Default policy treatment |
+|---|---|---|
+| `internal` | First-party, signed | Freely callable |
+| `pinned` | Operator-reviewed external, hash pinned | Treated as `internal` |
+| `imported` | Auto-imported from a known source | Excluded from `financial`/`privileged` by default |
+| `untrusted` | New, unreviewed | Read-only + sandbox; surfaced to model with explicit prefix |

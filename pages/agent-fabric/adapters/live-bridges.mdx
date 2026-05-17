@@ -1,0 +1,60 @@
+---
+title: Live Bridges
+description: Run mixed stacks during migration.
+---
+
+# Live Bridges
+
+## LangGraph live bridge
+
+A LangGraph node can call into a Veridex agent and vice-versa; the bridge translates state and threads `runId` for unified tracing.
+
+```ts
+import { veridexNode } from '@veridex/agents-adapters/langgraph';
+
+const graph = new StateGraph(MyState)
+  .addNode('classify', classifyNode)
+  .addNode('treasury', veridexNode({
+    agent: treasuryAgent,
+    mapState: (s) => s.userQuery,
+    mergeResult: (s, r) => ({ ...s, treasuryResult: r.output }),
+  }))
+  .addEdge('classify', 'treasury');
+```
+
+The treasury node runs under Veridex governance — policy, approvals, evidence bundles — while the rest of the graph keeps running in LangGraph.
+
+## OpenAI Assistants bridge
+
+```ts
+import { handoffToVeridex } from '@veridex/agents-adapters/openai';
+
+// In your Assistants tool handler:
+case 'process_payment':
+  return handoffToVeridex({ agent: treasuryAgent, input: args.userIntent });
+```
+
+Returns control to the Assistants run with the Veridex result; suspends if Veridex needs approval.
+
+## Mastra step bridge
+
+```ts
+import { veridexStep } from '@veridex/agents-adapters/mastra';
+
+const workflow = workflow()
+  .step(veridexStep({ agent: treasuryAgent, idAs: 'pay' }))
+  .step(notifyStep);
+```
+
+## Migration sequencing
+
+The recommended order:
+
+1. **Start with the highest-stakes path.** That's the one you most need policy, approvals, and audit on.
+2. **Bridge it.** Most of your app keeps running where it lives.
+3. **Move read-only paths next** — they have the least migration risk and let you build operator familiarity.
+4. **Remove the bridge** once the workflow is fully on Veridex.
+
+## Identity & tracing across the bridge
+
+Every bridged invocation carries the originating framework's `runId` as `parentRunId` in Veridex events. Trace inspectors render parent/child relationships so you can follow a transaction end-to-end across the seam.

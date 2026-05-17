@@ -1,0 +1,66 @@
+---
+title: ADR-0059 · React Hooks Architecture
+description: A suite of focused hooks — one per runtime concern — composed by a single AgentProvider, instead of a single mega-hook.
+---
+
+# ADR-0059 · React Hooks Architecture — Separation of Concerns
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Vercel AI SDK's `useChat` is the gold standard for chat ergonomics. It is also a monolithic
+surface: streaming, history, tool calls, and submission live in one hook. For an agent runtime
+that exposes approvals, traces, memory, budget, sandbox state, and skills, a single mega-hook
+is impossible to maintain and impossible to compose.
+
+Existing alternatives are worse: most agent frameworks ship no React layer at all, forcing
+developers to glue WebSocket streams to component state by hand.
+
+## Decision
+
+`@veridex/agents-react` ships a **suite of focused hooks**, each mirroring exactly one runtime
+concern, glued by a single `<AgentProvider>` context that holds the connection and run
+registry.
+
+### Hooks
+
+| Hook | Mirrors | Purpose |
+|---|---|---|
+| `useRun` | run lifecycle | submit input, observe `status: idle \| running \| suspended \| completed \| failed`, stream tokens |
+| `useApprovals` | `ApprovalManager` | list pending approvals for current user/tenant, decide |
+| `useTrace` | `EventBus` | subscribe to trace events with type filters; for inspector UIs |
+| `useMemory` | `MemoryManager` | read / promote / revoke entries by tier |
+| `useContextHealth` | `ContextCompiler` | live per-section token counts, $V_e$ utilisation, compression actions |
+| `useSkills` | skill registry | list, enable, disable skills |
+| `useBudget` | metrics | tokens, dollars, tool calls — current run and cumulative |
+| `useCheckpoint` | `CheckpointManager` | inspect / restore points |
+| `useSandboxStatus` | sandbox | running tools, resource usage |
+
+### Principles
+
+1. **One hook per concern.** Compose at the application layer.
+2. **Server-pushed, optimistically rendered.** Trace events stream over SSE/WebSocket; hooks
+   update on event arrival. Submitting an input is optimistic.
+3. **Strict typing.** Every payload is the same `TraceEvent` shape as the server.
+4. **No hidden global state.** All hooks read from the provider; tests can mount a
+   `<MockAgentProvider>`.
+5. **Backpressure-aware.** High-frequency event streams (e.g., token deltas) are batched at
+   the provider; hooks see settled state.
+
+### Transport
+
+The provider negotiates SSE first (works through most proxies), falls back to WebSocket.
+Authentication is a single `getToken()` callback (control-plane-issued JWT recommended).
+
+## Consequences
+
+**Positive.** Each hook is small enough to test in isolation. UIs compose only the surfaces
+they need. New hooks can be added without breaking existing ones.
+
+**Negative.** Slightly more imports than a single mega-hook. Tree-shaking makes the runtime
+cost negligible.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0059-react-hooks-architecture.md`

@@ -1,0 +1,77 @@
+---
+title: ADR-0053 · Policy Engine — Priority-Ordered Rule Composition
+description: A pure-function, priority-ordered policy engine evaluates every consequential proposal — tool call, memory write, handoff, or transport invocation.
+---
+
+# ADR-0053 · Policy Engine — Priority-Ordered Rule Composition
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Agent frameworks treat "guardrails" as a single prompt block ("don't do X"), a hardcoded list
+of disallowed tools, or an after-the-fact moderation pass. All three fail when compliance
+requires contextual rules ("transfers above $10k between 18:00–06:00 UTC require dual
+approval"), when the same rule must apply across many tools and agents, or when enterprise
+customers need to author and version their own policies without forking the framework.
+
+Treasury, healthcare, legal, and government use cases require declarative, composable,
+auditable policy — closer to OPA/Rego than to a system prompt.
+
+## Decision
+
+A `PolicyEngine` evaluates every consequential proposal against a **priority-ordered list of
+rules**. Each rule is a pure function:
+
+```ts
+type PolicyRule = {
+  id: string;
+  priority: number;          // lower = earlier
+  evaluate(ctx: PolicyContext): PolicyCheckResult; // allow | deny | escalate
+};
+```
+
+`PolicyCheckResult` carries a verdict, a human-readable reason, structured evidence, and
+(for `escalate`) an approval route hint.
+
+### Composition
+
+- Rules evaluate in priority order. First non-`allow` wins (deny short-circuits; escalate
+  short-circuits unless a later deny exists).
+- Rules can be composed from **policy packs**: versioned bundles (e.g.,
+  `@veridex/agents-treasury` ships a treasury pack with sanctions, ceilings, time-lock, and
+  dual-approval rules). Customers can ship their own packs via
+  `@veridex/agents-control-plane`.
+- Built-in factories: `blockSafetyClass`, `requireApproval`, `capSpend`, `capTokens`,
+  `restrictTimeWindow`, `rateLimit`, `denylist`, `allowlist`.
+- Custom rules are functions; the registry holds them and exposes them via dependency
+  injection — there is no global state.
+
+### Evaluation context
+
+`PolicyContext` includes the agent definition, run metadata (user, tenant, turn), proposal
+(tool call / memory write / handoff), live counters (spend so far, tool calls so far), and
+arbitrary `ctx.metadata` (e.g., pre-screened sanction result, KYC tier). Rules are pure
+functions of context — no I/O — so they replay deterministically.
+
+### Verdicts
+
+- `allow` — proceed.
+- `deny` — abort the proposal; emit `policy_violation`; the model sees a structured error and
+  may retry or apologise.
+- `escalate` — suspend, route to `ApprovalManager`, checkpoint (ADR-0054).
+
+Every evaluation emits a `policy_decision` event with rule id, verdict, reason, and the
+evidence the rule consumed.
+
+## Consequences
+
+**Positive.** Policy is testable, replayable, and composable. Enterprise customers extend via
+packs, not forks.
+
+**Negative.** Rule authors must keep `evaluate` pure. The contract enforces this at the type
+level.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0053-policy-engine-rule-composition.md`

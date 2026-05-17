@@ -1,0 +1,70 @@
+---
+title: ADR-0054 · Human-in-the-Loop Approvals with Checkpoint/Resume
+description: Approvals are a runtime mechanic — escalations suspend the run, checkpoint state, and resume cleanly when a decision arrives.
+---
+
+# ADR-0054 · Human-in-the-Loop Approvals with Checkpoint/Resume
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Production agents must sometimes wait — for a human to approve a wire, for compliance to clear
+a contract, for an SRE to confirm a rollout. The naive implementations all fail:
+
+- **Block the process.** Holds a connection open for hours; falls over on redeploy.
+- **Polling tool.** The agent emits a "wait for approval" tool that loops; consumes turns and
+  money, breaks on crash.
+- **External workflow engine.** Durable, but the LLM loses its place in the conversation.
+
+None preserve the *agent's mental state* (working memory, partial reasoning, the proposal
+envelope) across the wait.
+
+## Decision
+
+Approvals are first-class and integrate with the policy engine (ADR-0053) and checkpoint
+manager (ADR-0055).
+
+### Routes
+
+- `auto` — proceed without approval.
+- `human_required` — single approver.
+- `dual_approval` — two independent approvers (the proposer cannot be one of them).
+- `policy_pack` — delegate to control-plane workflow (multi-step chains, SLAs, on-call).
+
+A rule with verdict `escalate` carries a route hint; the `ApprovalManager` resolves the route,
+creates an `ApprovalRequest` with the full proposal envelope, and emits `approval_requested`.
+
+### Suspend / resume
+
+1. The runtime emits `approval_requested` with a content-hashed proposal envelope.
+2. `CheckpointManager.save()` snapshots the run — event-log position, working memory, pending
+   proposal, turn index.
+3. The run returns to the caller with `status: "suspended"`. The process is free.
+4. When an approver decides (via React inbox, API, CLI, or webhook), the control plane invokes
+   `runtime.resume(runId, approvalId, decision, reason, approver)`.
+5. The runtime loads the checkpoint, validates the proposal hash still matches (no tampering),
+   re-emits `approval_resolved`, and proceeds — either executing the approved proposal or
+   treating denial as a policy deny.
+
+### Timeouts and escalation chains
+
+Each route declares a timeout. On timeout: escalate to next tier, auto-deny, or auto-allow
+(only for low-risk classes). The control plane supports SLA-breach alerts.
+
+### Tamper resistance
+
+The approval envelope is content-hashed. If the pending proposal is mutated between request
+and decision, resume aborts with `proposal_mutation_detected` and emits an audit event.
+
+## Consequences
+
+**Positive.** Agents can wait days for a human decision without holding a connection. The
+agent's reasoning state is preserved exactly. Tampering during the wait is detected.
+
+**Negative.** Approval-aware workflows require thinking about routes and SLAs up front. The
+defaults handle the common cases.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0054-approvals-checkpoint-resume.md`

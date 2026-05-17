@@ -1,0 +1,71 @@
+---
+title: ADR-0060 · Framework Adapter Strategy
+description: Import existing tools, export to other frameworks, and bridge live workflows so teams can migrate piecewise instead of rewriting.
+---
+
+# ADR-0060 · Framework Adapter Strategy — Import, Export, Live Bridges
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Teams have years of investment in LangChain, LangGraph, OpenAI Agents SDK, PydanticAI, and
+OpenAPI tooling. A framework that demands a rewrite to onboard will be rejected, no matter
+how good its primitives. Conversely, a framework that just wraps another framework inherits
+its problems.
+
+## Decision
+
+`@veridex/agents-adapters` provides three layers — **import**, **export**, **live bridge** —
+across the major ecosystems.
+
+### Import (definition translation)
+
+- **OpenAPI** → `ToolContract[]`: parse a spec, generate Zod schemas, classify safety per HTTP
+  method (`GET` → `read`, `POST/PUT/DELETE` → `write|network`), attach an `execute` that calls
+  the endpoint via a sandboxed HTTP client.
+- **LangChain Tool / LangGraph Node** → `ToolContract`: extract name, description, schema;
+  wrap `_call` in a sandboxed executor.
+- **OpenAI Function** → `ToolContract`: trivial mapping (JSON schema → Zod).
+- **PydanticAI tool** → `ToolContract`: via JSON-schema bridge.
+
+Imported tools are labelled `trust: imported` and traverse the `TransportBoundaryPEP`
+(ADR-0057) — schemas are sanitised, descriptions truncated, names normalised.
+
+### Export
+
+- `@veridex/agents` → **MCP server**: expose any tool registry as MCP tools (ADR-0057).
+- `@veridex/agents` → **OpenAI function list**, **LangChain `Tool` array**: useful for hybrid
+  stacks where another framework is the host.
+
+### Live bridges (incremental migration)
+
+The riskiest part of migrations is "rewrite everything." Live bridges let teams run mixed
+stacks:
+
+- **LangGraph live bridge.** A LangGraph node can call into a Veridex agent and vice-versa;
+  the bridge translates state and threads `runId` for unified tracing.
+- **OpenAI Assistants bridge.** An Assistants run can hand off to Veridex for the consequential
+  subset (treasury, approvals) and return.
+- **Mastra step bridge.** Mastra workflow steps can be Veridex tool contracts.
+
+Bridges always run with the receiving framework's governance (Veridex tools through Veridex
+policy, LangGraph nodes through LangGraph) — we do not silently relax either side.
+
+### Migration playbook
+
+1. Import existing tools — Veridex runs them under sandbox + policy without a rewrite.
+2. Bridge live workflows — incremental traffic moves to Veridex for the high-stakes paths.
+3. Replace piecewise — once a workflow is fully on Veridex, the bridge is removed.
+
+## Consequences
+
+**Positive.** Teams adopt incrementally; risk is bounded per workflow. Imported tools
+immediately gain sandboxing, policy, and audit.
+
+**Negative.** Bridge code is per-framework; we maintain the ones that matter (LangGraph,
+OpenAI Assistants, Mastra). Community bridges are encouraged.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0060-framework-adapter-strategy.md`

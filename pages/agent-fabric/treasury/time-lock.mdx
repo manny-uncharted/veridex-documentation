@@ -1,0 +1,54 @@
+---
+title: Time-Lock
+description: Cooling-off windows scaled by amount and route.
+---
+
+# Time-Lock
+
+A cooling-off delay between approval and execution. High-value transfers, unusual counterparties, or off-hours routes can require an explicit window during which the transfer can be cancelled.
+
+## Configure
+
+```ts
+import { TimeLockManager } from '@veridex/agents-treasury';
+
+const timeLock = new TimeLockManager({
+  baseDelaySec: 60,
+  scalingFactor: 2,                        // delay = base × 2^(log10(amount/threshold))
+  scalingThresholdUsdMicro: 1_000_000_000n,
+  perRoute: {
+    'wire':       { baseDelaySec: 300, maxDelaySec: 86_400 },
+    'usdc-local': { baseDelaySec: 0   },
+  },
+  perCounterparty: {
+    'unknown-vendor': { baseDelaySec: 3600 },
+  },
+});
+```
+
+## Behaviour
+
+After approval (and before idempotency reservation):
+
+1. `TimeLockManager.compute(proposal)` returns a delay in seconds.
+2. The run **suspends** with a `time_lock_pending` checkpoint.
+3. A scheduler resumes the run when the delay elapses.
+4. Before resuming, the runtime re-checks: still approved, no cancellation, no sanctions update.
+
+## Cancellation
+
+During the window, an operator can cancel:
+
+```ts
+await agent.cancelTimeLock(runId, { reason: 'duplicate', by: 'cfo@example.com' });
+```
+
+A `time_lock_cancelled` event terminates the run; idempotency releases.
+
+## Replay-safe
+
+The delay end-time is recorded in the checkpoint; on process restart, the scheduler picks it up. A redeploy mid-window does not cause a re-delay.
+
+## Audit
+
+Every transition emits an event: `time_lock_started`, `time_lock_elapsed`, `time_lock_cancelled`. All appear in the Evidence Bundle.

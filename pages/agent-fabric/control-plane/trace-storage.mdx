@@ -1,0 +1,64 @@
+---
+title: Trace Storage
+description: Durable, hash-chained, tamper-evident event log.
+---
+
+# Trace Storage
+
+The control plane provides a **Postgres-backed durable event log** with hash-chain validation, per-tenant retention, and selective-disclosure export.
+
+## Schema (simplified)
+
+```sql
+CREATE TABLE trace_events (
+  id            TEXT PRIMARY KEY,                    -- ULID
+  tenant_id     TEXT NOT NULL,
+  run_id        TEXT NOT NULL,
+  turn_id       TEXT,
+  type          TEXT NOT NULL,
+  payload       JSONB NOT NULL,
+  content_hash  TEXT NOT NULL,
+  parent_hash   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL,
+  retain_until  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX ON trace_events (tenant_id, run_id, id);
+CREATE INDEX ON trace_events (tenant_id, type, created_at);
+```
+
+The `parent_hash` chain is verified at read time; tampering breaks the chain.
+
+## Retention
+
+Per-tenant, per-event-type retention. Events past retention are summarised into a single `retention_summary` event (hash-anchored to the original chain), then deleted.
+
+## Export
+
+```ts
+const bundle = await cp.trace.export({
+  tenantId: 'acme-corp',
+  runIds:   ['01JC...', '01JD...'],
+  format:   'jsonl',
+  sign:     true,
+});
+```
+
+The bundle is content-hashed and signed (Ed25519). Auditors verify offline:
+
+```ts
+import { verifyExport } from '@veridex/agents-control-plane';
+await verifyExport(bundle, { publicKey });
+```
+
+## Transparency log anchoring (optional)
+
+```ts
+await cp.transparency.enable({
+  tenantId: 'acme-corp',
+  log: { url: 'https://transparency.example.com' },
+  cadence: { everyEvents: 10_000, orEveryHours: 6 },
+});
+```
+
+Chain roots are committed to an external append-only log; a compromise of the trace store cannot retroactively rewrite history without breaking the external commitments.

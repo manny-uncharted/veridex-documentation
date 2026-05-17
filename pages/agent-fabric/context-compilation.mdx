@@ -1,0 +1,118 @@
+---
+title: Context Compilation
+description: The strict-budget context engine that prevents long-context degradation.
+---
+
+# Context Compilation
+
+> "The LLM context window is a bounded, lossy channel. Output quality degrades monotonically with token volume, regardless of the advertised window." — Schick, *The Root Theorem of Context Engineering*, 2026
+
+## The problem
+
+Frontier models advertise context windows of 200k, 1M, 2M tokens. In practice, **quality falls off a cliff** well before the limit — usually around 30–50k tokens for reasoning-heavy tasks. The naive solutions all fail:
+
+- **Transcript replay** (the LangChain `ConversationBufferMemory` default) hits the cliff fast and re-feeds stale reasoning.
+- **Summarise on overflow** triggers *after* the cliff has been crossed.
+- **More retrieval** retrieves more low-density chunks that crowd out signal.
+
+The engineering objective is to maximise the **signal-to-token ratio**:
+
+$$\Phi = \frac{S(C)}{T(C)}$$
+
+over the compiled context $C$. That requires a strict, *active* budget — not a fallback.
+
+## The Veridex answer: the effective window $V_e$
+
+Every Veridex agent operates under an effective window $V_e$ that is strictly smaller than the model's raw limit. **$V_e$ is the active constraint** — the compiler refuses to exceed it.
+
+```ts
+import { createAgent, ContextCompiler } from '@veridex/agents';
+
+const agent = createAgent(
+  {
+    name: 'long-horizon-researcher',
+    instructions: '...',
+    tools: [...],
+    context: {
+      V_e: 24_000,                 // 24k tokens, regardless of model max
+      budgets: {
+        persona:      300,
+        instructions: 1_200,
+        memory:       6_000,
+        history:     12_000,
+        tools:        3_000,
+        headroom:     1_500,        // generation reserve
+      },
+    },
+  },
+  { modelProviders: { default: provider } },
+);
+```
+
+Defaults are conservative: `V_e ≈ 0.4 × raw_window` for frontier models, lower for tool-heavy agents.
+
+## Per-section compression
+
+The compiler runs *every turn* and compresses each section to its budget:
+
+| Section | Strategy |
+|---|---|
+| **History** | Rolling summarisation of stale turns; embedding-based redundancy detection; keep-last-$K$ verbatim ($K=4$ default) with tool round-trips paired |
+| **Memory** | Score (relevance · recency · confidence · density) → top-$k$ within budget; tier-aware weights |
+| **Tools** | Progressive disclosure: only tools relevant to the live task; skill packs enabled per-turn via `skill_manage` |
+| **Persona / instructions** | Hard-capped; static; never compressed silently |
+| **Headroom** | Reserved for generation; never consumed by other sections |
+
+## The homeostatic cycle
+
+There is no "garbage collection mode." Compression is the steady state — every turn accumulates, compresses, rewrites, and sheds. The compiler emits a `context_compiled` event with the per-section token counts and the compression actions taken. You can inspect it live:
+
+```tsx
+import { useContextHealth } from '@veridex/agents-react';
+
+function ContextHealth({ runId }: { runId: string }) {
+  const { sections, V_e, utilisation, lastActions } = useContextHealth(runId);
+  return (
+    <div>
+      <Bar value={utilisation} max={1} label={`V_e=${V_e}`} />
+      {Object.entries(sections).map(([k, t]) => <Row name={k} tokens={t} />)}
+      <Log actions={lastActions} />
+    </div>
+  );
+}
+```
+
+## A real-world example: 50-turn research agent
+
+A research agent runs for 50 turns over two hours. With naive transcript replay, by turn 30 the context is 90k tokens and the model is hallucinating about its own earlier conclusions. With Veridex's compiler:
+
+| Turn | History tokens | Memory tokens | Total | Quality (LLM judge) |
+|---:|---:|---:|---:|---:|
+| 5 | 3,200 | 800 | 9,800 | 0.92 |
+| 15 | 8,000 | 2,400 | 17,200 | 0.91 |
+| 30 | 11,500 (rolling summary) | 4,100 (promoted facts) | 22,400 | 0.91 |
+| 50 | 12,000 (rolling summary) | 5,500 | 23,600 | 0.90 |
+
+Total tokens never exceed $V_e=24000$. Episodic observations are promoted to semantic memory ([Memory](./memory)) so they survive the rolling summary as compressed facts. Quality stays flat instead of falling off the cliff.
+
+## Inspectable, testable, replayable
+
+The compiler is **deterministic** given the inputs. Tests can assert:
+
+```ts
+expect(result.trace.events.filter(e => e.type === 'context_compiled'))
+  .toSatisfyAll(e => e.payload.totalTokens <= 24_000);
+```
+
+The stateful eval harness ([Testing](./testing)) ships long-horizon cases that explicitly gate on $V_e$ and quality plateau.
+
+## Why not just trust the model's raw window?
+
+We did the experiment. We did not like the results. Neither did the [Root Theorem](../../resources). The compiler is the difference between an agent that holds a coherent conversation for an hour and one that drifts into incoherence by minute 20.
+
+## Related
+
+- [ADR-0050](/agent-fabric/adrs/0050-context-compilation-effective-window) — the design decision
+- [Memory](./memory) — what feeds the memory section
+- [Tools](./tools) — progressive disclosure of tool schemas
+- [Internal architecture §5](/docs/architecture/agent-fabric#5-contextcompiler-internals) — algorithm details

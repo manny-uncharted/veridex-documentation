@@ -1,0 +1,8 @@
+{
+  "vs-langchain": "vs LangChain",
+  "vs-langgraph": "vs LangGraph",
+  "vs-llamaindex": "vs LlamaIndex",
+  "vs-mastra": "vs Mastra",
+  "vs-openai-sdk": "vs OpenAI Agents SDK",
+  "vs-pydantic-ai": "vs PydanticAI"
+}

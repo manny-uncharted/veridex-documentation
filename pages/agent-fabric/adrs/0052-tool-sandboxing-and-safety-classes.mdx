@@ -1,0 +1,87 @@
+---
+title: ADR-0052 · Tool Sandboxing and Safety Classes
+description: Tools are typed, classified, sandboxed contracts — not raw functions. Every metadata field is content-hashed and every output is sanitised.
+---
+
+# ADR-0052 · Tool Sandboxing and Safety Classes
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Every meaningful agent failure mode in recent years traces to a tool call: tool poisoning
+attacks embed instructions in metadata; prompt injection from a fetched page trips a shell
+tool; a credential leaks via an over-eager logger; a filesystem tool reads `/etc/passwd`. The
+MCP threat model and the OWASP LLM Top 10 enumerate the same primitives — tool poisoning,
+direct and indirect prompt injection, command injection, confused deputy, credential theft,
+directory traversal, schema spoofing.
+
+Frameworks today usually offer a function-calling API with no input validation, an
+`eval`-shaped code interpreter, or a "do-anything" shell tool with `cwd = process cwd`.
+Not acceptable for any agent that touches money, production, or untrusted data.
+
+## Decision
+
+In the Agent Fabric, **a tool is a typed, classified, sandboxed contract — not a function.**
+
+### 1. Typed contract
+
+Every tool is declared via
+`tool({ name, description, input: ZodSchema, output: ZodSchema, safetyClass, idempotency, execute })`.
+Schemas are required, not optional. Inputs are validated *before* dispatch; outputs are
+validated *after*.
+
+### 2. Safety classes
+
+Every tool declares one of: `read | write | network | financial | privileged`. The policy
+engine, approval routes, retry policy, and audit emitter all key off the class. Defaults:
+`financial` → human approval; `privileged` → dual approval; `network` → allowlist;
+`read` → freely callable.
+
+### 3. Sandboxed execution
+
+Tools run inside a `SandboxRuntime`. Built-ins:
+
+- `DenyAllSandbox` — refuses all side-effects (the default).
+- `LocalProcessSandbox` — child process with chroot-like path jail, env filter, CPU/memory/time
+  limits.
+- Pluggable adapters for remote isolation (E2B / Modal / Firecracker class).
+
+Filesystem tools accept paths *relative to a jail root*; absolute paths, `..` traversal, and
+symlink escape are rejected at the sandbox boundary. Network tools require an explicit
+`networkAllowlist`; unlisted hosts are blocked at the egress layer, not at the tool's
+discretion.
+
+### 4. Schema and metadata integrity
+
+Tool definitions are content-hashed at registration. Descriptions (the field a TPA targets)
+are truncated to a hard maximum, scanned for known injection signatures (e.g.,
+`ignore previous instructions`, hidden Unicode tag characters, role-impersonation tokens), and
+displayed in audit traces alongside their hash so a description swap is detectable. Tools
+imported from MCP servers are sanitised on ingress (ADR-0057). Homoglyph collisions on tool
+names raise a registry error.
+
+### 5. Idempotency
+
+Consequential tools declare `idempotency: 'required' | 'optional'`. The runtime threads an
+idempotency key through retries and replays; an `IdempotencyStore`
+(`@veridex/agents-treasury`) ensures double-spend is impossible across crashes.
+
+### 6. Input / output sanitisation
+
+Output sanitisation strips terminal escape sequences, hidden Unicode (BiDi, tag chars),
+embedded markdown that could re-prompt the model, and credential-shaped patterns. The model
+sees a cleaned string; the audit log retains both raw and cleaned.
+
+## Consequences
+
+**Positive.** Tool failures become visible, attributable, and bounded. The same primitives
+power production policy, audit, and replay.
+
+**Negative.** Tool authors must declare schemas and classes; "just give me an `exec`" is
+deliberately hard. The ergonomics are designed around `tool({...})` so the discipline reads
+naturally.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0052-tool-sandboxing-and-safety-classes.md`

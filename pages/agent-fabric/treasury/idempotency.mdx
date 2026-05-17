@@ -1,0 +1,60 @@
+---
+title: Idempotency
+description: Double-execution is impossible by construction.
+---
+
+# Idempotency
+
+Retries are inevitable: network blips, process crashes, redeploys mid-flight. Without idempotency, a retry of a transfer is a second transfer. Veridex makes that **impossible by construction**.
+
+## The flow
+
+1. Before executing a transfer tool, the runtime computes:
+
+   ```
+   idempotencyKey = sha256(canonical({ runId, turnId, proposalId, contract, args }))
+   ```
+2. The runtime calls `IdempotencyStore.get(key)` first:
+   - If a committed record is returned, **skip execution** and return the recorded result.
+   - Otherwise, call `reserve(key, ttlMs)` to claim the slot. The store throws atomically if another worker already reserved it — the caller treats that as `in_flight` and either waits-and-retries `get` or fails fast.
+3. After successful execution, `commit(key, result)` records the result for future replays.
+4. On a retryable failure, `release(key)` clears the reservation so the next attempt can proceed.
+
+## Use it
+
+```ts
+import { InMemoryIdempotencyStore } from '@veridex/agents-treasury';
+
+const idempotency = new InMemoryIdempotencyStore({ defaultTtlMs: 24 * 3600_000 });
+
+const kit = createTreasuryKit({ idempotency, /* ... */ });
+```
+
+For production, plug in a durable backend (Postgres, Redis, DynamoDB) by implementing the four-method interface:
+
+```ts
+import type { IdempotencyStore, IdempotencyKey, IdempotencyRecord } from '@veridex/agents-treasury';
+
+class PgIdempotencyStore implements IdempotencyStore {
+  async get<T>(key: IdempotencyKey): Promise<IdempotencyRecord<T> | undefined> { /* ... */ }
+  async reserve(key: IdempotencyKey, ttlMs: number): Promise<void> { /* ... */ }
+  async commit<T>(key: IdempotencyKey, result: T): Promise<void> { /* ... */ }
+  async release(key: IdempotencyKey): Promise<void> { /* ... */ }
+}
+```
+
+The `reserve` implementation must be **atomic** — typically a single `INSERT ... ON CONFLICT DO NOTHING` (Postgres) or `SETNX` (Redis). Without that guarantee, two workers can race past the check.
+
+The runtime threads the `idempotencyKey` into the tool's `execute` so downstream APIs (Stripe, Circle, internal payments) can use the same key for end-to-end protection.
+
+## Replay vs. double-execute
+
+| Scenario | Outcome |
+|---|---|
+| Tool throws, runtime retries | Same key → `in_flight` → backoff; if first attempt succeeds, second sees `completed` |
+| Process crashes mid-execute | On resume, `reserve` returns `in_flight` for the TTL window; after TTL, treated as failed and may retry |
+| User asks "did that go through?" and replays the request | Different `runId`/`turnId` → **different key** → executes again. Idempotency protects the *system*, not the user's intent — that's what [approvals](../approvals) are for |
+
+## Audit
+
+Every `reserve`/`commit` emits an event; replays are visible (`tool_executed` with `replay: true`).

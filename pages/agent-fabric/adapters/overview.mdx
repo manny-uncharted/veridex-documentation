@@ -1,0 +1,32 @@
+---
+title: Adapters — Overview
+description: Migrate from LangChain, LangGraph, OpenAI SDK, OpenAPI, PydanticAI without a rewrite.
+---
+
+# `@veridex/agents-adapters`
+
+The riskiest part of any migration is "rewrite everything." `@veridex/agents-adapters` lets you adopt Veridex **incrementally**: import existing tools, export Veridex tools as MCP/OpenAI functions, and run **live bridges** that translate state between frameworks.
+
+```bash
+npm install @veridex/agents-adapters
+```
+
+## What's in the box
+
+| Layer | Direction | Sources / targets |
+|---|---|---|
+| [Import](./import-export#import) | Other → Veridex | OpenAPI, LangChain tools, LangGraph nodes, OpenAI functions, PydanticAI tools |
+| [Export](./import-export#export) | Veridex → Other | MCP server, OpenAI function list, LangChain `Tool` array |
+| [Live bridges](./live-bridges) | Bidirectional | LangGraph nodes, OpenAI Assistants, Mastra steps |
+
+## The migration playbook
+
+1. **Import existing tools.** Veridex runs them under sandbox + policy without a rewrite.
+2. **Bridge live workflows.** Incremental traffic moves to Veridex for high-stakes paths.
+3. **Replace piecewise.** Once a workflow is fully on Veridex, the bridge is removed.
+
+## Why not just wrap-and-call?
+
+Wrapping LangChain inside Veridex inherits LangChain's failure modes (opaque prompt mutation, no checkpoints). The bridges go the other way: high-stakes paths execute under Veridex's loop with Veridex's governance; low-stakes paths continue to run where they live.
+
+See [ADR-0060](/agent-fabric/adrs/0060-framework-adapter-strategy) for the design rationale.

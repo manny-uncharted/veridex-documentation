@@ -1,0 +1,78 @@
+---
+title: ADR-0062 · Stateful Evaluation Harness
+description: Replay-driven, trajectory-graded evals — including adversarial security cases and 50-turn long-horizon assertions.
+---
+
+# ADR-0062 · Stateful Evaluation Harness
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Traditional LLM evaluation is stateless: prompt in, response out, grade. Agents are stateful:
+their behaviour at turn N depends on memory written at turn 1, on a policy that escalated at
+turn 7, on an approval that resolved at turn 9. A correct turn-by-turn replay can still
+produce a regression if a memory write changed shape between versions.
+
+Teams without a stateful eval harness ship on vibes.
+
+## Decision
+
+`@veridex/agents` ships a built-in stateful evaluation pipeline integrated with the event log
+and the replay provider.
+
+### Pipeline
+
+```
+dataset (JSONL) → target agent config → run with replay provider
+  → trajectory (event log) → extractor → grader → gate
+```
+
+1. **Dataset.** JSONL cases: input(s) (multi-turn supported), expected outputs or extractor
+   target, grading config, tags.
+2. **Replay provider.** A model provider that returns deterministic responses recorded from a
+   prior live run (or hand-written for adversarial cases). Tools execute against a fixture
+   sandbox so side-effects are simulated.
+3. **Trajectory.** The full event log of the run — model calls, tool proposals, policy
+   decisions, memory writes, approvals.
+4. **Extractor.** A pure function over the trajectory (and optionally the final memory state)
+   returning the value to grade: e.g., "the contents of `semantic:user.email`", "the tool
+   sequence", "the policy verdict on turn 5".
+5. **Grader.** String match, JSON-shape, regex, LLM-as-judge with a fixed rubric, or custom.
+6. **Gate.** Pass/fail thresholds per tag; CI integration via JUnit/TAP output.
+
+### Golden-trace diff
+
+For each case, the harness can store a canonicalised event log as a golden file. A subsequent
+run diffs against it; structural changes (new event types, reordered events, missing tool
+calls) surface immediately. Diffs are reviewable in PRs.
+
+### Adversarial cases
+
+The harness ships fixtures for the security threats in ADR-0052 / 0057:
+
+- Tool poisoning (description with embedded instructions).
+- Prompt injection from a fetched-content tool.
+- Confused-deputy handoff.
+- Replay attack on an idempotent transfer.
+
+These cases run on every PR; a regression in mitigation is a CI failure.
+
+### Long-horizon eval
+
+Multi-turn cases (50+ turns) test the context compiler (ADR-0050) and memory lifecycle
+(ADR-0051). A case can assert *"at turn 50, the agent still remembers fact F"* and
+*"context never exceeded $V_e$"*.
+
+## Consequences
+
+**Positive.** Teams ship with evidence. Security mitigations are continuously tested.
+Long-horizon behaviour is measurable, not anecdotal. The same primitives power production
+replay for incident reconstruction.
+
+**Negative.** Golden files require maintenance; canonicalisation reduces noise but doesn't
+eliminate review. Replay datasets must be recorded; a CLI flow is provided.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0062-stateful-evaluation-harness.md`

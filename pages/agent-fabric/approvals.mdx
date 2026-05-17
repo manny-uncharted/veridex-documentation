@@ -1,0 +1,150 @@
+---
+title: Approvals
+description: Human-in-the-loop, durably — suspend, resume, escalate, audit.
+---
+
+# Approvals
+
+A treasury wire that needs a human signoff cannot be solved by holding an HTTP connection open for two hours. Veridex makes approvals a **first-class runtime mechanic** that integrates with the policy engine ([Policy](./policy)) and the checkpoint manager ([Checkpoints](./checkpoints)).
+
+## Routes
+
+| Route | Behaviour |
+|---|---|
+| `auto` | Proceed without approval |
+| `human_required` | Single approver (any with permission) |
+| `dual_approval` | Two independent approvers; proposer cannot be one of them |
+| `policy_pack` | Delegate to a control-plane workflow (multi-tier chains, SLAs, on-call rotation) |
+
+Set per-tool, per-rule, or per-tenant:
+
+```ts
+const transfer = tool({
+  name: 'transfer',
+  safetyClass: 'financial',
+  approval: { route: 'human_required', timeoutMs: 24 * 3600_000 },
+  // ...
+});
+```
+
+Or via a policy rule (overrides the tool default):
+
+```ts
+policyRule({
+  id: 'large-transfer-dual',
+  priority: 10,
+  evaluate(ctx) {
+    if (ctx.proposal.kind === 'tool'
+        && ctx.proposal.contract.safetyClass === 'financial'
+        && BigInt(ctx.proposal.arguments.amount) >= 10_000_00n) {
+      return { kind: 'escalate', route: 'dual_approval' };
+    }
+    return { kind: 'allow' };
+  },
+});
+```
+
+## The suspend/resume flow
+
+```ts
+const run = await agent.run("Send $50,000 to acme.com");
+
+if (run.status === 'suspended') {
+  console.log('Approval needed:', run.approvalId);
+  // Run is checkpointed. Process is free.
+}
+
+// …minutes/hours/days later, in any process:
+const final = await agent.resume(run.runId, run.approvalId, {
+  decision: 'allow',
+  approver: 'cfo@example.com',
+  reason: 'Counterparty verified; quarterly invoice.',
+});
+```
+
+Internally:
+
+1. The policy rule emits `escalate` → `policy_decision` event.
+2. `ApprovalManager.request` creates an `ApprovalRequest` with the **content-hashed proposal envelope** and emits `approval_requested`.
+3. `CheckpointManager.save` snapshots the run (working memory, pending proposal, event-log position).
+4. The run returns `status: "suspended"` to the caller.
+5. Approver decides via React inbox, REST API, CLI, or webhook.
+6. `agent.resume` loads the checkpoint, **verifies the proposal hash still matches**, emits `approval_resolved`, and continues.
+
+Hash mismatch on resume aborts with `proposal_mutation_detected` and emits a security event — a hostile mutation between request and resume is impossible to hide.
+
+## Timeouts and escalation chains
+
+```ts
+approval: {
+  route: 'policy_pack',
+  pack: 'treasury-high-value',
+  // pack defines: tier1 (15 min) → tier2 (1 hr) → tier3 (4 hr) → auto-deny
+},
+```
+
+Control-plane SLA breach alerts notify approvers; metrics surface chronic timeouts.
+
+## React inbox
+
+```tsx
+import { useApprovals } from '@veridex/agents-react';
+
+function Inbox() {
+  const { pending, decide } = useApprovals({ scope: 'mine' });
+  return pending.map(req => (
+    <ApprovalCard key={req.id} request={req}
+      onAllow={(reason) => decide(req.id, { decision: 'allow', reason })}
+      onDeny={(reason)  => decide(req.id, { decision: 'deny',  reason })}
+    />
+  ));
+}
+```
+
+Each card shows the full proposal, the policy rule that triggered, the agent's reasoning chain (filtered), and the trace events leading up to the request.
+
+## End-to-end: treasury agent with HITL
+
+```ts
+import { createAgent } from '@veridex/agents';
+import { treasuryPolicyPack, createTreasuryKit } from '@veridex/agents-treasury';
+
+const kit = createTreasuryKit({
+  ceilings:    inMemoryCeilings,
+  idempotency: inMemoryIdempotency,
+  timeLock,
+  sanctions:   sanctionsScreener,
+  reputation:  sbtProvider,
+  evidenceSigner,
+  portal:      portalTelemetry,
+  dualApprovalAbove: { amountUsdMicro: 10_000_000_000n },
+});
+
+const agent = createAgent({
+  name: 'treasury-bot',
+  instructions: '...',
+  tools: kit.tools,
+  policies: kit.policyRules,
+}, { modelProviders: { default: provider }, plugins: [kit.plugin] });
+
+const run = await agent.run("Pay $50k to acme.com for invoice INV-1234");
+// run.status === 'suspended' — dual approval needed
+```
+
+Two approvers later, `agent.resume(...)` runs the transfer through:
+
+1. Idempotency reservation (impossible to double-execute).
+2. Sanctions screening (denylist + allowlist).
+3. Time-lock (zero-delay here; configurable per-route).
+4. Executor (signs, broadcasts, waits for receipt).
+5. Ceiling commit (the spend is recorded).
+6. **Evidence Bundle finalised** — every event, verdict, approval, and chain receipt is canonicalised, content-hashed, and signed (Ed25519 or HMAC).
+
+The bundle is submitted to the developer-portal trace store via the relayer; any auditor can verify it offline.
+
+## Related
+
+- [ADR-0054](/agent-fabric/adrs/0054-approvals-checkpoint-resume)
+- [Checkpoints](./checkpoints)
+- [Policy](./policy)
+- [Treasury package](./treasury/overview)

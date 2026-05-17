@@ -1,0 +1,143 @@
+---
+title: Memory
+description: Four tiers, editable writes, homeostatic lifecycle — memory that doesn't drift.
+---
+
+# Memory
+
+Most "agent memory" is a vector store with a `memory_add` tool. That's not memory; that's a write-only log that retrieves similar text. Real memory in production needs **tiers**, **provenance**, **confidence**, and a **lifecycle** that promotes, decays, and reconciles.
+
+## Four tiers
+
+| Tier | Lifetime | Purpose | When to write |
+|---|---|---|---|
+| **working** | Single run | Scratchpad, intermediate reasoning | Inside a run; cleared on completion |
+| **episodic** | Hours–days (TTL) | Time-stamped interaction events | Anything that happened, with provenance |
+| **semantic** | Indefinite | Stable, distilled facts | After confirmation across multiple episodes (or explicit user statement) |
+| **procedural** | Indefinite | Learned routines, playbooks | When the agent discovers a repeatable workflow |
+
+```ts
+import { createAgent } from '@veridex/agents';
+
+const agent = createAgent({
+  name: 'sales-copilot',
+  instructions: '...',
+  tools: [...],
+  memory: {
+    episodic: { ttlMs: 7 * 24 * 3600_000 },
+    semantic: { embedder: 'openai:text-embedding-3-small' },
+    reconciler: { cadence: { everyTurns: 25 } },
+  },
+});
+```
+
+## Writing memory
+
+Memory writes are **proposals** — they traverse the policy engine just like tool calls.
+
+The model writes via a built-in tool:
+
+```ts
+// the agent does:
+await memory.write({
+  tier: 'semantic',
+  key: 'customer.acme.preferences',
+  value: { preferredChannel: 'slack', timezone: 'PT' },
+  confidence: 0.85,
+  source: { kind: 'user' },
+});
+```
+
+Or you write directly:
+
+```ts
+await agent.memory.write({ tier: 'semantic', key: '...', value: {...}, confidence: 1.0 });
+```
+
+Every commit emits a `memory_written` event with the entry's content hash and provenance (`runId`, `turn`, `eventId`).
+
+## Reading memory
+
+The context compiler ([Context Compilation](./context-compilation)) selects memory entries within the `memoryBudget` using a tier-aware score (relevance × recency × confidence × density). You can also read directly:
+
+```ts
+const entries = await agent.memory.query({
+  tier: 'semantic',
+  q: 'acme preferences',
+  k: 5,
+});
+```
+
+## The reconciler — anti-drift in steady state
+
+A scheduled `MemoryReconciler` keeps memory healthy. Default cadence: every 25 turns or 10 minutes idle.
+
+| Job | What it does |
+|---|---|
+| **Deduplication** | Embedding cos-sim > θ collapses entries; higher confidence wins; provenance merges |
+| **Conflict resolution** | Same key, different values → recency × confidence × source weight picks; loser gets `supersededBy` |
+| **Promotion** | Episodic entries corroborated across ≥3 distinct turns → semantic |
+| **Decay** | Episodic past TTL → summarised into a "session digest" semantic entry, originals removed |
+| **Linking** | New semantic entries get bidirectional links to top-K nearest neighbours (A-MEM-style) |
+
+The reconciler is bounded and rate-limited; the LLM-as-arbiter call for conflict resolution is opt-in.
+
+## Naive replay vs. Veridex
+
+```ts
+// Naive (LangChain default):
+// history = [turn1, turn2, ..., turn50]   ← all of it, every call
+//
+// Result: 90k tokens, model contradicts itself, costs spike.
+
+// Veridex:
+// history (rolling)            : 11k tokens (last 4 verbatim + summary)
+// semantic memory (promoted)   : 4k tokens of distilled facts
+// episodic memory (retrieved)  : 1.5k tokens of relevant recent events
+// Total: ~17k tokens, coherent, predictable cost.
+```
+
+## React inspector
+
+```tsx
+import { useMemory } from '@veridex/agents-react';
+
+function MemoryPanel({ tenantId }: { tenantId: string }) {
+  const { entries, promote, revoke } = useMemory({ tier: 'semantic' });
+  return entries.map(e => (
+    <Row key={e.id} entry={e}
+      onPromote={() => promote(e.id)}
+      onRevoke={() => revoke(e.id, 'incorrect')} />
+  ));
+}
+```
+
+Operators can promote a low-confidence entry, revoke a wrong one, or pin a critical fact.
+
+## Anti-drift strict mode
+
+Enable strict mode and the runtime refuses to let the model contradict a high-confidence semantic fact without an explicit `supersedes`:
+
+```ts
+memory: { strictAntiDrift: true }
+```
+
+Violations emit `policy_violation` of type `memory_conflict`. Useful for compliance-sensitive contexts.
+
+## Custom backends
+
+```ts
+import { MemoryStore } from '@veridex/agents';
+
+class MyPostgresMemory implements MemoryStore { /* ... */ }
+
+memory: { store: new MyPostgresMemory(pool) }
+```
+
+Built-ins: `InMemoryMemoryStore`, `PostgresMemoryStore` (ships in `@veridex/agents-control-plane`).
+
+## Related
+
+- [ADR-0051](/agent-fabric/adrs/0051-tiered-memory-lifecycle)
+- [Context Compilation](./context-compilation)
+- [Internal architecture §6](/docs/architecture/agent-fabric#6-memory-subsystem-internals)

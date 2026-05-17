@@ -1,0 +1,126 @@
+---
+title: Security — Overview
+description: Framework-agnostic security gateway, packs, and adapters for agent systems.
+---
+
+# `@veridex/agent-security`
+
+A **framework-agnostic security gateway** for agent systems. One TypeScript engine evaluates a layered defence — packs covering the OWASP LLM Top 10 and the MCP threat model — against any payload (prompts, tool I/O, fetch requests) and returns a uniform verdict. Adapters wire that engine into LangChain, CrewAI, Vercel AI SDK, and any framework that can call a function.
+
+```bash
+npm install @veridex/agent-security
+```
+
+## What you get
+
+| Surface | Use it for |
+|---|---|
+| `SecurityGateway` | In-process evaluation: pass prompts, tool calls, or arbitrary payloads, get a verdict |
+| `SecurityClient` | Out-of-process: forward evaluations to a hardened sidecar/service |
+| `createSecureFetch` | A drop-in `fetch` that enforces endpoint allowlists, rate limits, and secret/exfiltration scans |
+| `TokenBucketRateLimiter` | Pluggable rate limiter used by `createSecureFetch` and packs |
+| `TelemetryReporter` | Structured `security_event` records routed to your sink (stdout, OTLP, SIEM) |
+| Adapters | `VeridexLangChainGuard`, `VeridexCrewAIGuard` — same verdict, framework-native API |
+
+## Built-in packs
+
+Imported individually or via `createDefaultPacks()`. Each pack is a coherent rule bundle for one threat class.
+
+| Pack | Threat | Behaviour |
+|---|---|---|
+| `injectionDetectionPack` | LLM01 — Prompt injection | Heuristic + pattern detection on untrusted inputs and tool outputs |
+| `toolPoisoningPack` | LLM05 / MCP TPA | Flags imported/untrusted tool descriptions and outputs; forces downgrade to `read` safety class |
+| `secretDetectionPack` | LLM02 — Sensitive info disclosure | Scans inputs, outputs, and fetch bodies for secrets, JWTs, private keys |
+| `shellCommandSafetyPack` | LLM07 — Insecure plugin/tool design | Blocks dangerous shell patterns when shell-execution tools are present |
+| `endpointAllowlistPack` | LLM05 / data exfiltration | Restricts outbound HTTP to a per-tenant allowlist |
+| `budgetCeilingPack` | LLM10 — Unbounded consumption | Token / call / cost ceilings per run and per tenant |
+| `handoffSafetyPack` | Multi-agent A2A risk | Validates inter-agent handoff envelopes; blocks tainted context propagation |
+
+## Compose
+
+```ts
+import {
+  SecurityGateway,
+  createDefaultPacks,
+  injectionDetectionPack,
+  secretDetectionPack,
+  endpointAllowlistPack,
+} from '@veridex/agent-security';
+
+const gateway = new SecurityGateway({
+  packs: [
+    ...createDefaultPacks(),
+    endpointAllowlistPack({ allow: ['api.acme.com', '*.veridex.network'] }),
+  ],
+  telemetry: telemetryReporter,
+});
+
+const verdict = await gateway.evaluate({
+  kind: 'tool_input',
+  toolName: 'send_email',
+  payload: { to: '...', body: '...' },
+  context: { tenantId, runId, principal },
+});
+
+if (verdict.decision === 'deny') throw new SecurityViolation(verdict.reason);
+```
+
+`SecurityGateway` returns a uniform `{ decision, reason, taxonomy, evidence }` regardless of which pack produced the verdict.
+
+## Hardened fetch
+
+```ts
+import { createSecureFetch, TokenBucketRateLimiter } from '@veridex/agent-security';
+
+const secureFetch = createSecureFetch({
+  gateway,
+  rateLimiter: new TokenBucketRateLimiter({ capacity: 60, refillPerSec: 1 }),
+});
+
+// Drop-in for fetch — throws SecureFetchViolationError on policy denial.
+await secureFetch('https://api.acme.com/orders', { method: 'POST', body });
+```
+
+`createSecureFetch` runs each request through the gateway's `endpointAllowlistPack`, `secretDetectionPack`, and rate limiter before the underlying `fetch` is invoked.
+
+## Framework adapters
+
+```ts
+// LangChain
+import { VeridexLangChainGuard } from '@veridex/agent-security/adapters/langchain';
+const guard = new VeridexLangChainGuard({ gateway });
+agentExecutor.addCallback(guard);
+
+// CrewAI
+import { VeridexCrewAIGuard } from '@veridex/agent-security/adapters/crewai';
+const crewGuard = new VeridexCrewAIGuard({ gateway });
+crew.use(crewGuard);
+```
+
+Both adapters call the same `SecurityGateway` instance; the verdict surface is identical across frameworks.
+
+## Server mode
+
+The `/server` subpath exposes the same gateway behind an HTTP API for out-of-process deployment. Run it as a sidecar alongside untrusted agent processes and have them speak to it via `SecurityClient`:
+
+```ts
+import { SecurityClient } from '@veridex/agent-security';
+const client = new SecurityClient({ baseUrl: 'http://veridex-security:8080', apiKey });
+const verdict = await client.evaluate(/* ... */);
+```
+
+This is the recommended topology when the agent process itself cannot be trusted to honour in-process verdicts (e.g. user-supplied code, third-party plugins).
+
+## Telemetry
+
+Every evaluation — allow, deny, or escalate — emits a structured `security_event` record with a stable taxonomy field. Pipe it to OTLP, your SIEM, or stdout via `TelemetryReporter`.
+
+## Use with the control plane
+
+Packs are versioned bundles. The [control plane](../control-plane/policy-packs) composes, versions, and rolls them out per tenant; the same TypeScript pack runs everywhere from local dev to production sidecar.
+
+## Related
+
+- [ADR-0057 — MCP transport security hardening](/agent-fabric/adrs/0057-mcp-transport-security-hardening)
+- [SECURITY.md](https://github.com/veridex-protocol/veridex/blob/main/SECURITY.md)
+- [Package README](https://github.com/veridex-protocol/veridex/tree/main/packages/agents-security)

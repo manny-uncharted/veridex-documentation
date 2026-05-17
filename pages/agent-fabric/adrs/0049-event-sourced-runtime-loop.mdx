@@ -1,0 +1,70 @@
+---
+title: ADR-0049 · Event-Sourced, Policy-Gated Runtime Loop
+description: Why every Agent Fabric run is an append-only stream of typed events and every consequential action is a policy-checked proposal.
+---
+
+# ADR-0049 · Event-Sourced, Policy-Gated Runtime Loop
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Most agent frameworks implement the run loop as opaque mutation: the framework calls the model,
+parses tool calls, invokes them, appends results, and recurses — invisibly. When something goes
+wrong in production (a tool that ran twice, a memory write that conflicts, a model that lied
+about a tool result) the loop offers no forensic surface. Two structural failures fall out:
+
+1. **No durable progress.** State lives in process memory; a crash, redeploy, or long-running
+   approval erases work.
+2. **No safe gate for consequential actions.** Tools that move money or mutate production data
+   run the moment the model emits a call.
+
+Veridex targets treasury, governance, and accountability contexts where neither failure is
+acceptable.
+
+## Decision
+
+The core runtime in `@veridex/agents` is **event-sourced** and **policy-gated**.
+
+- **Every state transition is an append-only, typed event** on a `TraceEventBus`:
+  `run_started`, `turn_started`, `context_compiled`, `tool_proposed`, `policy_decision`,
+  `approval_requested`, `tool_executed`, `memory_written`, `checkpoint_saved`, etc. Events
+  carry `runId`, `turnId`, content hashes, and structured payloads. The event log is the
+  source of truth; memory, checkpoints, and the control plane are projections.
+- **Every consequential action is a proposal.** The model never directly executes a tool. It
+  emits a `ToolCall` which becomes a `ToolProposal` and traverses the `PolicyEngine` and
+  (if escalated) the `ApprovalManager`. Only an approved proposal reaches the sandboxed
+  executor.
+- **The loop is checkpointable at every turn boundary.** Pending approvals suspend the run,
+  write a checkpoint with the proposal envelope and event-log position, and the run can
+  resume in a different process days later.
+- **The loop is fully deterministic** given `(config, events, model responses)`. Replay
+  re-emits the same events; golden-trace tests diff event logs.
+
+One turn executes:
+
+```
+beforeTurn hook
+→ ContextCompiler.compile(history, memory, tools)  emit context_compiled
+→ ModelProvider.generate(context)                  emit model_call_*
+→ extract proposals (tool calls, memory writes, handoffs)
+→ for each proposal:
+    PolicyEngine.evaluate(proposal)                emit policy_decision
+    if escalate: ApprovalManager.route() → suspend → checkpoint → return
+    if allow:    Sandbox.execute(proposal)         emit tool_proposed/executed
+→ MemoryManager.commit(writes)                     emit memory_written
+→ afterTurn hook
+→ continue or terminate
+```
+
+## Consequences
+
+**Positive.** Full forensic surface, durable runs, deterministic replay, clean integration
+points for governance, memory lifecycle, and audit.
+
+**Negative.** Every contributor must reason in events rather than in mutating objects. The
+discipline pays off in production.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0049-event-sourced-policy-gated-runtime-loop.md`

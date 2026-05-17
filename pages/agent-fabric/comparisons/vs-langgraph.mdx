@@ -1,0 +1,52 @@
+---
+title: Veridex vs LangGraph
+description: Where LangGraph's state graph stops and Veridex's runtime loop starts.
+---
+
+# Veridex vs LangGraph
+
+LangGraph is LangChain's stateful graph runner. It's a real improvement over `AgentExecutor` for explicit control flow. We still find it short for production agents:
+
+| Dimension | LangGraph | Veridex |
+|---|---|---|
+| **State model** | User-defined reducer over a `StateGraph` | Event-sourced; typed `TraceEvent` stream; deterministic replay |
+| **Checkpoints** | `checkpoint_id` per state snapshot | Differential checkpoints + content-hashed event log + signed bundles |
+| **Human-in-the-loop** | `interrupt_before/after` + manual resume | First-class `escalate` verdict; `ApprovalManager`; workflow tiers |
+| **Tools** | LangChain `Tool` | Typed contract + safety class + sandbox |
+| **Context budget** | Manual | Strict $V_e$, per-section budgets, compression-as-steady-state |
+| **Policy** | If/branch in graph | Priority-ordered rules; pack composition; staged rollouts |
+| **Adversarial proofs** | External | Built-in red-team suite, runs in CI |
+| **Multi-tenancy** | Out of scope | Control plane (opt-in) |
+
+## They compose
+
+A LangGraph graph can call a Veridex agent for a high-stakes subgraph; the rest of the graph keeps running.
+
+```ts
+import { veridexNode } from '@veridex/agents-adapters/langgraph';
+
+const graph = new StateGraph(MyState)
+  .addNode('research', researchNode)              // stays in LangGraph
+  .addNode('treasury', veridexNode({              // governed by Veridex
+    agent: treasuryAgent,
+    mapState: s => s.userQuery,
+    mergeResult: (s, r) => ({ ...s, paid: r.output }),
+  }))
+  .addEdge('research', 'treasury');
+```
+
+The `treasury` node runs under Veridex's policy + approvals + evidence bundling. The rest of the graph keeps its LangGraph semantics.
+
+## When LangGraph is enough
+
+- The graph state is small and well-typed.
+- HITL is rare and short.
+- Audit is informal.
+- Single-tenant deployment.
+
+## When Veridex is the right tool
+
+- Treasury, healthcare, compliance.
+- Hours-to-days workflows with multi-tier approvals.
+- Adversarial threat models.
+- Multi-tenant fleets with per-tenant governance.

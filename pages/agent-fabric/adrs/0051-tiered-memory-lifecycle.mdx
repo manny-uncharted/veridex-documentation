@@ -1,0 +1,79 @@
+---
+title: ADR-0051 · Tiered Memory with Homeostatic Lifecycle
+description: Four memory tiers, proposal-style writes, and a reconciler that deduplicates, resolves conflicts, promotes, and decays.
+---
+
+# ADR-0051 · Tiered Memory with Homeostatic Lifecycle
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+"Memory" in most agent frameworks is either the full transcript shoved back into the next
+prompt or a vector store the model retrieves from via a tool call. Both fail at scale:
+transcript replay drives drift and cost; naive vector RAG cannot distinguish stable facts
+from one-off statements, cannot resolve conflicts, cannot decay, and cannot promote a
+recurring observation into a durable belief.
+
+The research literature (MemGPT/Letta, A-MEM, Cognee) converges on a tiered, lifecycle-managed
+model: memory must be *editable*, *provenance-tracked*, *confidence-scored*, and subject to a
+continuous lifecycle.
+
+## Decision
+
+The Agent Fabric defines four memory tiers with explicit semantics, an editable write API, and
+a homeostatic lifecycle.
+
+### Tiers
+
+| Tier | Lifetime | Purpose | Backed by |
+|---|---|---|---|
+| **Working** | Single run | Per-run scratchpad, intermediate reasoning | In-process |
+| **Episodic** | Hours–days (TTL) | Time-stamped interaction events | KV + vector |
+| **Semantic** | Indefinite | Stable facts, distilled from episodes, versioned with provenance | KV + vector + graph |
+| **Procedural** | Indefinite | Learned routines, policies, agent-authored playbooks | KV |
+
+### Write API
+
+Memory writes are **proposals**, not commands. The agent emits a `MemoryWriteProposal`
+`(tier, key, value, confidence, source, supersedes?)`. It traverses the policy engine — just
+like a tool call — and only commits if allowed. Every commit emits a `memory_written` event
+with content hash.
+
+### Homeostatic lifecycle
+
+A `MemoryReconciler` runs at a configurable cadence (after N turns, on heartbeat, or on demand):
+
+1. **Deduplication.** Embedding similarity above threshold collapses to the higher-confidence
+   entry; provenance is merged.
+2. **Conflict resolution.** Contradictions on the same key are resolved by recency × confidence
+   × source weighting; the loser is archived with a `superseded_by` link.
+3. **Promotion.** Episodic entries that recur across N episodes with consistent value and high
+   confidence are promoted to semantic.
+4. **Decay.** Episodic entries past TTL are summarised into semantic if salient, otherwise
+   dropped.
+5. **Linking.** New semantic entries trigger retroactive link generation (A-MEM-style) to
+   related entries.
+
+### Retrieval scoring
+
+```
+score = w_rel · cos_sim(query, entry)
+      + w_rec · recency_decay(entry.timestamp)
+      + w_conf · entry.confidence
+      + w_den  · semantic_density(entry)
+```
+
+Weights are tier-aware; retrieval emits a `memory_retrieved` event listing IDs and scores.
+
+## Consequences
+
+**Positive.** Long-horizon coherence, conflict resolution, measurable confidence, and a memory
+surface developers and operators can inspect.
+
+**Negative.** More moving parts than a single vector store. The defaults are designed to be
+useful without configuration.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0051-tiered-memory-lifecycle.md`

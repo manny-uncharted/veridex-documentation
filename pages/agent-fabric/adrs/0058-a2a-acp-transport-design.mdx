@@ -1,0 +1,66 @@
+---
+title: ADR-0058 · A2A and ACP Transport Design
+description: Inter-agent traffic is gated by the same policy, sandbox, and audit pipeline as tool calls.
+---
+
+# ADR-0058 · A2A and ACP Transport Design
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+Agents will increasingly call other agents. The emerging standards — Agent-to-Agent (A2A) and
+Agent Communication Protocol (ACP) — promise capability discovery and secure invocation, but
+most reference implementations are toy-grade: no identity binding, no rate limiting, no
+replay protection, no audit, and no policy gate on outbound calls.
+
+A runtime that takes governance seriously cannot treat inter-agent traffic as less governed
+than tool calls.
+
+## Decision
+
+A2A and ACP transports are first-class peers to MCP, sharing the same `TransportBoundaryPEP`
+and event-bus integration (ADR-0057).
+
+### Agent Cards
+
+Each agent exposes an Agent Card: a signed JSON document describing identity (DID-style),
+supported skills, safety classes, rate limits, pricing (if any), and the public key used to
+verify outbound claims. Cards are content-hashed and discoverable.
+
+### Invocation
+
+An outbound A2A call is structurally a tool call: it traverses the policy engine, may require
+approval, runs through the sandbox boundary, and emits trace events. The remote agent's
+response is treated as untrusted data — it traverses the output sanitiser and is admitted to
+the context only as a tool result, never as system instructions.
+
+### Identity binding and replay protection
+
+- Every invocation carries a signed envelope:
+  `(senderAgentId, runId, turnId, nonce, timestamp, payload)`.
+- The receiver verifies the signature, rejects replays (nonce store with TTL), and binds the
+  invocation to its own run.
+- Cross-tenant calls require explicit tenant-level grants in the control plane.
+
+### Circuit breakers
+
+A `CircuitBreaker` per remote agent tracks error rate and latency; persistent failures open
+the breaker and emit `transport_circuit_open`. The calling agent receives a structured error
+and may hand off or apologise — it does not retry blindly.
+
+### ACP specifics
+
+ACP message routing is implemented over the same envelope; multi-hop messages preserve the
+original `runId` for traceability. Each hop emits a `handoff` event with provenance.
+
+## Consequences
+
+**Positive.** Inter-agent traffic is governed, auditable, and replay-protected by default.
+Cross-organisation agent collaboration becomes a question of grants, not custom code.
+
+**Negative.** Agent operators must publish and maintain Agent Cards. We ship a generator.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0058-a2a-acp-transport-design.md`

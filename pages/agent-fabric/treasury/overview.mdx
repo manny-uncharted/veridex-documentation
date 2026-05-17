@@ -1,0 +1,99 @@
+---
+title: Treasury — Overview
+description: Money-movement capability layer with policy, audit, and adversarial proofs.
+---
+
+# `@veridex/agents-treasury`
+
+The capability layer for **money-movement agents**. Idempotency, ceilings, time-lock, sanctions, signed evidence bundles, policy pack, and a red-team eval suite — all built on the agent fabric.
+
+```bash
+npm install @veridex/agents-treasury
+```
+
+## Why a separate package
+
+Treasury isn't a tool, it's an attack surface. The package consolidates the *non-negotiable* primitives so a treasury-capable agent inherits them by default:
+
+| Concern | Primitive |
+|---|---|
+| Double-execution under retries/crashes | [Idempotency](./idempotency) |
+| Velocity & cumulative spend control | [Ceilings](./ceilings) |
+| Cooling-off period for high-value transfers | [Time-Lock](./time-lock) |
+| Counterparty risk | [Sanctions](./sanctions) |
+| Tamper-evident disclosure | [Evidence Bundles](./evidence-bundles) |
+| Compositional rules | [Policy Pack](./policy) |
+| Continuous adversarial proof | [Red-Team Suite](./red-team) |
+
+## Quick start
+
+```ts
+import { createAgent } from '@veridex/agents';
+import {
+  createTreasuryKit,
+  InMemoryIdempotencyStore,
+  SpendCeilings,
+  TimeLockManager,
+  CompositeSanctionScreener,
+  DenylistSanctionScreener,
+  Ed25519EvidenceSigner,
+} from '@veridex/agents-treasury';
+
+const kit = createTreasuryKit({
+  appId:   'app_123',
+  runId:   run.id,
+  agentId: 'treasury-bot',
+
+  idempotency: new InMemoryIdempotencyStore({ defaultTtlMs: 24 * 3600_000 }),
+  sanctions:   new CompositeSanctionScreener([
+    new DenylistSanctionScreener(internalDenylist),
+    // chain a vendor (Chainalysis, TRM) here in production
+  ]),
+  evidenceSigner: new Ed25519EvidenceSigner({ privateKey, publicKey, keyId: 'ops-2026' }),
+
+  ceilings: new SpendCeilings([
+    { window: 'day',   currency: 'USDC', decimals: 6, limit: '50000000000' },   // $50,000
+    { window: 'month', currency: 'USDC', decimals: 6, limit: '500000000000' },  // $500,000
+  ]),
+  timeLock: new TimeLockManager({ /* per-route delays */ }),
+
+  transfer: { executor: myTransferExecutor },
+  portal:   portalTelemetry,
+});
+
+const agent = createAgent(
+  { name: 'treasury-bot', instructions: '...', tools: kit.tools, policies: kit.policyRules },
+  { modelProviders: { default: provider }, plugins: [kit.plugin] },
+);
+```
+
+The kit returns a coherent `tools` / `policyRules` / `plugin` triple plus the underlying `bundler`. `kit.plugin` wires sanctions screening into the proposal context and evidence-bundle assembly into the runtime event bus.
+
+## End-to-end happy path
+
+```
+user → "pay $50k to acme.com"
+  → propose transfer tool call
+  → policy: sanctions check passes, ceilings pass, amount >= dual-approval threshold
+  → escalate: dual approval
+  → checkpoint, suspend
+  → 2 approvers decide allow
+  → time-lock (configured zero for this route)
+  → idempotency reservation
+  → executor signs + broadcasts
+  → ceiling commit
+  → evidence bundle finalised, signed, submitted to portal
+  → run_completed
+```
+
+Every step is an event. Every event is in the bundle. The bundle is verifiable offline.
+
+## Read next
+
+- [Idempotency](./idempotency)
+- [Ceilings](./ceilings)
+- [Time-Lock](./time-lock)
+- [Sanctions](./sanctions)
+- [Evidence Bundles](./evidence-bundles)
+- [Policy Pack](./policy)
+- [Red-Team Suite](./red-team)

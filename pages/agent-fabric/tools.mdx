@@ -1,0 +1,161 @@
+---
+title: Tools
+description: Typed contracts, safety classes, sandboxing, idempotency — tools that survive the threat model.
+---
+
+# Tools
+
+A tool in Veridex is **not** a function. It is a **typed, classified, sandboxed contract** — and the difference is the difference between an agent you can ship and one you can't.
+
+## Why not just a function?
+
+The MCP threat model and OWASP LLM Top 10 catalogue the failure modes:
+
+- **Tool Poisoning Attack (TPA):** malicious instructions in a tool's description hijack the model.
+- **Prompt Injection:** a fetched webpage tells the model to call a shell tool with a payload.
+- **Command Injection:** unsanitised inputs concatenated into shell commands.
+- **Confused Deputy:** an agent with high privileges is tricked into reading protected data.
+- **Credential Theft:** secrets leak via logs or environment.
+- **Directory Traversal:** filesystem tools read outside the jail.
+- **Schema Poisoning:** a remote MCP server swaps in a different schema.
+
+A `function` cannot defend against any of these. A typed contract can.
+
+## Anatomy of a tool
+
+```ts
+import { tool } from '@veridex/agents';
+import { z } from 'zod';
+
+const sendEmail = tool({
+  name: 'send_email',
+  description: 'Send a transactional email to a verified address.',
+  safetyClass: 'network',                     // read | write | network | financial | privileged
+  idempotency: 'required',                    // optional | required
+  input: z.object({
+    to:      z.string().email(),
+    subject: z.string().max(200),
+    body:    z.string().max(8000),
+  }),
+  output: z.object({ messageId: z.string() }),
+  sandbox: { networkAllowlist: ['api.sendgrid.com'] },
+  approval: { route: 'auto' },                // or 'human_required', 'dual_approval', 'policy_pack'
+  retry:    { attempts: 3, backoffMs: 500 },
+  async execute({ input, secrets, idempotencyKey }) {
+    const client = new SendGrid(secrets.get('SENDGRID_KEY'));
+    const id = await client.send({ ...input, idempotencyKey });
+    return { success: true, llmOutput: { messageId: id } };
+  },
+});
+```
+
+Every field is enforced by the runtime, not advisory.
+
+## Safety classes
+
+| Class | Default treatment | Examples |
+|---|---|---|
+| `read` | Freely callable | `get_weather`, `search_docs` |
+| `write` | Logged + policy-checked | `create_ticket`, `update_record` |
+| `network` | Allowlist required | `fetch_url`, `send_email` |
+| `financial` | Human approval default | `transfer`, `pay_invoice` |
+| `privileged` | Dual approval default | `rotate_credentials`, `delete_user` |
+
+Defaults are overridable via [policy rules](./policy). The class drives audit visibility — every dashboard, alert, and report keys off it.
+
+## The sandbox
+
+Tools run inside a `SandboxRuntime`. Built-ins:
+
+- **`DenyAllSandbox`** — refuses all side effects (the default in tests).
+- **`LocalProcessSandbox`** — child process with chroot-like path jail, env filter, resource limits.
+- **`E2BSandbox`** / **`ModalSandbox`** — remote isolated environments for higher-risk work.
+
+```ts
+import { LocalProcessSandbox } from '@veridex/agents';
+
+const agent = createAgent(
+  { name: '...', tools: [...] },
+  {
+    modelProviders: { default: provider },
+    sandbox: new LocalProcessSandbox({
+      jailRoot: '/var/agents/run-data',
+      envAllowlist: ['NODE_ENV'],
+      cpuMs: 5_000,
+      memoryMb: 256,
+    }),
+  },
+);
+```
+
+Filesystem tools resolve paths via `safeResolve(jailRoot, input)` — absolute paths, `..` traversal, and symlink escape are rejected at the boundary. Network egress is mediated by an injected `HttpClient` with the allowlist.
+
+## Idempotency
+
+For `financial` or `network` tools that are not naturally idempotent, the runtime threads an `idempotencyKey` through retries and replays. Combined with the `IdempotencyStore` (from `@veridex/agents-treasury`), double-execution across crashes is impossible.
+
+```ts
+async execute({ input, idempotencyKey }) {
+  return externalApi.transfer({ ...input, idempotencyKey });
+}
+```
+
+## Output is untrusted data
+
+The model sees the output **after** the output sanitiser:
+
+- Terminal escape sequences stripped.
+- Hidden Unicode (BiDi, tag-block) stripped.
+- Role-impersonation tokens neutralised.
+- Credential-shaped strings redacted; a `security_event` is emitted.
+- Oversize outputs truncated with a `[truncated: N bytes]` marker.
+
+This is the single most underrated mitigation against indirect prompt injection.
+
+## Secrets
+
+Tools never receive raw secrets from the model. They receive `SecretRef` indirections via the `SecretsProvider`:
+
+```ts
+async execute({ input, secrets }) {
+  const apiKey = secrets.get('STRIPE_KEY');     // SecretRef
+  return new Stripe(apiKey).charges.create(...);
+}
+```
+
+`SecretRef.toString()` returns `[REDACTED:STRIPE_KEY]`. The audit emitter scrubs `SecretRef` values from event payloads.
+
+## Importing tools
+
+OpenAPI:
+
+```ts
+import { fromOpenAPI } from '@veridex/agents-adapters';
+const tools = await fromOpenAPI('./stripe.yaml', { safetyClassByMethod: 'auto' });
+```
+
+LangChain / LangGraph / OpenAI:
+
+```ts
+import { fromLangChainTool, fromOpenAIFunction } from '@veridex/agents-adapters';
+const t = fromLangChainTool(existingTool);
+```
+
+Imported tools are labelled `trust: imported` and traverse the `TransportBoundaryPEP` ([ADR-0057](/agent-fabric/adrs/0057-mcp-transport-security-hardening)) — schemas sanitised, descriptions truncated, names normalised.
+
+## Secure tool development checklist
+
+- [ ] Zod schema for `input` and `output` (no `z.any()`)
+- [ ] Correct `safetyClass`
+- [ ] `idempotency` declared for non-idempotent side effects
+- [ ] `sandbox.networkAllowlist` for any network access
+- [ ] Secrets via `secrets.get`, never `process.env`
+- [ ] No `eval`, no string-shell, no path concatenation
+- [ ] Tested against the [red-team corpus](./testing)
+
+## Related
+
+- [ADR-0052](/agent-fabric/adrs/0052-tool-sandboxing-and-safety-classes)
+- [Policy](./policy) — how rules act on safety classes
+- [Adapters](./adapters/overview) — importing existing tools
+- [Internal architecture §7](/docs/architecture/agent-fabric#7-tool-sandbox-internals)

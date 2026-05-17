@@ -1,0 +1,81 @@
+---
+title: ADR-0055 · Checkpoint Persistence and Resumability
+description: Checkpoints capture the minimum sufficient state to resume deterministically across crashes, redeploys, and long-running approvals.
+---
+
+# ADR-0055 · Checkpoint Persistence and Resumability
+
+**Status:** Accepted · **Date:** 2026-05-17
+
+## Context
+
+A run that exists only in process memory is hostile to production: a redeploy mid-run destroys
+work, a long-running approval requires keeping a connection open, and a crash means re-running
+an idempotent-but-expensive sequence from scratch. Frameworks that bolt on checkpointing as
+an afterthought either snapshot too little (just messages) or too much (random object graphs
+that don't survive a code change). Both fail on resume.
+
+## Decision
+
+`CheckpointManager` is a first-class subsystem. Checkpoints are taken automatically at **every
+turn boundary** and **before any suspension**. They contain the *minimum sufficient state* to
+resume deterministically.
+
+### Checkpoint contents
+
+```jsonc
+{
+  "runId": "...",
+  "agentVersion": "sha256:...",      // hash of compiled agent definition
+  "turn": 7,
+  "eventLogPosition": 142,           // monotonic counter into the event log
+  "workingMemory": { /* serialised */ },
+  "pendingProposal": { /* if suspended */ },
+  "memoryDelta": { /* diff vs run start */ },
+  "metrics": { "tokensIn": 12000, "tokensOut": 3400, "toolCalls": 4 },
+  "createdAt": "2026-05-17T..."
+}
+```
+
+### Differential storage
+
+Only the *delta* since the previous checkpoint is stored; periodic full snapshots bound
+recovery cost. Payloads are gzip-compressed and content-hashed.
+
+### Backends
+
+- `InMemoryCheckpointStore` (default; tests, ephemeral runs).
+- `FileCheckpointStore` (single-host dev).
+- `PostgresCheckpointStore` (production; shared across processes; ships with the control
+  plane).
+- Pluggable: `CheckpointStore` interface.
+
+### Resume algorithm
+
+1. Load the latest checkpoint for `runId`.
+2. Validate `agentVersion` — refuse to resume into an incompatible agent definition (offer a
+   migration path).
+3. Re-hydrate working memory and memory delta.
+4. Re-attach event log; subsequent events resume the monotonic position.
+5. If `pendingProposal` is present, validate its content hash against the approval record, then
+   execute or deny per resolution.
+6. Continue the loop.
+
+### Invariants
+
+- Tools are idempotent or guarded by an `IdempotencyStore`; resume never double-executes a
+  side-effect.
+- Event-log position is the source of truth; checkpoints can be regenerated from the log if
+  necessary.
+
+## Consequences
+
+**Positive.** Long-running, suspendable runs become routine. Redeploys and crashes don't lose
+work. The minimum-sufficient-state discipline keeps checkpoints small and version-tolerant.
+
+**Negative.** Tool side-effects must be idempotent or guarded by an idempotency store — but
+the Treasury layer already requires this.
+
+## Source
+
+Internal ADR: `docs/architecture/decisions/0055-checkpoint-persistence-resumability.md`

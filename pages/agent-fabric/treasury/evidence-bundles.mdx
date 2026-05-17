@@ -1,0 +1,95 @@
+---
+title: Evidence Bundles
+description: Canonicalised, content-hashed, signed receipts for every money-moving workflow.
+---
+
+# Evidence Bundles
+
+The bundle is the **portable, verifiable artifact** that an auditor, regulator, or counterparty can consume to prove what happened. It contains:
+
+- Every trace event for the workflow.
+- Every policy verdict.
+- Every approval (request, decision, approver, reason).
+- The final proposal envelope (content-hashed).
+- The on-chain (or rail) receipt.
+- Canonical content hash.
+- Signature.
+
+## Generate
+
+```ts
+import { EvidenceBundler, Ed25519EvidenceSigner } from '@veridex/agents-treasury';
+
+const bundler = new EvidenceBundler({
+  signer: new Ed25519EvidenceSigner({ privateKey, publicKey, keyId: 'ops-2026' }),
+  portal: portalTelemetry,
+});
+
+// Inside a workflow:
+bundler.recordTrace(event);
+bundler.recordPolicyVerdict(verdict);
+bundler.recordApproval(approval);
+bundler.recordProposal(proposal);
+bundler.recordChainTx(receipt);
+
+const bundle = await bundler.finalize({ workflowId, submit: true });
+```
+
+(The `kit.plugin` returned by `createTreasuryKit` wires this automatically.)
+
+## Verify
+
+```ts
+import { verifyEvidenceBundle } from '@veridex/agents-treasury';
+
+const ok = await verifyEvidenceBundle(bundle, { publicKey });
+if (!ok.signatureValid) throw new Error('Signature invalid');
+if (!ok.chainConsistent) throw new Error(`Tamper at event ${ok.brokenAt}`);
+```
+
+Verification is offline — no network call required.
+
+## Canonicalisation
+
+Stable JSON canonicalisation (RFC 8785) before hashing: sorted keys, no whitespace, ULID timestamps preserved. Hashes are stable across language implementations.
+
+## Signers
+
+| Signer | Use case |
+|---|---|
+| `NoopEvidenceSigner` | Dev, tests |
+| `HmacEvidenceSigner` | Internal verification, shared-secret |
+| `Ed25519EvidenceSigner` | Public verification, third-party audit |
+| Custom | KMS-backed, HSM-backed |
+
+```ts
+import { EvidenceSigner } from '@veridex/agents-treasury';
+
+class KmsSigner implements EvidenceSigner {
+  async sign(canonicalBytes) { /* call KMS */ }
+  publicKeyInfo() { return { alg: 'ed25519', keyId: '...' }; }
+}
+```
+
+## Portal submission
+
+When `submit: true` and a `portal` telemetry client is configured, the bundle is uploaded to the developer-portal trace store. The portal returns a permanent receipt URL embedded in the bundle's `submission` field.
+
+## Selective disclosure
+
+```ts
+import { redactBundle } from '@veridex/agents-treasury';
+
+const redacted = redactBundle(bundle, {
+  redactFields: ['counterparty.address', 'memo'],
+});
+// signature remains valid only if redaction policy is verifier-known
+// otherwise use selective-disclosure receipts (Merkle-based, opt-in)
+```
+
+For regulator-friendly selective disclosure (prove an event happened without revealing it), opt in to Merkle-receipt mode.
+
+## Related
+
+- [ADR-0056](/agent-fabric/adrs/0056-immutable-event-log-signed-audit)
+- [Observability](../observability)

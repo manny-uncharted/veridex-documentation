@@ -1,0 +1,85 @@
+---
+title: React — Overview
+description: Focused hooks that mirror runtime concerns.
+---
+
+# `@veridex/agents-react`
+
+A suite of **focused hooks** that each mirror exactly one runtime concern, plus a `<AgentProvider>` that holds the connection and run registry.
+
+```bash
+npm install @veridex/agents-react
+```
+
+## Provider
+
+```tsx
+import { AgentProvider } from '@veridex/agents-react';
+
+export default function App({ children }) {
+  return (
+    <AgentProvider
+      endpoint="/api/agent"            // your SSE/WS endpoint
+      getToken={async () => session.accessToken}
+    >
+      {children}
+    </AgentProvider>
+  );
+}
+```
+
+The provider negotiates SSE first, falls back to WebSocket. High-frequency events are batched at 30 Hz; consumers see settled state.
+
+## Hooks at a glance
+
+| Hook | Mirrors | Use it for |
+|---|---|---|
+| `useRun` | run lifecycle | Submit input, observe status, stream tokens |
+| `useApprovals` | `ApprovalManager` | Approval inbox; decide |
+| `useTrace` | `EventBus` | Inspector UIs, debugging |
+| `useMemory` | `MemoryManager` | Inspect, promote, revoke memory |
+| `useContextHealth` | `ContextCompiler` | Live $V_e$ utilisation and per-section tokens |
+| `useSkills` | skill registry | Toggle skills per run |
+| `useBudget` | metrics | Cost dashboards |
+| `useCheckpoint` | `CheckpointManager` | Restore points |
+| `useSandboxStatus` | sandbox | Running tools, resource usage |
+| `useAgent` | aggregator | Simple cases |
+
+See [Hooks Reference](./hooks-reference) for full signatures.
+
+## Example: an approval inbox + budget dashboard
+
+```tsx
+import { useApprovals, useBudget } from '@veridex/agents-react';
+
+function Dashboard({ tenantId }: { tenantId: string }) {
+  const { pending, decide } = useApprovals({ scope: { tenantId } });
+  const { dollars, tokensIn, tokensOut } = useBudget({ scope: { tenantId, window: 'day' } });
+
+  return (
+    <Grid>
+      <Card title="Today's spend">${dollars.toFixed(2)} · {tokensIn + tokensOut} tokens</Card>
+      <Section title="Pending approvals">
+        {pending.map(req => (
+          <ApprovalCard key={req.id} request={req}
+            onAllow={(r) => decide(req.id, { decision: 'allow', reason: r })}
+            onDeny={(r)  => decide(req.id, { decision: 'deny',  reason: r })}
+          />
+        ))}
+      </Section>
+    </Grid>
+  );
+}
+```
+
+## Principles
+
+1. **One hook per concern.** Compose at the app layer.
+2. **Server-pushed, optimistically rendered.** Trace events stream; submissions are optimistic.
+3. **Strict typing.** Payloads are the same `TraceEvent` shape as the server.
+4. **No hidden global state.** Mount `<MockAgentProvider>` in tests.
+
+## Related
+
+- [ADR-0059](/agent-fabric/adrs/0059-react-hooks-architecture)
+- [Hooks Reference](./hooks-reference)

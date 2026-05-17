@@ -1,0 +1,100 @@
+---
+title: Checkpoints
+description: Runs as database rows — survive crashes, redeploys, and multi-day approvals.
+---
+
+# Checkpoints
+
+A run that exists only in process memory is unfit for production. Veridex's `CheckpointManager` makes every run a **resumable, durable artifact**.
+
+## What's captured
+
+Every turn boundary (and before any suspension) the runtime writes a checkpoint:
+
+```jsonc
+{
+  "version": 2,
+  "runId": "01JC...",
+  "agentVersion": "sha256:bd2c...",      // hash of the compiled agent
+  "turn": 7,
+  "createdAt": "2026-05-17T14:51:39Z",
+  "eventLogPosition": 142,
+  "workingMemory": { /* serialised */ },
+  "memoryDelta": { "added": [...], "updated": [...], "removed": [...] },
+  "pendingProposal": null,                // or content-hashed proposal envelope if suspended
+  "metrics": { "tokensIn": 12000, "tokensOut": 3400, "toolCalls": 4 },
+  "parentCheckpoint": "ckpt_abc...",      // differential storage
+  "contentHash": "sha256:..."
+}
+```
+
+## Differential storage
+
+Each checkpoint stores only the **delta** vs. its parent. Every 10 checkpoints a full snapshot is written. Recovery walks back to the nearest full snapshot and applies deltas forward — bounded cost and bounded recovery time.
+
+## Configure
+
+```ts
+import { PostgresCheckpointStore } from '@veridex/agents-control-plane';
+
+const agent = createAgent(
+  { name: '...', tools: [...] },
+  {
+    modelProviders: { default: provider },
+    checkpoint: {
+      store: new PostgresCheckpointStore(pool),
+      snapshotEvery: 10,
+      retentionDays: 30,
+    },
+  },
+);
+```
+
+Built-in stores:
+
+| Store | Use case |
+|---|---|
+| `InMemoryCheckpointStore` | Tests, ephemeral runs |
+| `FileCheckpointStore` | Single-host dev |
+| `PostgresCheckpointStore` | Production, multi-process |
+
+Implement `CheckpointStore` for any backend.
+
+## Resume
+
+```ts
+const run = await agent.run(input);
+
+if (run.status === 'suspended') {
+  // …later, in any process…
+  const final = await agent.resume(run.runId, run.approvalId, decision);
+}
+
+// Or resume after a crash without an approval:
+const recovered = await agent.resume(run.runId);
+```
+
+The resume algorithm (see [internal §8](/docs/architecture/agent-fabric#8-checkpoint-format-and-resume)) validates `agentVersion`, re-hydrates working memory, re-attaches the event log, verifies any pending proposal hash, and continues.
+
+### Version mismatch
+
+If you redeploy the agent with non-trivial changes (e.g., removed a tool the run was about to call), resume refuses with a structured error and offers a migration path. Backwards-compatible changes (added tools, new memory tier) only warn.
+
+## Replay = checkpoint + event log
+
+The event log is the source of truth; the checkpoint is a materialised view. You can:
+
+- **Replay deterministically** from any checkpoint by re-emitting events.
+- **Inspect** the state at any turn by loading that turn's checkpoint.
+- **Export** a run as a portable bundle for offline analysis or compliance.
+
+```ts
+const bundle = await agent.exportRun(runId);
+// signed JSONL of all events + checkpoints + evidence bundles
+```
+
+## Related
+
+- [ADR-0055](/agent-fabric/adrs/0055-checkpoint-persistence-resumability)
+- [Approvals](./approvals)
+- [Observability](./observability)

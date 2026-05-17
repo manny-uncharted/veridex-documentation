@@ -1,0 +1,65 @@
+---
+title: Treasury Policy Pack
+description: The pre-composed rule bundle for money-movement agents.
+---
+
+# Treasury Policy Pack
+
+The pack pre-composes the rules every treasury agent needs. You configure thresholds; the rules wire themselves to the kit's primitives.
+
+```ts
+import { treasuryPolicyPack } from '@veridex/agents-treasury';
+
+const policies = treasuryPolicyPack({
+  sanctions: compositeScreener,
+  ceilings:  ceilingStore,
+  timeLock:  timeLockManager,
+  reputation: sbtProvider,                          // optional
+  dualApprovalAbove: { amountUsdMicro: 10_000_000_000n },
+  routeAllowlist: ['usdc', 'wire-domestic'],
+  counterpartyAllowlist: { mode: 'pin', list: ['acme.com', 'partner.io'] },
+});
+```
+
+## Rules in the pack (priority order)
+
+| Pri | Rule | Verdict |
+|---:|---|---|
+| 1 | `sanctions-block` | Deny if counterparty/address sanctioned |
+| 3 | `counterparty-allowlist` | Deny if not on allowlist (when `mode: 'pin'`) |
+| 5 | `route-allowlist` | Deny if route not configured |
+| 8 | `chain-allowlist` | Deny non-allowlisted chains |
+| 10 | `per-transfer-ceiling` | Deny if amount > per-transfer cap |
+| 12 | `velocity-ceiling-day` | Deny if window utilisation exceeded |
+| 15 | `velocity-ceiling-month` | Deny if monthly cap exceeded |
+| 18 | `dual-approval-threshold` | Escalate `dual_approval` above threshold |
+| 20 | `single-approval-default` | Escalate `human_required` for any `financial` write |
+| 25 | `time-lock-trigger` | Inject time-lock for high-value/unusual |
+| 30 | `reputation-floor` | Deny if counterparty SBT reputation below floor |
+| 50 | `idempotency-guard` | Deny if a contradicting idempotency record exists |
+
+## Overriding
+
+```ts
+treasuryPolicyPack({
+  /* ... */,
+  overrides: {
+    'per-transfer-ceiling': { priority: 10, params: { usdMicro: 20_000_000_000n } },
+    'reputation-floor':     { disabled: true },
+  },
+});
+```
+
+## Composing with other packs
+
+```ts
+import { policyComposition } from '@veridex/agents';
+import { secretDetectionPack } from '@veridex/agent-security';
+
+const policies = policyComposition([
+  secretDetectionPack(),
+  treasuryPolicyPack({ /* ... */ }),
+]);
+```
+
+`policyComposition` flattens packs while preserving priority — `secretDetectionPack` rules fire before `sanctions-block` only if both target the same proposal; mismatched targets pass through.
