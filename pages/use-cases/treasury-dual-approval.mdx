@@ -75,13 +75,8 @@ import {
   SpendCeilings, 
   TimeLockManager, 
   NoopSanctionScreener, // swap for OFAC/Chainalysis adapters in production
-  Ed25519EvidenceSigner 
+  HmacEvidenceSigner 
 } from '@veridex/agents-treasury';
-import { readFileSync } from 'fs';
-
-// Load enterprise-grade Ed25519 signing keys for evidence validation
-const privateKey = readFileSync('/secrets/evidence-signer.pem');
-const publicKey = readFileSync('/secrets/evidence-signer-pub.pem');
 
 export const treasuryKit = createTreasuryKit({
   appId: 'treasury-prod-01',
@@ -103,16 +98,41 @@ export const treasuryKit = createTreasuryKit({
   // 4. Sanctions screen block list
   sanctions: new NoopSanctionScreener(),
   
-  // 5. Crytographically-signed Evidence Bundler config
-  evidenceSigner: new Ed25519EvidenceSigner({
-    privateKey,
-    publicKey,
-    keyId: 'treasury-ev-key-2026'
-  }),
+  // 5. Cryptographically-signed Evidence Bundler config
+  // We use HmacEvidenceSigner with a secure 32-byte secret key for our audit logs
+  evidenceSigner: new HmacEvidenceSigner(
+    'treasury-ev-key-2026', 
+    Buffer.from('super-secret-hmac-key-must-be-at-least-32-chars-long')
+  ),
+
+  // 6. Connect inline providers to populate the tool array correctly
+  balance: {
+    provider: {
+      getBalance: async (asset) => ({
+        amount: '10000000000', // $10,000 USD represented in micro-USD (6 decimals)
+        currency: asset.currency,
+        decimals: 6
+      })
+    }
+  },
+  transfer: {
+    executor: {
+      execute: async (proposal) => ({
+        txHash: '0x' + 'a'.repeat(64),
+        chain: proposal.to.chain,
+        confirmedAt: Date.now(),
+        idempotencyKey: proposal.idempotencyKey
+      })
+    }
+  },
   
-  // 6. Dual approval required for transfers exceeding $10,000 USD
-  // All monetary parameters in the treasury kit are measured in micro-USD (10^6)
-  dualApprovalAbove: { amountUsdMicro: 10_000_000_000n } // $10,000 USD
+  // 7. Dual approval required for transfers exceeding $10,000 USD
+  // All policy thresholds are set inside the policy config block
+  policy: {
+    dualApprovalThreshold: {
+      USD: { amount: '10000000000', currency: 'USD', decimals: 6 } // $10,000 USD represented with 6 decimals (micro-USD)
+    }
+  }
 });
 ```
 

@@ -177,10 +177,22 @@ export async function startAutonomousAgent(vaultAddress: string, sessionCredenti
   const sdk = createSDK('base', { network: 'testnet' });
   
   const wallet = await createAgentWallet({
-    vaultAddress,
-    sessionCredentials: sessionCredentialsHex,
-    sdk
+    masterCredential: {
+      credentialId: 'user-credential-id',
+      publicKeyX: 0n,
+      publicKeyY: 0n,
+      keyHash: '0xhash...'
+    },
+    session: {
+      dailyLimitUSD: 50,
+      perTransactionLimitUSD: 10,
+      expiryHours: 24,
+      allowedChains: [10004] // Base Sepolia Wormhole chain ID
+    }
   });
+
+  // Import the session payload received from the browser
+  await wallet.importSession(JSON.parse(sessionCredentialsHex));
 
   // 2. Initialize the safe agentic runtime
   const agent = createAgent(
@@ -240,10 +252,15 @@ export const balanceTool = (wallet: AgentWallet) =>
     input: z.object({}),
     safetyClass: 'read',
     async execute() {
-      const balance = await wallet.getBalance('USDC');
+      // getBalance expects a Wormhole Chain ID (e.g., 10004 for Base Sepolia) and returns TokenBalance[]
+      const balances = await wallet.getBalance(10004);
+      const usdc = balances.find((b: any) => b.token.symbol === 'USDC');
+      const formattedBalance = usdc ? usdc.formatted : '0';
+      const status = wallet.getSessionStatus();
+
       return {
         success: true,
-        llmOutput: `Available balance: ${balance.formatted} USDC. Limit spent today: $${wallet.getDailySpent()}/$50.`,
+        llmOutput: `Available balance: ${formattedBalance} USDC. Limit spent today: $${status.totalSpentUSD}/$50.`,
       };
     },
   });
@@ -260,19 +277,24 @@ export const payTool = (wallet: AgentWallet) =>
     safetyClass: 'financial',
     async execute({ input }) {
       try {
+        const status = wallet.getSessionStatus();
         // Enforce reasoning capture
-        const traceReasoning = `Autonomous Payment: ${input.purpose}. Daily cumulative spent: $${wallet.getDailySpent()}`;
+        const traceReasoning = `Autonomous Payment: ${input.purpose}. Daily cumulative spent: $${status.totalSpentUSD}`;
         
+        // Convert to smallest units as string
+        const atomicAmount = parseUnits(input.amountUSD.toString(), 6).toString();
+
         const tx = await wallet.pay({
           recipient: input.recipient,
-          amount: parseUnits(input.amountUSD.toString(), 6), // USDC uses 6 decimals
+          amount: atomicAmount, // USDC uses 6 decimals, pay expects smallest unit string
           token: 'USDC',
-          reasoning: traceReasoning
+          chain: 10004, // Base Sepolia Wormhole chain ID
+          metadata: { reasoning: traceReasoning }
         });
 
         return {
           success: true,
-          llmOutput: `Successfully transferred ${input.amountUSD} USDC to ${input.recipient}. Hash: ${tx.transactionHash}`,
+          llmOutput: `Successfully transferred ${input.amountUSD} USDC to ${input.recipient}. Hash: ${tx.txHash}`,
         };
       } catch (err: any) {
         return {
