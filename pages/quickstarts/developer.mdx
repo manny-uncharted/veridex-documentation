@@ -28,7 +28,7 @@ npm install @veridex/sdk ethers
 bun add @veridex/sdk ethers
 ```
 
-> Current published version: `@veridex/sdk@1.1.1`. The SDK targets the live EVM testnets today — Base Sepolia (hub), Ethereum Sepolia, Optimism Sepolia, Arbitrum Sepolia, Monad Testnet, and Polygon Amoy. Mainnet is not yet enabled.
+> Current published version: `@veridex/sdk@1.1.5`. The SDK targets the live EVM testnets today — Base Sepolia (hub), Ethereum Sepolia, Optimism Sepolia, Arbitrum Sepolia, Monad Testnet, and Polygon Amoy. Mainnet is not yet enabled.
 
 ## Step 2: Initialize the SDK
 
@@ -54,7 +54,7 @@ Passkey registration runs in the browser — it triggers a WebAuthn prompt on th
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
+const sdk = createSDK('base');                       // testnet + public relayer baked in
 
 // One-time Passkey registration → vault provisioned on Base Sepolia
 await sdk.passkey.register('user@example.com', 'My Wallet');

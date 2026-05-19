@@ -1,6 +1,9 @@
 {
-  "quick-start": "Quick Start",
-  "installation": "Installation",
   "concepts": "Core Concepts",
-  "faq": "FAQ"
+  "installation": "Installation",
+  "faq": "FAQ",
+  "quick-start": {
+    "title": "Quick Start",
+    "display": "hidden"
+  }
 }

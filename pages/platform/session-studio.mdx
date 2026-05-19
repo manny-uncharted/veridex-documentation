@@ -74,7 +74,7 @@ The Session Studio displays all active sessions for the current workspace, acros
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
+const sdk = createSDK('base');
 
 // Create a session programmatically
 const session = await sdk.sessions.createSession({
