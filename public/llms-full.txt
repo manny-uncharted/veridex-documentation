@@ -7,7 +7,7 @@
 > GitHub: https://github.com/veridex-protocol/
 > llms.txt index: https://docs.veridex.network/llms.txt
 
-> Generated: 2026-05-19T11:47:18.560Z
+> Generated: 2026-05-19T20:17:20.570Z
 > Pages: 66
 
 ## Table of Contents
@@ -15,10 +15,10 @@
 ### Home
 - Veridex Protocol (/home/index)
 ### Getting Started
-- Quick Start (/getting-started/quick-start)
-- Installation (/getting-started/installation)
 - Core Concepts (/getting-started/concepts)
+- Installation (/getting-started/installation)
 - FAQ (/getting-started/faq)
+- Quick Start (/getting-started/quick-start)
 ### Guides
 - Create Wallet (/guides/create-wallet)
 - Send Tokens (/guides/send-tokens)
@@ -289,6 +289,7 @@ console.log(tx.transactionHash);                                             // 
 
   Explore the docs
   
+    Core Concepts →
     Multi-Session Management →
     Session Keys →
     Agent Payments →
@@ -312,341 +313,6 @@ console.log(tx.transactionHash);                                             // 
     Discord
     Telegram
     Twitter
-
-
-================================================================================
-URL: /getting-started/quick-start
-================================================================================
-
-# Quick Start
-
-> **Note:** **The Quickstart has moved.** For the canonical, up-to-date path from zero to your first governed transfer, head to the [Developer Quickstart](/quickstarts/developer). If you want to try Veridex without installing anything first, open the [browser playground](/playground).
-
-## Where to go
-
-- **[Developer Quickstart](/quickstarts/developer)** — five steps, ~5 minutes, no account required.
-- **[Playground](/playground)** — fully-wired sandbox running in your browser.
-- **[Operator Quickstart](/quickstarts/operator)** — for teams reviewing posture, policies, and traces.
-- **[Core Concepts](/getting-started/concepts)** — 90-second mental model of passkeys, sessions, vaults, and the hub-and-spoke architecture.
-
-If you arrived here from an external link, please update your bookmarks to point at [/quickstarts/developer](/quickstarts/developer).
-
-
-================================================================================
-URL: /getting-started/installation
-================================================================================
-
-# Installation
-
-## What should I install?
-
-Most teams need exactly **one** package to start. Pick the row that matches what you're building:
-
-| If you're building... | Install | Then read |
-|---|---|---|
-| A wallet, dApp, or any UI where a human signs with a passkey | `@veridex/sdk` | [Developer Quickstart](/quickstarts/developer) |
-| An AI agent that pays for things autonomously | `@veridex/agentic-payments` | [Agent Payments guide](/guides/agent-payments) |
-| A custom agent runtime (tools, memory, policies, checkpoints) | `@veridex/agents` | [Agents framework](/sdks/agents-framework) |
-| Approval inbox / trace explorer / policy ops UI | `@veridex/agents-control-plane` | [Control Plane](/guides/enterprise-manager) |
-
-> **Note:** **Don't know yet?** Start with `@veridex/sdk`. Every other Veridex package builds on it — you'll never need to throw away the integration when you graduate to agents or the control plane.
-
-## Reference: the full package family
-
-- **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, cross-chain transfers, and **wallet backup/recovery**
-- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools (depends on `@veridex/sdk`)
-- **`@veridex/agents`** — General-purpose TypeScript agent runtime
-- **`@veridex/agents-react`** — React hooks and provider for the runtime
-- **`@veridex/agents-adapters`** — Adapters and live bridges for external runtimes
-- **`@veridex/agents-openclaw`** — OpenClaw / Pi compatibility bridge
-- **`@veridex/agents-control-plane`** — Control-plane service and client for approvals, traces, policy, and audit
-
-## Prerequisites
-
-- Node.js 18+ or Bun
-- A **browser frontend** for passkey operations (see note below)
-- A WebAuthn-compatible browser (Chrome, Safari, Firefox, Edge)
-- TypeScript 5.0+ (recommended)
-- `ethers` v6 (peer dependency for the core SDK)
-
-> **Note:** **Frontend Required for Passkeys:** The core SDK uses WebAuthn browser APIs for passkey registration and authentication. These operations (`sdk.passkey.register()`, `sdk.passkey.authenticate()`) must run in a **client-side browser context** (HTTPS or localhost) — they cannot run in Node.js, server components, or CLI scripts. You need a frontend (React, Next.js, plain HTML, etc.) to create and authenticate passkeys. Server-side code can handle balance queries, transaction verification, and relayer calls, but the initial passkey creation must happen in the browser.
-
-> **Note:** **Agent SDK Exception:** The Agent SDK (`@veridex/agentic-payments`) runs server-side in Node.js, but it requires a `masterCredential` that was originally created via a browser frontend. The typical flow is: human creates passkey in browser → configures spending limits → agent backend receives credentials and operates autonomously within those limits.
-
-## Install the Core SDK
-
-For building passkey-authenticated wallets and dApps:
-
-
-  
-    ```bash
-    npm install @veridex/sdk ethers
-    ```
-  
-  
-    ```bash
-    yarn add @veridex/sdk ethers
-    ```
-  
-  
-    ```bash
-    pnpm add @veridex/sdk ethers
-    ```
-  
-  
-    ```bash
-    bun add @veridex/sdk ethers
-    ```
-  
-
-
-## Install the Agent SDK
-
-For building autonomous AI agents that can make payments:
-
-
-  
-    ```bash
-    npm install @veridex/agentic-payments
-    ```
-  
-  
-    ```bash
-    yarn add @veridex/agentic-payments
-    ```
-  
-  
-    ```bash
-    pnpm add @veridex/agentic-payments
-    ```
-  
-  
-    ```bash
-    bun add @veridex/agentic-payments
-    ```
-  
-
-
-> **Note:** The Agent SDK (`@veridex/agentic-payments`) includes `@veridex/sdk` as a dependency and re-exports core functions like `createSDK` and `generateSecp256k1KeyPair` for convenience.
-
-## Install the Agents Framework
-
-For general-purpose agents, workflow-style orchestration, interop, and enterprise control:
-
-
-  
-    ```bash
-    npm install @veridex/agents zod
-    npm install @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
-    ```
-  
-  
-    ```bash
-    yarn add @veridex/agents zod
-    yarn add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
-    ```
-  
-  
-    ```bash
-    pnpm add @veridex/agents zod
-    pnpm add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
-    ```
-  
-  
-    ```bash
-    bun add @veridex/agents zod
-    bun add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
-    ```
-  
-
-
-> **Note:** The new framework packages are implemented and usable, but still evolving. Some APIs may still change and parts of the docs may still be catching up. We welcome fixes and feedback.
-
-## Package Comparison
-
-| Feature | `@veridex/sdk` | `@veridex/agentic-payments` |
-|---------|---------------|---------------------------|
-| Passkey registration & login | ✅ | ✅ (via re-export) |
-| Vault management | ✅ | ✅ |
-| Session key management | ✅ `SessionManager` | ✅ `SessionKeyManager` (enhanced) |
-| Spending limits | ✅ `SpendingLimitsManager` | ✅ `SpendingTracker` (USD-aware) |
-| Cross-chain transfers | ✅ | ✅ `CrossChainRouter` |
-| ERC-8004 low-level utilities | ✅ `erc8004/` module | ✅ (via re-export) |
-| ERC-8004 identity clients | — | ✅ `IdentityClient`, `ReputationClient` |
-| Registration file management | — | ✅ `RegistrationFileManager` |
-| Trust gates & reputation | — | ✅ `TrustGate`, `ReputationPipeline` |
-| Agent discovery | — | ✅ `AgentDiscovery` |
-| Protocol detection (x402/UCP/ACP/AP2) | — | ✅ `ProtocolDetector` |
-| AI agent orchestration | — | ✅ `AgentWallet` |
-| MCP tools (Claude/Cursor) | — | ✅ `MCPServer` |
-| UCP credentials | — | ✅ `UCPCredentialProvider` |
-| Audit logging & compliance | — | ✅ `AuditLogger`, `ComplianceExporter` |
-| Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks, Monad | All + `MonadChainClient`, `StacksChainClient` |
-| Pyth price oracle | — | ✅ `PythOracle` |
-
-## Agent Fabric Package Comparison
-
-| Package | Main job | Best for |
-|---------|----------|----------|
-| `@veridex/agents` | Runtime core | Tools, hooks, memory, checkpoints, transports, policy-aware runs |
-| `@veridex/agents-react` | UI integration | React chat, approvals, trace views, budget and identity dashboards |
-| `@veridex/agents-adapters` | Import/export and bridges | LangGraph, OpenAI Agents, PydanticAI, OpenAPI migration |
-| `@veridex/agents-openclaw` | OpenClaw / Pi interop | Skill import, context-file import, ACP collaboration |
-| `@veridex/agents-control-plane` | Governance plane | Tenants, approvals, policy packs, traces, audit export, remote service |
-
-## TypeScript Configuration
-
-For TypeScript projects, ensure your `tsconfig.json` includes:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "strict": true
-  }
-}
-```
-
-## Browser Support
-
-Veridex uses WebAuthn (Passkeys) which requires:
-
-| Browser | Minimum Version |
-|---------|-----------------|
-| Chrome | 67+ |
-| Safari | 14+ |
-| Firefox | 60+ |
-| Edge | 79+ |
-
-> **Note:** Passkeys require a secure context (HTTPS) in production. For local development, `localhost` is allowed.
-
-## Framework Integration
-
-### React / Next.js (Core SDK)
-
-```typescript
-// lib/veridex.ts
-
-
-export const sdk = createSDK('base', {
-  network: 'testnet',
-  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
-});
-```
-
-### Node.js / Backend (Agent SDK)
-
-```typescript
-// agent.ts
-
-
-const agent = await createAgentWallet({
-  masterCredential: {
-    credentialId: process.env.CREDENTIAL_ID!,
-    publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
-    publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
-    keyHash: process.env.KEY_HASH!,
-  },
-  session: {
-    dailyLimitUSD: 100,
-    perTransactionLimitUSD: 25,
-    expiryHours: 24,
-    allowedChains: [10004],
-  },
-});
-```
-
-### General-purpose runtime (`@veridex/agents`)
-
-```typescript
-
-
-const searchDocs = tool({
-  name: 'search_docs',
-  description: 'Search internal documentation by keyword',
-  input: z.object({ query: z.string() }),
-  safetyClass: 'read',
-  async execute({ input }) {
-    return {
-      success: true,
-      llmOutput: `Would search docs for ${input.query}`,
-    };
-  },
-});
-
-const agent = createAgent({
-  id: 'docs-agent',
-  name: 'Docs Agent',
-  model: { provider: 'openai', model: 'gpt-4o-mini' },
-  instructions: 'Help users find accurate documentation quickly.',
-  tools: [searchDocs],
-});
-```
-
-### Stacks Integration
-
-```typescript
-// For Stacks-specific operations
-
-
-const sdk = createSDK('stacks', { network: 'testnet' });
-```
-
-## Verify Installation
-
-### Core SDK
-
-```typescript
-// test-sdk.ts
-
-
-const sdk = createSDK('base', { network: 'testnet' });
-const chains = getSupportedChains('testnet');
-
-console.log('SDK initialized successfully!');
-console.log('Supported chains:', chains);
-console.log('Base config:', getChainConfig('base', 'testnet'));
-```
-
-### Agent SDK
-
-```typescript
-// test-agent.ts
-
-
-// Test Pyth oracle
-const oracle = new PythOracle();
-const ethPrice = await oracle.getPrice('ETH');
-const stxPrice = await oracle.getPrice('STX');
-
-console.log('Agent SDK loaded successfully!');
-console.log('ETH price:', ethPrice);
-console.log('STX price:', stxPrice);
-```
-
-Run with:
-
-```bash
-npx tsx test-sdk.ts
-```
-
-## Next Steps
-
-
-  
-    Build your first passkey wallet
-  
-  
-    Understand how Veridex works
-  
-  
-    Build autonomous agent payments
-  
-  
-    Build general-purpose and payment-capable agents
 
 
 ================================================================================
@@ -1179,6 +845,323 @@ without changing framework families later.
 
 
 ================================================================================
+URL: /getting-started/installation
+================================================================================
+
+# Installation
+
+## What should I install?
+
+Most teams need exactly **one** package to start. Pick the row that matches what you're building:
+
+| If you're building... | Install | Then read |
+|---|---|---|
+| A wallet, dApp, or any UI where a human signs with a passkey | `@veridex/sdk` | [Developer Quickstart](/quickstarts/developer) |
+| An AI agent that pays for things autonomously | `@veridex/agentic-payments` | [Agent Payments guide](/guides/agent-payments) |
+| A custom agent runtime (tools, memory, policies, checkpoints) | `@veridex/agents` | [Agents framework](/sdks/agents-framework) |
+| Approval inbox / trace explorer / policy ops UI | `@veridex/agents-control-plane` | [Control Plane](/guides/enterprise-manager) |
+
+> **Note:** **Don't know yet?** Start with `@veridex/sdk`. Every other Veridex package builds on it — you'll never need to throw away the integration when you graduate to agents or the control plane.
+
+## Reference: the full package family
+
+- **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, cross-chain transfers, and **wallet backup/recovery**
+- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools (depends on `@veridex/sdk`)
+- **`@veridex/agents`** — General-purpose TypeScript agent runtime
+- **`@veridex/agents-react`** — React hooks and provider for the runtime
+- **`@veridex/agents-adapters`** — Adapters and live bridges for external runtimes
+- **`@veridex/agents-openclaw`** — OpenClaw / Pi compatibility bridge
+- **`@veridex/agents-control-plane`** — Control-plane service and client for approvals, traces, policy, and audit
+
+## Prerequisites
+
+- Node.js 18+ or Bun
+- A **browser frontend** for passkey operations (see note below)
+- A WebAuthn-compatible browser (Chrome, Safari, Firefox, Edge)
+- TypeScript 5.0+ (recommended)
+- `ethers` v6 (peer dependency for the core SDK)
+
+> **Note:** **Frontend Required for Passkeys:** The core SDK uses WebAuthn browser APIs for passkey registration and authentication. These operations (`sdk.passkey.register()`, `sdk.passkey.authenticate()`) must run in a **client-side browser context** (HTTPS or localhost) — they cannot run in Node.js, server components, or CLI scripts. You need a frontend (React, Next.js, plain HTML, etc.) to create and authenticate passkeys. Server-side code can handle balance queries, transaction verification, and relayer calls, but the initial passkey creation must happen in the browser.
+
+> **Note:** **Agent SDK Exception:** The Agent SDK (`@veridex/agentic-payments`) runs server-side in Node.js, but it requires a `masterCredential` that was originally created via a browser frontend. The typical flow is: human creates passkey in browser → configures spending limits → agent backend receives credentials and operates autonomously within those limits.
+
+## Install the Core SDK
+
+For building passkey-authenticated wallets and dApps:
+
+
+  
+    ```bash
+    npm install @veridex/sdk ethers
+    ```
+  
+  
+    ```bash
+    yarn add @veridex/sdk ethers
+    ```
+  
+  
+    ```bash
+    pnpm add @veridex/sdk ethers
+    ```
+  
+  
+    ```bash
+    bun add @veridex/sdk ethers
+    ```
+  
+
+
+## Install the Agent SDK
+
+For building autonomous AI agents that can make payments:
+
+
+  
+    ```bash
+    npm install @veridex/agentic-payments
+    ```
+  
+  
+    ```bash
+    yarn add @veridex/agentic-payments
+    ```
+  
+  
+    ```bash
+    pnpm add @veridex/agentic-payments
+    ```
+  
+  
+    ```bash
+    bun add @veridex/agentic-payments
+    ```
+  
+
+
+> **Note:** The Agent SDK (`@veridex/agentic-payments`) includes `@veridex/sdk` as a dependency and re-exports core functions like `createSDK` and `generateSecp256k1KeyPair` for convenience.
+
+## Install the Agents Framework
+
+For general-purpose agents, workflow-style orchestration, interop, and enterprise control:
+
+
+  
+    ```bash
+    npm install @veridex/agents zod
+    npm install @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  
+  
+    ```bash
+    yarn add @veridex/agents zod
+    yarn add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  
+  
+    ```bash
+    pnpm add @veridex/agents zod
+    pnpm add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  
+  
+    ```bash
+    bun add @veridex/agents zod
+    bun add @veridex/agents-react @veridex/agents-adapters @veridex/agents-openclaw @veridex/agents-control-plane
+    ```
+  
+
+
+> **Note:** The new framework packages are implemented and usable, but still evolving. Some APIs may still change and parts of the docs may still be catching up. We welcome fixes and feedback.
+
+## Package Comparison
+
+| Feature | `@veridex/sdk` | `@veridex/agentic-payments` |
+|---------|---------------|---------------------------|
+| Passkey registration & login | ✅ | ✅ (via re-export) |
+| Vault management | ✅ | ✅ |
+| Session key management | ✅ `SessionManager` | ✅ `SessionKeyManager` (enhanced) |
+| Spending limits | ✅ `SpendingLimitsManager` | ✅ `SpendingTracker` (USD-aware) |
+| Cross-chain transfers | ✅ | ✅ `CrossChainRouter` |
+| ERC-8004 low-level utilities | ✅ `erc8004/` module | ✅ (via re-export) |
+| ERC-8004 identity clients | — | ✅ `IdentityClient`, `ReputationClient` |
+| Registration file management | — | ✅ `RegistrationFileManager` |
+| Trust gates & reputation | — | ✅ `TrustGate`, `ReputationPipeline` |
+| Agent discovery | — | ✅ `AgentDiscovery` |
+| Protocol detection (x402/UCP/ACP/AP2) | — | ✅ `ProtocolDetector` |
+| AI agent orchestration | — | ✅ `AgentWallet` |
+| MCP tools (Claude/Cursor) | — | ✅ `MCPServer` |
+| UCP credentials | — | ✅ `UCPCredentialProvider` |
+| Audit logging & compliance | — | ✅ `AuditLogger`, `ComplianceExporter` |
+| Multi-chain clients | EVM, Solana, Aptos, Sui, Starknet, Stacks, Monad | All + `MonadChainClient`, `StacksChainClient` |
+| Pyth price oracle | — | ✅ `PythOracle` |
+
+## Agent Fabric Package Comparison
+
+| Package | Main job | Best for |
+|---------|----------|----------|
+| `@veridex/agents` | Runtime core | Tools, hooks, memory, checkpoints, transports, policy-aware runs |
+| `@veridex/agents-react` | UI integration | React chat, approvals, trace views, budget and identity dashboards |
+| `@veridex/agents-adapters` | Import/export and bridges | LangGraph, OpenAI Agents, PydanticAI, OpenAPI migration |
+| `@veridex/agents-openclaw` | OpenClaw / Pi interop | Skill import, context-file import, ACP collaboration |
+| `@veridex/agents-control-plane` | Governance plane | Tenants, approvals, policy packs, traces, audit export, remote service |
+
+## TypeScript Configuration
+
+For TypeScript projects, ensure your `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true
+  }
+}
+```
+
+## Browser Support
+
+Veridex uses WebAuthn (Passkeys) which requires:
+
+| Browser | Minimum Version |
+|---------|-----------------|
+| Chrome | 67+ |
+| Safari | 14+ |
+| Firefox | 60+ |
+| Edge | 79+ |
+
+> **Note:** Passkeys require a secure context (HTTPS) in production. For local development, `localhost` is allowed.
+
+## Framework Integration
+
+### React / Next.js (Core SDK)
+
+```typescript
+// lib/veridex.ts
+
+
+export const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
+});
+```
+
+### Node.js / Backend (Agent SDK)
+
+```typescript
+// agent.ts
+
+
+const agent = await createAgentWallet({
+  masterCredential: {
+    credentialId: process.env.CREDENTIAL_ID!,
+    publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
+    publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
+    keyHash: process.env.KEY_HASH!,
+  },
+  session: {
+    dailyLimitUSD: 100,
+    perTransactionLimitUSD: 25,
+    expiryHours: 24,
+    allowedChains: [10004],
+  },
+});
+```
+
+### General-purpose runtime (`@veridex/agents`)
+
+```typescript
+
+
+const searchDocs = tool({
+  name: 'search_docs',
+  description: 'Search internal documentation by keyword',
+  input: z.object({ query: z.string() }),
+  safetyClass: 'read',
+  async execute({ input }) {
+    return {
+      success: true,
+      llmOutput: `Would search docs for ${input.query}`,
+    };
+  },
+});
+
+const agent = createAgent({
+  id: 'docs-agent',
+  name: 'Docs Agent',
+  model: { provider: 'openai', model: 'gpt-4o-mini' },
+  instructions: 'Help users find accurate documentation quickly.',
+  tools: [searchDocs],
+});
+```
+
+### Stacks Integration
+
+```typescript
+// For Stacks-specific operations
+
+
+const sdk = createSDK('stacks', { network: 'testnet' });
+```
+
+## Verify Installation
+
+### Core SDK
+
+```typescript
+// test-sdk.ts
+
+
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
+const chains = getSupportedChains('testnet');
+
+console.log('SDK initialized successfully!');
+console.log('Supported chains:', chains);
+console.log('Base config:', getChainConfig('base', 'testnet'));
+```
+
+### Agent SDK
+
+```typescript
+// test-agent.ts
+
+
+// Test Pyth oracle
+const oracle = new PythOracle();
+const ethPrice = await oracle.getPrice('ETH');
+const stxPrice = await oracle.getPrice('STX');
+
+console.log('Agent SDK loaded successfully!');
+console.log('ETH price:', ethPrice);
+console.log('STX price:', stxPrice);
+```
+
+Run with:
+
+```bash
+npx tsx test-sdk.ts
+```
+
+## Next Steps
+
+
+  
+    Build your first passkey wallet
+  
+  
+    Understand how Veridex works
+  
+  
+    Build autonomous agent payments
+  
+  
+    Build general-purpose and payment-capable agents
+
+
+================================================================================
 URL: /getting-started/faq
 ================================================================================
 
@@ -1298,7 +1281,7 @@ Wormhole uses a 13/19 guardian quorum. Veridex verifies:
 ```typescript
 
 
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 await sdk.passkey.register('user@example.com', 'My App');
 const vault = sdk.getVaultAddress();
 ```
@@ -1399,6 +1382,24 @@ const agent = await createAgentWallet({
 - **Discord**: [discord.gg/veridex](https://discord.gg/veridex)
 - **Twitter**: [@VeridexProtocol](https://twitter.com/VeridexProtocol)
 - **Email**: [team@veridex.network](mailto:team@veridex.network)
+
+
+================================================================================
+URL: /getting-started/quick-start
+================================================================================
+
+# Quick Start
+
+> **Note:** **The Quickstart has moved.** For the canonical, up-to-date path from zero to your first governed transfer, head to the [Developer Quickstart](/quickstarts/developer). If you want to try Veridex without installing anything first, open the [browser playground](/playground).
+
+## Where to go
+
+- **[Developer Quickstart](/quickstarts/developer)** — five steps, ~5 minutes, no account required.
+- **[Playground](/playground)** — fully-wired sandbox running in your browser.
+- **[Operator Quickstart](/quickstarts/operator)** — for teams reviewing posture, policies, and traces.
+- **[Core Concepts](/getting-started/concepts)** — 90-second mental model of passkeys, sessions, vaults, and the hub-and-spoke architecture.
+
+If you arrived here from an external link, please update your bookmarks to point at [/quickstarts/developer](/quickstarts/developer).
 
 
 ================================================================================
@@ -2839,6 +2840,7 @@ export function ConnectVeridex() {
 | CORS error on relayer | Origin not in CORS allowlist | Registered origins are automatically added. Check your registration status. |
 | Session expired | Server session token expired | Create a new session with `authenticateAndCreateSession()` |
 | "Credential not found" on session create | User hasn't registered a passkey yet | User must create a passkey at `veridex.network` first |
+| WebAuthn "Invalid Domain" in sandboxes | WebContainers (e.g. StackBlitz) run on dynamic domains (`*.webcontainer.io`) which require explicit origin registration | Add your dynamic WebContainer domain to the `origins` array in your `.well-known/webauthn` file. |
 
 ---
 
@@ -2999,7 +3001,7 @@ If you want direct on-chain transactions (user pays gas):
 const provider = new ethers.BrowserProvider(window.ethereum);
 const signer = await provider.getSigner();
 
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 
 // Prepare and execute directly (user pays gas)
 const prepared = await sdk.prepareTransfer({
@@ -24682,7 +24684,7 @@ await sdk.transferViaRelayer({ token, recipient, amount });
 
 ```typescript
 // ✅ Correct
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base');
 await sdk.passkey.authenticate();
 
 // ❌ Incorrect

@@ -503,6 +503,7 @@ export function ConnectVeridex() {
 | CORS error on relayer | Origin not in CORS allowlist | Registered origins are automatically added. Check your registration status. |
 | Session expired | Server session token expired | Create a new session with `authenticateAndCreateSession()` |
 | "Credential not found" on session create | User hasn't registered a passkey yet | User must create a passkey at `veridex.network` first |
+| WebAuthn "Invalid Domain" in sandboxes | WebContainers (e.g. StackBlitz) run on dynamic domains (`*.webcontainer.io`) which require explicit origin registration | Add your dynamic WebContainer domain to the `origins` array in your `.well-known/webauthn` file. |
 
 ---
 

@@ -221,17 +221,100 @@ const userLookup = tool({
 
 Sovereignty violations are automatically detected and reported when PII flows across jurisdictional boundaries.
 
-## Core Features
+## Core Features & Advanced Examples
 
-The agents framework includes:
+### 1. Multi-Tier Memory Management
 
-- **Policy Engine** — Register rules, evaluate verdicts per tool call
-- **Approval Manager** — Route escalated proposals to human or automated approvers
-- **Memory Manager** — Four-tier memory (working, episodic, semantic, procedural)
-- **Event Bus** — Typed events for every runtime action
-- **Checkpoints** — Suspend and resume runs without losing state
-- **Hooks** — Before/after phases for cross-cutting concerns
-- **Transports** — MCP, ACP, and A2A protocol support
+The `MemoryManager` supports four independent tiers (working, episodic, semantic, procedural) to prevent drift and manage the agent's long-term recall without bloat.
+
+```typescript
+import { MemoryManager, InMemoryStore } from '@veridex/agents';
+
+const memory = new MemoryManager({
+  store: new InMemoryStore(),
+  decayRate: 0.05,           // memory decay score per day
+  compactionThreshold: 10,   // trigger compaction every 10 turns
+});
+
+// A. Working Memory: temporary scratchpad for the active run (auto-discarded)
+await memory.setWorking('active_intent', 'payout_supplier_invoice');
+
+// B. Episodic Memory: timestamped records of raw events, searchable via semantic index
+await memory.writeEpisode({
+  content: 'User requested a payout status check for INV-2026.',
+  confidence: 0.95,
+  tags: ['billing', 'invoice']
+});
+
+// C. Semantic Memory: consolidated factual records with confidence scoring & provenance
+await memory.commitFact({
+  subject: 'acme_operations',
+  fact: '0x742d... is the verified Acme recipient wallet on Base',
+  confidence: 1.0,
+  provenance: 'manually_declared_by_owner'
+});
+
+// D. Procedural Memory: learned routines or strict operations manuals
+await memory.storeProcedure({
+  trigger: 'excessive_gas_spikes',
+  actions: ['suspend_non_urgent_swaps', 'notify_engineering_channel']
+});
+```
+
+### 2. Custom Rule Composition in the Policy Engine
+
+You can easily register declarative policy checks or write custom verification functions. The engine intercepts every tool proposal before the model can execute it.
+
+```typescript
+import { PolicyEngine, ToolProposal, RuleVerdict } from '@veridex/agents';
+
+const engine = new PolicyEngine();
+
+// Register a custom verification rule
+engine.registerRule({
+  name: 'restrict_weekend_payments',
+  description: 'Requires human escalation for any financial operations proposed on weekends',
+  async evaluate(proposal: ToolProposal): Promise<RuleVerdict> {
+    const isWeekend = [0, 6].includes(new Date().getDay());
+    
+    if (proposal.safetyClass === 'financial' && isWeekend) {
+      return {
+        verdict: 'escalate',
+        reason: 'Out-of-hours financial transactions require explicit administrator sign-off.'
+      };
+    }
+    
+    return { verdict: 'allow' };
+  }
+});
+```
+
+### 3. MCP Server (Model Context Protocol) Integration
+
+Expose your agent's tools securely to external hosts (like Claude Desktop, Cursor, or peer agents) using standard MCP transports.
+
+```typescript
+import { MCPServerTransport, createAgent } from '@veridex/agents';
+
+const agent = createAgent({
+  name: 'mcp-treasury-helper',
+  instructions: 'Expose local balance-checks and transfer tools over MCP.',
+  tools: [/* your safety-classed tools */]
+});
+
+// Initialize the native MCP Server transport
+const mcpServer = new MCPServerTransport({
+  name: 'Veridex Treasury MCP Service',
+  version: '1.2.0',
+  agent
+});
+
+// Run over stdio (allows deep integration with any local developer environment)
+await mcpServer.start();
+console.log('Veridex MCP Server listening on standard I/O...');
+```
+
+---
 
 See the [Veridex Agents Guide](/guides/veridex-agents) for a comprehensive tutorial covering all features.
 

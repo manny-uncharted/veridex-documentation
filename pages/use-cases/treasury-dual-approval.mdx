@@ -1,135 +1,288 @@
 ---
 title: Treasury with dual approval
-description: Ship small payments instantly; pause large payments for a human signoff.
+description: Build a mission-critical treasury agent. Transfers under $10,000 ship instantly; larger transfers pause for human approval.
 ---
 
-import { Callout } from "../../components/mdx"
+import { Callout, Steps, CodeGroup, Tip, Warning, Info, Danger } from "../../components/mdx"
 
-# Treasury with dual approval
+# Treasury Workflow with Dual Approval
 
-A finance ops team wants two things at once: speed for the 95% of payouts that are routine, and a hard stop for the 5% that aren't. Veridex's `MultisigManager` lets you mark transfers above a threshold as "policy-protected" — they refuse to dispatch directly and must be co-signed by a second key before the relayer accepts them.
+Treasury money-movement is the highest-stakes application of AI agents in production. A single bug—such as double-execution during network retries, payment to a sanctioned entity, or a hijacked prompt—can result in catastrophic losses.
 
-**What you ship**
+In this tutorial, you will build a production-grade, risk-gated **Treasury Agent** that:
+- Executes transfers under **$10,000** instantly.
+- **Suspends** and **checkpoints** any execution proposal above **$10,000**, emitting a request for dual human approval.
+- Restarts and resumes cleanly once operators approve, guaranteeing **idempotency** (zero double-payments).
+- Automatically screens counterparties against **sanctions registries** and seals every execution with an offline-verifiable, **Ed25519-signed Evidence Bundle**.
 
-- A backend that auto-ships any USDC payment under $1,000.
-- Any payment **at or above** $1,000 emits an `approval_required` record. A second approver signs from a separate device; only then does the relayer submit the tx.
-- An ops dashboard query that lists pending approvals.
+We will build this using `@veridex/agents` (the core runtime) and `@veridex/agents-treasury` (the enterprise financial security toolkit).
 
-**Prerequisites**
+---
 
-- Two passkey-backed vaults (or one vault with two registered signers via the [Multisig guide](/governance/multisig)).
-- Finish the [Developer Quickstart](/quickstarts/developer) so you have a working `createSDK`.
+## Technical Flow
 
-## 1. Configure the dual-approval policy
+The diagram below details the stateful suspend-resume architecture, showing how checkpoints preserve state across asynchronous human approvals.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as Ops Team (React UI)
+    participant Agent as Treasury Agent Runtime
+    participant Treasury as @veridex/agents-treasury
+    participant Chain as Blockchain Hub
+
+    Agent->>Agent: Receive Prompt: "Pay $50k to Acme Inc"
+    Agent->>Treasury: Evaluate Proposal against Policy Pack
+    Note over Treasury: Spend ceiling matched (> $10k threshold)
+    Treasury-->>Agent: Verdict: REQUIRE_APPROVAL
+    Agent->>Agent: Snapshot full state (Memory, Transcript, Tool queues)
+    Agent->>Agent: Persist Checkpoint & Suspend execution
+    Agent-->>Operator: Emit 'approval_requested' event (Webhooks / Slack)
+    
+    Note over Operator: Dual operators verify invoice offline & click Approve
+    Operator->>Agent: Resume run from Checkpoint (runId, approvals)
+    Agent->>Agent: Verify Approvals cryptographically
+    Agent->>Treasury: Check Idempotency & Run Sanctions Screen
+    Agent->>Chain: Disburse Funds
+    Chain-->>Agent: Tx Hash: 0x8a92...
+    Agent->>Treasury: Commit Spend Ceiling & Sign Evidence Bundle (Ed25519)
+    Agent-->>Operator: Return "Transaction Executed" + signed receipt
+```
+
+---
+
+## Installation & Setup
+
+Install the core agent framework and the specialized treasury companion package:
+
+```bash
+npm install @veridex/agents @veridex/agents-treasury zod ethers
+```
+
+---
+
+<Steps>
+
+### Step 1: Configure the Treasury Kit
+
+The `createTreasuryKit` factory bundles five critical financial-security layers into a single, cohesive plugin. We define spending ceilings, an idempotency database, sanctions screening, and our dual-approval threshold ($10,000 USD).
 
 ```typescript
-// src/policy.ts
-import { createSDK, MultisigManager } from '@veridex/sdk';
-import { parseUnits, Wallet, JsonRpcProvider } from 'ethers';
+// server/treasury.ts
+import { 
+  createTreasuryKit, 
+  InMemoryIdempotencyStore, 
+  SpendCeilings, 
+  TimeLockManager, 
+  NoopSanctionScreener, // swap for OFAC/Chainalysis adapters in production
+  Ed25519EvidenceSigner 
+} from '@veridex/agents-treasury';
+import { readFileSync } from 'fs';
 
-export function loadPolicy() {
-  const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
-  const provider = new JsonRpcProvider('https://sepolia.base.org');
-  const signer = new Wallet(process.env.OPS_PRIVATE_KEY!, provider);
+// Load enterprise-grade Ed25519 signing keys for evidence validation
+const privateKey = readFileSync('/secrets/evidence-signer.pem');
+const publicKey = readFileSync('/secrets/evidence-signer-pub.pem');
 
-  const multisig = new MultisigManager(sdk, {
-    threshold: 2,                                    // require 2 signatures
-    approvers: [                                     // the two passkey keyHashes you registered
-      process.env.APPROVER_A_KEYHASH!,
-      process.env.APPROVER_B_KEYHASH!,
-    ],
-    triggers: [
-      { action: 'transfer', token: 'USDC', minAmount: parseUnits('1000', 6) },
-    ],
+export const treasuryKit = createTreasuryKit({
+  appId: 'treasury-prod-01',
+  runId: 'ops-workflow',
+  agentId: 'treasury-bot',
+  
+  // 1. Guaranteed single-execution under retries
+  idempotency: new InMemoryIdempotencyStore(),
+  
+  // 2. Velocity and total spend tracking (limits per transfer / day)
+  ceilings: new SpendCeilings({
+    perTransferUsdMicro: 100_000_000_000n, // Max single transfer $100,000
+    dayUsdMicro:         500_000_000_000n  // Max daily limit $500,000
+  }),
+  
+  // 3. 60-second time-lock to allow revocations on high-value actions
+  timeLock: new TimeLockManager({ baseDelaySec: 60 }),
+  
+  // 4. Sanctions screen block list
+  sanctions: new NoopSanctionScreener(),
+  
+  // 5. Crytographically-signed Evidence Bundler config
+  evidenceSigner: new Ed25519EvidenceSigner({
+    privateKey,
+    publicKey,
+    keyId: 'treasury-ev-key-2026'
+  }),
+  
+  // 6. Dual approval required for transfers exceeding $10,000 USD
+  // All monetary parameters in the treasury kit are measured in micro-USD (10^6)
+  dualApprovalAbove: { amountUsdMicro: 10_000_000_000n } // $10,000 USD
+});
+```
+
+---
+
+### Step 2: Initialize the Governed Agent Runtime
+
+We import the pre-built `tools` and `policyRules` from our `treasuryKit`, weaving them directly into `@veridex/agents`.
+
+```typescript
+// server/agent.ts
+import { createAgent, OpenAIProvider } from '@veridex/agents';
+import { treasuryKit } from './treasury';
+
+export const agent = createAgent(
+  {
+    id: 'enterprise-treasury-agent',
+    name: 'Enterprise Treasury Agent',
+    model: { provider: 'openai', model: 'gpt-4o' },
+    instructions: `
+      You are an enterprise treasury agent.
+      You process supplier payouts and execute asset redistributions.
+      You must obey all spending limits and sanctions policies.
+      If a transfer exceeds $10,000, explain to the user that it has been paused for approval.
+    `,
+    // Tools and policies are composite: they inherit all treasury rules automatically
+    tools: [...treasuryKit.tools],
+    policies: [...treasuryKit.policyRules],
+    maxTurns: 10
+  },
+  {
+    modelProviders: {
+      openai: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
+    },
+    // We must enable checkpoints to store the execution state during human suspension
+    enableCheckpoints: true,
+    enableTracing: true,
+    plugins: [treasuryKit.plugin]
+  }
+);
+```
+
+---
+
+### Step 3: Handle Suspensions & Emit Approval Requests
+
+When we run the agent with a transfer request that violates our $10,000 threshold, the policy engine suspends execution. The run shifts to `waiting_for_approval`, and we capture the persistent `checkpointId`.
+
+```typescript
+// server/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { agent } from './agent';
+
+export async function POST(req: NextRequest) {
+  const { prompt } = await req.json();
+
+  // Execute the run loop
+  const result = await agent.run(prompt);
+
+  // Check if the agent's run was suspended by our treasury policies
+  if (result.run.state === 'waiting_for_approval') {
+    const checkpointId = result.run.checkpointId;
+    const approvalId = result.run.approvalId; // Id of the matching policy trigger
+    
+    // Post details to our Slack channel or approval database
+    await notifyOpsTeam({
+      runId: result.run.id,
+      checkpointId,
+      approvalId,
+      proposedTransfer: result.run.metadata.proposedAction, // Auto-extracted by treasury plugin
+      reasoning: result.run.reasoning
+    });
+
+    return NextResponse.json({
+      status: 'SUSPENDED',
+      message: 'This transfer exceeds $10,000 and requires dual human approval.',
+      runId: result.run.id,
+      checkpointId
+    });
+  }
+
+  return NextResponse.json({
+    status: 'COMPLETED',
+    output: result.output,
+    txHash: result.run.metadata.txHash
   });
-
-  return { sdk, multisig, signer };
 }
 ```
 
-`triggers` is the predicate that escalates from "single-signer fastpath" to "two-of-two required". Below the threshold the SDK keeps the direct-dispatch path; at or above it, `sdk.transferViaRelayer` will throw `MULTISIG_REQUIRED` and you'll route through the approval flow instead.
+---
 
-## 2. The fastpath: small payments ship instantly
+### Step 4: Resume Execution Safely
+
+Once dual approvers verify the payment and authorize it from their dashboard, we resume the agent directly from the checkpoint. The agent bypasses the model call and immediately jumps into executing the approved transaction.
 
 ```typescript
-// src/payout.ts
-import { parseUnits } from 'ethers';
-import { loadPolicy } from './policy';
+// server/resume-route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { agent } from './agent';
 
-export async function payout(recipient: string, usdc: string) {
-  const { sdk } = loadPolicy();
-  const amount = parseUnits(usdc, 6);
+export async function POST(req: NextRequest) {
+  const { checkpointId, approvals } = await req.json();
+  
+  // approvals is an array representing dual approvals:
+  // [{ approver: "alice@acme.com", signature: "..." }, { approver: "bob@acme.com", signature: "..." }]
 
-  try {
-    const tx = await sdk.transferViaRelayer({
-      targetChain: 10004,
-      token: 'USDC',
-      recipient,
-      amount,
-    });
-    return { status: 'sent', txHash: tx.transactionHash };
-  } catch (err: any) {
-    if (err.code === 'MULTISIG_REQUIRED') {
-      return await escalate(recipient, amount);     // see Step 3
+  const resumedResult = await agent.resumeFromCheckpoint(checkpointId, {
+    approval: {
+      approved: true,
+      approvers: approvals.map((a: any) => a.approver),
+      metadata: { signatures: approvals }
     }
-    throw err;
+  });
+
+  // Verify that the run finalized successfully
+  if (resumedResult.run.state === 'completed') {
+    
+    // Extract the cryptographically-signed Evidence Bundle (receipt)
+    const evidenceBundle = resumedResult.run.metadata.evidenceBundle;
+
+    return NextResponse.json({
+      status: 'EXECUTED',
+      output: resumedResult.output,
+      receipt: evidenceBundle // Offline-verifiable RFC 8785 JSON bundle
+    });
+  }
+
+  return NextResponse.json({
+    status: 'FAILED',
+    error: resumedResult.run.error
+  });
+}
+```
+
+---
+
+### Step 5: Cryptographic Receipt Verification
+
+Every completed treasury action registers an **Evidence Bundle**. Because this bundle is cryptographically signed using our Ed25519 keys, any auditor or third-party bank can verify its validity offline without access to our database.
+
+```typescript
+// auditing/verify-receipt.ts
+import { verifyEvidenceBundle } from '@veridex/agents-treasury';
+import { readFileSync } from 'fs';
+
+const publicKey = readFileSync('./evidence-signer-pub.pem');
+const receiptJson = readFileSync('./receipt-01HF8.json', 'utf8');
+
+async function auditTransaction() {
+  const bundle = JSON.parse(receiptJson);
+  
+  const isAuthentic = await verifyEvidenceBundle(bundle, { publicKey });
+  
+  if (isAuthentic) {
+    console.log('✅ RECEIPT VALID');
+    console.log('Merchant:', bundle.proposal.recipient);
+    console.log('Reasoning:', bundle.proposal.reasoning);
+    console.log('Signed At:', new Date(bundle.timestamp).toISOString());
+  } else {
+    console.error('❌ TAMPER DETECTED: Receipt signatures do not match hashes.');
   }
 }
 ```
 
-For amounts under $1,000 the relayer takes the payment within a block. No human in the loop, no Slack ping.
+</Steps>
 
-## 3. The slowpath: large payments wait for the second signer
+---
 
-When the policy fires, `MultisigManager.prepareProposal` builds the canonical action payload and stores it pending approvals. Each approver fetches the proposal, signs it with their passkey, and submits the signature back:
+<Danger>
+  **Idempotency is Non-Negotiable.** If the network drops after Step 4, executing the same transaction again without an idempotency key would result in a double-spend. The `InMemoryIdempotencyStore` (or `PostgresIdempotencyStore`) integrated into our `treasuryKit` records the unique intent hash on Step 1. Any incoming execution payload with a matching hash is safely rejected or returns the original cached result, entirely neutralizing double-spend vectors.
+</Danger>
 
-```typescript
-// src/escalate.ts
-import { loadPolicy } from './policy';
-
-export async function escalate(recipient: string, amount: bigint) {
-  const { sdk, multisig } = loadPolicy();
-
-  const proposal = await multisig.prepareProposal({
-    action: 'transfer',
-    targetChain: 10004,
-    token: 'USDC',
-    recipient,
-    amount,
-  });
-
-  // Approver A signs from their device (FaceID prompt)
-  const sigA = await multisig.signProposal(proposal.id, /* approver context A */);
-  await multisig.attachSignature(proposal.id, sigA);
-
-  // ... ops dashboard surfaces the pending proposal to Approver B ...
-  // Approver B signs and the threshold is met:
-  const sigB = await multisig.signProposal(proposal.id, /* approver context B */);
-  await multisig.attachSignature(proposal.id, sigB);
-
-  // Submission is automatic once threshold is reached
-  const result = await multisig.finalizeProposal(proposal.id);
-  return { status: 'sent', txHash: result.transactionHash, proposal: proposal.id };
-}
-```
-
-## 4. Query pending approvals from ops
-
-```typescript
-const pending = await multisig.listProposals({ status: 'awaiting_signatures' });
-// → [{ id, action, signaturesCollected: 1, signaturesRequired: 2, createdAt }, ...]
-```
-
-Wire this into your existing approvals UI (Notion, Linear, an internal dashboard). The approver's device handles the actual cryptography — your dashboard only needs to render the proposal and deep-link the approver to a "Sign" page.
-
-## What you've achieved
-
-- **No window of unbounded risk.** Even the worst-case compromise of a single signer cannot move more than $999.
-- **No friction for routine work.** 95% of payouts never touch a human.
-- **Provable governance.** Every escalated payment carries two signed approvals plus the on-chain hash. Auditors can verify both off-chain.
-
-## Going further
-
-- Add **time-locked approvals** (24h window, auto-cancel): see [Governance / Approvals](/governance/approvals).
-- Add **per-counterparty rules**: only require dual approval for new payees: see [Multisig triggers](/governance/multisig#triggers).
-- Replace the in-memory proposal store with a Postgres-backed control plane: [Agents Control Plane](/sdks/agents-control-plane).
+To see how to write custom policy filters or explore other security mechanisms, visit the [SDK Policies Reference](/sdks/agents-framework#tools--safety-classes).
