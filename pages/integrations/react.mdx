@@ -56,8 +56,8 @@ const evmClient = new EVMClient({
   wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
   name: 'Base Sepolia',
   explorerUrl: 'https://sepolia.basescan.org',
-  vaultFactory: '0xCFaEb5652aa2Ee60b2229dC8895B4159749C7e53',
-  vaultImplementation: '0x0d13367C16c6f0B24eD275CC67C7D9f42878285c',
+  vaultFactory: '0xb25b73D5FeD5693dcd1Bb78f8e33387B59A022EC',
+  vaultImplementation: '0x2CB8397df988c1880d9e5cFfF65bfC22D7D90EE6',
 });
 
 const sdk = new VeridexSDK({
@@ -94,12 +94,12 @@ export const config = {
   chainId: 84532,
   wormholeChainId: 10004,
   rpcUrl: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
-  hubContract: '0x66D87dE68327f48A099c5B9bE97020Feab9a7c82',
+  hubContract: '0xD5D29b6EaeE6FF4b765e704298a7e48D22607059',
   wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
   chainName: 'Base Sepolia',
   explorerUrl: 'https://sepolia.basescan.org',
   vaultFactory: '0xb25b73D5FeD5693dcd1Bb78f8e33387B59A022EC',
-  vaultImplementation: '0xD65E996CD6d5B01689dc54ad30B51f1D88a100f5',
+  vaultImplementation: '0x2CB8397df988c1880d9e5cFfF65bfC22D7D90EE6',
   relayerUrl,
 };
 
@@ -109,14 +109,14 @@ export const spokeConfigs = {
     wormholeChainId: 10005,
     rpcUrl: 'https://sepolia.optimism.io',
     vaultFactory: '0x3c5e4aCdC8Cd53ae5ae603B4c511885191fBb868',
-    vaultImplementation: '0x26C4FD8fC66150ef5964562F7A69271fB0cd02A4',
+    vaultImplementation: '0xA45dBF322c5A3028687fEEB161603d3BCe02e119',
   },
   arbitrumSepolia: {
     chainId: 421614,
     wormholeChainId: 10003,
     rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
     vaultFactory: '0xB9C3e6bad3c6f26956be4a4bb5a366376Fd3045D',
-    vaultImplementation: '0x9f74Dc14A98E59df7AEC5571a2B9E329153dF5Cd',
+    vaultImplementation: '0x8601881b94B68B09b485f407317686103d3CB681',
   },
 };
 ```
