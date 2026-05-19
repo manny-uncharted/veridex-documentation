@@ -62,7 +62,7 @@ import Link from "next/link"
 import { createSDK } from '@veridex/sdk';
 import { parseEther } from 'ethers';
 
-const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' }); // Base Sepolia + public relayer
+const sdk = createSDK('base', { network: 'testnet' });                       // Base Sepolia + public relayer
 await sdk.passkey.register('alice@example.com', 'My Wallet');                // FaceID / TouchID prompt → vault provisioned
 const tx = await sdk.transferViaRelayer({
   targetChain: 10004,                                                        // Base Sepolia (Wormhole chain id)
