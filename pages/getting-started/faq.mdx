@@ -119,7 +119,7 @@ Wormhole uses a 13/19 guardian quorum. Veridex verifies:
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 await sdk.passkey.register('user@example.com', 'My App');
 const vault = sdk.getVaultAddress();
 ```

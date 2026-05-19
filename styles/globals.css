@@ -472,3 +472,305 @@ code.vdx-package-install {
   font-size: 0.9375rem;
   line-height: 1.6;
 }
+
+/* ── Phase 1: Homepage upgrades ── */
+
+/* Hero meta line */
+.vdx-hero-meta {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+  opacity: 0.6;
+}
+
+.vdx-hero-meta a {
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+  text-decoration: none;
+}
+
+.vdx-hero-meta a:hover {
+  text-decoration: underline;
+}
+
+/* Section lede */
+.vdx-section-lede {
+  font-size: 0.9375rem;
+  opacity: 0.7;
+  margin: -0.5rem 0 1.5rem;
+  max-width: 44rem;
+}
+
+/* "What you'll build" outcomes */
+.vdx-outcomes {
+  margin: 3rem 0;
+}
+
+.vdx-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .vdx-outcome-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vdx-outcome-card {
+  display: block;
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--nextra-border));
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.vdx-outcome-card:hover {
+  border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+  box-shadow: 0 2px 12px hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
+}
+
+.vdx-outcome-tag {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.1);
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+  margin-bottom: 0.625rem;
+}
+
+.vdx-outcome-title {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 0.375rem;
+}
+
+.vdx-outcome-desc {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  opacity: 0.7;
+}
+
+/* Five-lines section heading */
+.vdx-fivelines {
+  margin: 3rem 0 0;
+}
+
+/* "How it works" model upgrades */
+.vdx-model {
+  margin: 3rem 0;
+}
+
+.vdx-model-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .vdx-model-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .vdx-model-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vdx-model-step {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--nextra-border));
+  background: hsl(var(--nextra-border) / 0.08);
+}
+
+.vdx-model-num {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  opacity: 0.5;
+}
+
+.vdx-model-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0.125rem 0 0.375rem;
+}
+
+.vdx-model-desc {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
+.vdx-model-cta {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.vdx-model-cta a {
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50%);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.vdx-model-cta a:hover {
+  text-decoration: underline;
+}
+
+/* "vs status quo" comparison */
+.vdx-vs {
+  margin: 3rem 0;
+}
+
+.vdx-vs-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--nextra-border));
+  border-radius: 0.75rem;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+.vdx-vs-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1.2fr;
+  gap: 0;
+}
+
+.vdx-vs-row > div {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid hsl(var(--nextra-border));
+}
+
+.vdx-vs-row:last-child > div {
+  border-bottom: none;
+}
+
+.vdx-vs-row.vdx-vs-head > div {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  background: hsl(var(--nextra-border) / 0.2);
+}
+
+.vdx-vs-label {
+  font-weight: 500;
+}
+
+.vdx-vs-us {
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.08);
+  font-weight: 500;
+}
+
+.vdx-vs-row.vdx-vs-head .vdx-vs-us {
+  color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+}
+
+@media (max-width: 768px) {
+  .vdx-vs-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .vdx-vs-row.vdx-vs-head {
+    display: none;
+  }
+  .vdx-vs-row > div:first-child {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    background: hsl(var(--nextra-border) / 0.15);
+  }
+  .vdx-vs-row > div:not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 0.125rem;
+  }
+}
+
+/* Packages: primary + collapsible secondary */
+.vdx-package-primary {
+  position: relative;
+  border-color: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.5);
+  box-shadow: 0 2px 12px hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 50% / 0.06);
+}
+
+.vdx-package-pill {
+  position: absolute;
+  top: -0.625rem;
+  left: 1.5rem;
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  background: hsl(var(--nextra-primary-hue) var(--nextra-primary-saturation) 45%);
+  color: #fff;
+}
+
+.vdx-package-more {
+  margin-top: 1.25rem;
+  border: 1px solid hsl(var(--nextra-border));
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.vdx-package-more summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.vdx-package-more[open] summary {
+  margin-bottom: 1rem;
+}
+
+.vdx-package-grid-secondary {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 640px) {
+  .vdx-package-grid-secondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Trace example block on homepage */
+.vdx-trace {
+  margin: 3rem 0;
+}
+
+.vdx-trace-block {
+  border: 1px solid hsl(var(--nextra-border));
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  background: hsl(var(--nextra-border) / 0.12);
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.vdx-trace-block code {
+  font-family: var(--nextra-font-mono, ui-monospace, monospace);
+  white-space: pre;
+}

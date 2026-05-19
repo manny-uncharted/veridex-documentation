@@ -4,8 +4,13 @@
     "type": "page",
     "display": "hidden"
   },
+  "playground": {
+    "title": "Playground",
+    "type": "page"
+  },
   "why-veridex": "Why Veridex",
   "quickstarts": "Quickstarts",
+  "use-cases": "Use cases",
   "sdks": "SDKs",
   "platform": "Developer Platform",
   "governance": "Governance",

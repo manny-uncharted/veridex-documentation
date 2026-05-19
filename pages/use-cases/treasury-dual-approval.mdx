@@ -1,0 +1,135 @@
+---
+title: Treasury with dual approval
+description: Ship small payments instantly; pause large payments for a human signoff.
+---
+
+import { Callout } from "../../components/mdx"
+
+# Treasury with dual approval
+
+A finance ops team wants two things at once: speed for the 95% of payouts that are routine, and a hard stop for the 5% that aren't. Veridex's `MultisigManager` lets you mark transfers above a threshold as "policy-protected" — they refuse to dispatch directly and must be co-signed by a second key before the relayer accepts them.
+
+**What you ship**
+
+- A backend that auto-ships any USDC payment under $1,000.
+- Any payment **at or above** $1,000 emits an `approval_required` record. A second approver signs from a separate device; only then does the relayer submit the tx.
+- An ops dashboard query that lists pending approvals.
+
+**Prerequisites**
+
+- Two passkey-backed vaults (or one vault with two registered signers via the [Multisig guide](/governance/multisig)).
+- Finish the [Developer Quickstart](/quickstarts/developer) so you have a working `createSDK`.
+
+## 1. Configure the dual-approval policy
+
+```typescript
+// src/policy.ts
+import { createSDK, MultisigManager } from '@veridex/sdk';
+import { parseUnits, Wallet, JsonRpcProvider } from 'ethers';
+
+export function loadPolicy() {
+  const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
+  const provider = new JsonRpcProvider('https://sepolia.base.org');
+  const signer = new Wallet(process.env.OPS_PRIVATE_KEY!, provider);
+
+  const multisig = new MultisigManager(sdk, {
+    threshold: 2,                                    // require 2 signatures
+    approvers: [                                     // the two passkey keyHashes you registered
+      process.env.APPROVER_A_KEYHASH!,
+      process.env.APPROVER_B_KEYHASH!,
+    ],
+    triggers: [
+      { action: 'transfer', token: 'USDC', minAmount: parseUnits('1000', 6) },
+    ],
+  });
+
+  return { sdk, multisig, signer };
+}
+```
+
+`triggers` is the predicate that escalates from "single-signer fastpath" to "two-of-two required". Below the threshold the SDK keeps the direct-dispatch path; at or above it, `sdk.transferViaRelayer` will throw `MULTISIG_REQUIRED` and you'll route through the approval flow instead.
+
+## 2. The fastpath: small payments ship instantly
+
+```typescript
+// src/payout.ts
+import { parseUnits } from 'ethers';
+import { loadPolicy } from './policy';
+
+export async function payout(recipient: string, usdc: string) {
+  const { sdk } = loadPolicy();
+  const amount = parseUnits(usdc, 6);
+
+  try {
+    const tx = await sdk.transferViaRelayer({
+      targetChain: 10004,
+      token: 'USDC',
+      recipient,
+      amount,
+    });
+    return { status: 'sent', txHash: tx.transactionHash };
+  } catch (err: any) {
+    if (err.code === 'MULTISIG_REQUIRED') {
+      return await escalate(recipient, amount);     // see Step 3
+    }
+    throw err;
+  }
+}
+```
+
+For amounts under $1,000 the relayer takes the payment within a block. No human in the loop, no Slack ping.
+
+## 3. The slowpath: large payments wait for the second signer
+
+When the policy fires, `MultisigManager.prepareProposal` builds the canonical action payload and stores it pending approvals. Each approver fetches the proposal, signs it with their passkey, and submits the signature back:
+
+```typescript
+// src/escalate.ts
+import { loadPolicy } from './policy';
+
+export async function escalate(recipient: string, amount: bigint) {
+  const { sdk, multisig } = loadPolicy();
+
+  const proposal = await multisig.prepareProposal({
+    action: 'transfer',
+    targetChain: 10004,
+    token: 'USDC',
+    recipient,
+    amount,
+  });
+
+  // Approver A signs from their device (FaceID prompt)
+  const sigA = await multisig.signProposal(proposal.id, /* approver context A */);
+  await multisig.attachSignature(proposal.id, sigA);
+
+  // ... ops dashboard surfaces the pending proposal to Approver B ...
+  // Approver B signs and the threshold is met:
+  const sigB = await multisig.signProposal(proposal.id, /* approver context B */);
+  await multisig.attachSignature(proposal.id, sigB);
+
+  // Submission is automatic once threshold is reached
+  const result = await multisig.finalizeProposal(proposal.id);
+  return { status: 'sent', txHash: result.transactionHash, proposal: proposal.id };
+}
+```
+
+## 4. Query pending approvals from ops
+
+```typescript
+const pending = await multisig.listProposals({ status: 'awaiting_signatures' });
+// → [{ id, action, signaturesCollected: 1, signaturesRequired: 2, createdAt }, ...]
+```
+
+Wire this into your existing approvals UI (Notion, Linear, an internal dashboard). The approver's device handles the actual cryptography — your dashboard only needs to render the proposal and deep-link the approver to a "Sign" page.
+
+## What you've achieved
+
+- **No window of unbounded risk.** Even the worst-case compromise of a single signer cannot move more than $999.
+- **No friction for routine work.** 95% of payouts never touch a human.
+- **Provable governance.** Every escalated payment carries two signed approvals plus the on-chain hash. Auditors can verify both off-chain.
+
+## Going further
+
+- Add **time-locked approvals** (24h window, auto-cancel): see [Governance / Approvals](/governance/approvals).
+- Add **per-counterparty rules**: only require dual approval for new payees: see [Multisig triggers](/governance/multisig#triggers).
+- Replace the in-memory proposal store with a Postgres-backed control plane: [Agents Control Plane](/sdks/agents-control-plane).

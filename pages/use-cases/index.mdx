@@ -1,0 +1,20 @@
+---
+title: Use cases
+description: Three end-to-end tutorials that show what you can ship with Veridex in an afternoon.
+---
+
+import { Callout } from "../../components/mdx"
+
+# Use cases
+
+Each tutorial below builds one of the outcomes promised on the home page. They share the same SDK (`@veridex/sdk`) and the same public relayer, so once you've finished one you can mix and match the pieces.
+
+| Tutorial | What you build | Time |
+|----------|----------------|------|
+| [AI agent with a $50/day budget](/use-cases/agent-with-budget) | An autonomous agent that spends within a bounded session key, revocable at any time. | ~25 min |
+| [Treasury with dual approval](/use-cases/treasury-dual-approval) | Transfers under a threshold ship instantly; over the threshold they pause for a human approval. | ~30 min |
+| [Consumer passkey wallet](/use-cases/consumer-passkey-wallet) | A wallet UI where users sign in with FaceID/TouchID and send funds across chains — no seed phrase. | ~20 min |
+
+<Callout type="info">
+  Want to skip the read and try it live? Open the [Stackblitz playground](https://stackblitz.com/github/Veridex-Protocol/playground?file=src/main.ts) (top-level tab — passkeys are blocked inside iframes).
+</Callout>

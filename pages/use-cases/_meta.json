@@ -1,0 +1,9 @@
+{
+  "index": {
+    "title": "Overview",
+    "display": "hidden"
+  },
+  "agent-with-budget": "AI agent with a daily budget",
+  "treasury-dual-approval": "Treasury with dual approval",
+  "consumer-passkey-wallet": "Consumer passkey wallet"
+}

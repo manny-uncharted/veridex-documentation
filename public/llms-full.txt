@@ -7,7 +7,7 @@
 > GitHub: https://github.com/veridex-protocol/
 > llms.txt index: https://docs.veridex.network/llms.txt
 
-> Generated: 2026-05-19T10:22:44.881Z
+> Generated: 2026-05-19T11:47:18.560Z
 > Pages: 66
 
 ## Table of Contents
@@ -93,15 +93,141 @@
 URL: /
 ================================================================================
 
-Open-source protocol
-  Bounded authority.For apps & agents.
-  API keys identify applications. Session keys delegate bounded authority to software. Operators decide how much autonomy is acceptable. Developers decide how to implement it.
+Open-source protocol · Free during beta
+  Give your app or agentan on-chain budget.
+  Hard spending limits, human approvals, and a verifiable audit trail — across 8 chains. Your code (or your AI agent) signs only what your policy allows.
   
-    Developer Quickstart
-    Operator Quickstart
+    Start in 5 minutes
+    Try it in your browser ↗
   
   
     npm install @veridex/sdk
+  
+  
+    No wallet to install
+    ·
+    Free testnet by default
+    ·
+    For operators →
+  
+
+
+  What you'll build
+  
+    
+      AI agents
+      An AI agent with a $50/day USDC budget
+      Your agent spends autonomously up to a daily cap. Revoke instantly. Every spend is logged with the agent's reasoning.
+    
+    
+      Treasury
+      A treasury workflow with dual approval
+      Transfers over a threshold pause until a human approves them. Below the threshold, your service ships in milliseconds.
+    
+    
+      Consumer
+      A consumer wallet with biometric login
+      Passkeys instead of seed phrases. One identity across Base, Optimism, Arbitrum and more — no bridges to babysit.
+    
+  
+
+
+  A governed transfer in six lines
+  Drop this into a browser-side script. Veridex prompts for a passkey and ships a gasless transfer through the public relayer — within a policy you control. Click below to run it live, no install required.
+  
+    Open in Stackblitz →
+  
+
+
+```typescript
+
+
+const sdk = createSDK('base', { network: 'testnet' });                       // Base Sepolia + public relayer
+await sdk.passkey.register('alice@example.com', 'My Wallet');                // FaceID / TouchID prompt → vault provisioned
+const tx = await sdk.transferViaRelayer({
+  targetChain: 10004,                                                        // Base Sepolia (Wormhole chain id)
+  token: 'native',
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
+  amount: parseEther('0.001'),
+});
+console.log(tx.transactionHash);                                             // on-chain Hub tx hash
+```
+
+> Want a key with hard spending caps that signs many transfers without re-prompting? Add a [`SessionManager`](/sdks/sessions) on top of this flow — same SDK, two extra setup lines.
+
+
+  What gets recorded
+  Every executed action produces a signed, exportable trace — the agent's reasoning, the policy verdicts, the signatures, and the on-chain proof. Here's what the trace for the transfer above looks like.
+
+
+```json
+{
+  "traceId": "trc_01HF8...",
+  "action": { "type": "transfer", "chain": "base-sepolia", "token": "native", "amount": "0.001" },
+  "reasoning": "User-initiated transfer, relayed gaslessly.",
+  "verdicts": [
+    { "rule": "spending_limit",   "verdict": "allowed", "detail": "0.001 <= daily limit" },
+    { "rule": "chain_allowlist",  "verdict": "allowed", "detail": "base-sepolia in [base-sepolia]" },
+    { "rule": "counterparty",     "verdict": "allowed", "detail": "open allowlist" }
+  ],
+  "signatures": [{ "by": "passkey", "hash": "0xa7c1..." }],
+  "transactionHash": "0x3f8e...",
+  "timestamp": "2026-05-19T17:42:11Z"
+}
+```
+
+> The signed Trace API (`sdk.traces.get(traceId)`) is on the v1.2 roadmap. Today every transfer returns its on-chain `transactionHash`; you can reconstruct the policy verdicts client-side from the same inputs you signed.
+
+
+  
+    See the Trace Explorer →
+  
+
+
+  Why not just use a wallet?
+  
+    
+      
+      Hot wallet
+      Multisig
+      Custodial API
+      Veridex
+    
+    
+      Spending limits per key
+      —
+      —
+      Provider-defined
+      Per-session, on-chain
+    
+    
+      Human approval on demand
+      —
+      Threshold only
+      Manual escalation
+      Policy-driven
+    
+    
+      Revoke a bad session in one click
+      Rotate seed
+      Re-deploy
+      Open a ticket
+      Yes
+    
+    
+      Audit evidence per action
+      Tx hash only
+      Signature set
+      Vendor log
+      Reasoning + verdicts + signatures
+    
+    
+      You hold the keys
+      Yes
+      Yes
+      No
+      Yes (passkey)
+    
   
 
 
@@ -109,124 +235,56 @@ Open-source protocol
   
     
       1. 
-      API Keys
-      Register your app and get an API key. This identifies your application to the platform.
+      API key
+      Identifies your application. One namespace for all downstream sessions and activity.
     
     
       2. 
-      Session Keys
-      Create bounded session keys with limits, chains, expiry, and permissions. Multiple concurrent sessions per identity.
+      Session key
+      A bounded delegation: which actions, which chains, how much, for how long. Multiple per identity.
     
     
       3. 
-      Governed Execution
-      Every action runs through policy evaluation. Spending limits, chain restrictions, approval thresholds, and counterparty rules.
+      Governed execution
+      Every action runs through your policies. Spending limits, chain allowlists, approval thresholds, counterparty rules.
     
     
       4. 
-      Audit Evidence
-      Every execution produces a trace with reasoning, policy verdicts, signatures, and an exportable evidence bundle.
+      Audit evidence
+      Every execution produces a signed trace with reasoning, verdicts, and an exportable bundle.
     
+  
+  
+    Read the 90-second concepts overview →
   
 
 
-  
-    🚀
-    
-      Developer Quickstart
-      Register an app, create a session, execute your first governed request in under 10 minutes.
-    
-  
-  
-    🛡️
-    
-      Operator Quickstart
-      Review posture, configure policies, approve actions, inspect traces and evidence bundles.
-    
-  
-  
-    ⚡
-    
-      SDKs
-      Core SDK for wallets and sessions. Agent SDK for autonomous payments, identity, and MCP tools.
-    
-  
-  
-    🎛️
-    
-      Session Studio
-      Create, list, select, rotate, and revoke sessions. App sessions, agent sessions, multi-session inventory.
-    
-  
-  
-    📋
-    
-      Governance
-      Approvals, policies, incidents, traces, and evidence exports for operator oversight.
-    
-  
-  
-    🔗
-    
-      Chains
-      Base, Optimism, Arbitrum, Solana, Aptos, Sui, Starknet, and Stacks.
-    
-  
-
-
-  Packages
+  Pick one package
+  Most teams start with the Core SDK. The other packages build on it — adopt them when you need them.
   
     
+      Start here
       @veridex/sdk
-      Passkey wallets, multi-session keys, cross-chain transfers, spending limits, and ERC-8004 utilities.
+      Passkey wallets, session keys, cross-chain transfers, spending limits. The foundation everything else builds on.
       npm install @veridex/sdk
       View SDK docs →
     
+  
+  
+    Building an AI agent or a custom runtime? See advanced packages.
     
-      @veridex/agentic-payments
-      Autonomous payments, on-chain identity, session inventory, trust gates, and MCP tools for AI agents.
-      npm install @veridex/agentic-payments
-      View Agent SDK docs →
-    
-    
-      @veridex/agents
-      General-purpose TypeScript agent runtime with tools, hooks, memory, checkpoints, and policy-aware execution.
-      npm install @veridex/agents zod
-      View framework docs →
+      
+        @veridex/agentic-payments
+        Autonomous payments for AI agents — on-chain identity, trust gates, MCP tools, x402.
+        View Agent SDK →
+      
+      
+        @veridex/agents
+        General-purpose TypeScript agent runtime: tools, memory, checkpoints, policy-aware execution.
+        View framework docs →
+      
     
   
-
-
-## Bounded Authority in 30 seconds
-
-```typescript
-
-
-const sdk = createSDK('base', { network: 'testnet' });
-
-// Register a passkey
-const credential = await sdk.passkey.register('alice', 'My Wallet');
-
-// Create a bounded session (one of many)
-const session = await sdk.sessions.createSession({
-  permissions: ['transfer'],
-  chainScopes: [8453],
-  spendingLimit: { amount: 100_000_000n, token: 'USDC' },
-  duration: 3600,
-  label: 'payment-agent-001',
-});
-
-// List all active sessions
-const sessions = await sdk.sessions.listSessions();
-
-// Execute a governed transfer with the active session
-const prepared = await sdk.prepareTransfer({
-  targetChain: 8453,
-  token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n,
-});
-```
 
 
   Explore the docs
@@ -242,7 +300,7 @@ const prepared = await sdk.prepareTransfer({
     Approval Inbox →
     Trace Explorer →
     Evidence Export →
-    Enterprise Manager →
+    Threat Model →
     Architecture Decisions →
     Glossary →
   
@@ -262,372 +320,16 @@ URL: /getting-started/quick-start
 
 # Quick Start
 
-Build a passkey wallet and send your first transaction in under 5 minutes.
+> **Note:** **The Quickstart has moved.** For the canonical, up-to-date path from zero to your first governed transfer, head to the [Developer Quickstart](/quickstarts/developer). If you want to try Veridex without installing anything first, open the [browser playground](/playground).
 
-> **Note:** **What is a passkey wallet?** Instead of seed phrases or private keys, your wallet is secured by your device's biometrics (FaceID, fingerprint, Windows Hello). No passwords to remember, no seed phrases to write down. Your biometric = your wallet key.
+## Where to go
 
-> **Note:** **Frontend Required:** Passkey operations (`register`, `authenticate`) use WebAuthn browser APIs and must run in a **client-side browser context** (HTTPS or localhost). They cannot run in Node.js, server components, or terminal scripts. All code examples below must execute in a browser — either in a React/Next.js client component, a plain HTML page with a `` tag, or any other browser environment.
+- **[Developer Quickstart](/quickstarts/developer)** — five steps, ~5 minutes, no account required.
+- **[Playground](/playground)** — fully-wired sandbox running in your browser.
+- **[Operator Quickstart](/quickstarts/operator)** — for teams reviewing posture, policies, and traces.
+- **[Core Concepts](/getting-started/concepts)** — 90-second mental model of passkeys, sessions, vaults, and the hub-and-spoke architecture.
 
-## 1. Initialize the SDK
-
-First, tell the SDK which blockchain you want to use. We'll use Base Sepolia (a free test network) so you won't spend any real money while learning.
-
-```typescript
-
-
-// Initialize with testnet (free test network — no real money involved)
-const sdk = createSDK('base', {
-  network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network',
-});
-// That's it! The SDK is ready to use.
-```
-
-## 2. Register a Passkey
-
-This is the "sign up" step. The user's browser will show a biometric prompt (FaceID, fingerprint, etc.). After they verify, a passkey is created and a wallet address is generated automatically.
-
-```typescript
-// This pops up a biometric prompt (FaceID / fingerprint / PIN)
-const credential = await sdk.passkey.register(
-  'user@example.com',  // Username shown in the passkey prompt
-  'My Veridex Wallet'  // A friendly name for this passkey
-);
-
-// Done! The user now has a wallet.
-console.log('Credential ID:', credential.credentialId);
-console.log('Key Hash:', credential.keyHash);
-console.log('Vault Address:', sdk.getVaultAddress());
-```
-
-> **Note:** The vault address is **deterministic** — the same passkey always produces the same address on every EVM chain. Your user gets one address that works everywhere.
-
-## 3. Fund the Vault
-
-Your wallet needs some test tokens before it can send transactions. "Faucets" are free token dispensers for test networks — just paste your vault address and click a button.
-
-For testnet, use these faucets:
-
-| Chain | Faucet |
-|-------|--------|
-| Base Sepolia | [base.org/faucet](https://www.base.org/faucet) |
-| Optimism Sepolia | [app.optimism.io/faucet](https://app.optimism.io/faucet) |
-| Arbitrum Sepolia | [faucet.quicknode.com/arbitrum](https://faucet.quicknode.com/arbitrum) |
-| Stacks Testnet | [explorer.hiro.so/sandbox/faucet](https://explorer.hiro.so/sandbox/faucet?chain=testnet) |
-
-## 4. Prepare and Execute a Transfer
-
-Sending tokens is a two-step process: **prepare** (preview the cost) then **execute** (sign and send). This lets you show users exactly what will happen before they confirm.
-
-```typescript
-// Step A: Prepare — calculates gas cost, doesn't send anything yet
-const prepared = await sdk.prepareTransfer({
-  targetChain: 10004,  // Base Sepolia (Wormhole chain ID)
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
-  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n, // 1 USDC (USDC has 6 decimals, so 1_000_000 = 1.0 USDC)
-});
-
-// Show the user a human-readable summary
-const summary = await sdk.getTransactionSummary(prepared);
-console.log(summary.title);       // "Transfer"
-console.log(summary.description); // "Send 1.0 USDC to 0x742d...5A234"
-console.log('Gas cost:', prepared.formattedCost);
-
-// Step B: Execute — triggers biometric prompt, signs, and sends
-const result = await sdk.executeTransfer(prepared, signer);
-console.log('Transaction hash:', result.transactionHash);
-// Done! The tokens are on their way.
-```
-
-## 5. Check Spending Limits
-
-```typescript
-
-
-// Check current limits
-const limits = await sdk.getSpendingLimits();
-console.log('Daily remaining:', limits.dailyRemaining);
-
-// Check if a specific amount is allowed
-const check = await sdk.checkSpendingLimit(ethers.parseEther('1.0'));
-if (check.allowed) {
-  console.log('Transfer allowed!');
-} else {
-  console.log('Blocked:', check.message);
-}
-
-// Get formatted limits for UI
-const formatted = await sdk.getFormattedSpendingLimits();
-console.log(`${formatted.dailyUsedPercentage}% of daily limit used`);
-```
-
-## 6. Check Balances
-
-```typescript
-// Get all token balances on the current chain
-const portfolio = await sdk.getVaultBalances();
-
-for (const entry of portfolio.tokens) {
-  console.log(`${entry.token.symbol}: ${entry.formatted}`);
-}
-console.log('Total USD:', portfolio.totalUsdValue);
-```
-
-## 7. Back Up Your Wallet (Optional but Recommended)
-
-If you lose your device, you can recover your wallet using an encrypted backup. This takes 30 seconds:
-
-```typescript
-
-
-const backup = new WalletBackupManager({
-  passkey: sdk.passkey,
-  relayerUrl: 'https://relayer.veridex.network/api/v1',
-});
-
-// Encrypt and upload your credentials (triggers biometric prompt)
-const cred = sdk.passkey.getCredential();
-const result = await backup.backupCredentials(cred.keyHash);
-console.log('Backup complete!', result.credentialCount, 'credentials saved');
-```
-
-> **Note:** Your backup is encrypted with a key only your passkey can produce — the server cannot read it. See the full [Wallet Backup & Recovery](/guides/wallet-backup-recovery) guide for recovery steps.
-
-## Complete Example
-
-```typescript
-
-
-async function main() {
-  // 1. Initialize
-  const sdk = createSDK('base', {
-    network: 'testnet',
-    relayerUrl: 'https://relayer.veridex.network',
-  });
-
-  // 2. Check if user has existing passkeys
-  const storedCredentials = sdk.passkey.getAllStoredCredentials();
-
-  if (storedCredentials.length === 0) {
-    // 3. Register new passkey (prompts biometric)
-    console.log('Registering passkey...');
-    await sdk.passkey.register('user@example.com', 'My Wallet');
-  } else {
-    // 4. Authenticate with existing passkey (shows passkey picker)
-    console.log('Logging in...');
-    await sdk.passkey.authenticate();
-  }
-
-  // 5. Get vault info
-  const vault = sdk.getVaultAddress();
-  console.log('Vault:', vault);
-
-  // 6. Check spending limits
-  const limits = await sdk.getSpendingLimits();
-  console.log('Daily limit remaining:', limits.dailyRemaining);
-
-  // 7. Prepare a transfer
-  const prepared = await sdk.prepareTransfer({
-    targetChain: 10004,
-    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-    amount: 100000n, // 0.1 USDC
-  });
-
-  // 8. Show summary to user
-  const summary = await sdk.getTransactionSummary(prepared);
-  console.log(`${summary.title}: ${summary.description}`);
-  console.log('Gas cost:', prepared.formattedCost);
-
-  if (summary.risks.length > 0) {
-    console.warn('Risks:', summary.risks.map(r => r.message));
-  }
-}
-
-main().catch(console.error);
-```
-
-## Multi-Chain Initialization (Advanced)
-
-For apps that need multi-chain support, use the `VeridexSDK` class directly with an `EVMClient`:
-
-```typescript
-
-
-// Create the EVM chain client (hub chain)
-const evmClient = new EVMClient({
-  chainId: 84532,
-  wormholeChainId: 10004,
-  rpcUrl: 'https://sepolia.base.org',
-  hubContractAddress: '0xD5D29b6EaeE6FF4b765e704298a7e48D22607059',
-  wormholeCoreBridge: '0x79A1027a6A159502049F10906D333EC57E95F083',
-  name: 'Base Sepolia',
-  explorerUrl: 'https://sepolia.basescan.org',
-  vaultFactory: '0xb25b73D5FeD5693dcd1Bb78f8e33387B59A022EC',
-  vaultImplementation: '0x2CB8397df988c1880d9e5cFfF65bfC22D7D90EE6',
-});
-
-const sdk = new VeridexSDK({
-  chain: evmClient,
-  persistWallet: true,
-  testnet: true,
-  relayerUrl: '/api/relayer',
-  relayerApiKey: process.env.NEXT_PUBLIC_RELAYER_API_KEY,
-});
-```
-
-> **Note:** The `createSDK` shorthand is great for getting started. For production apps with multi-chain vaults, use `VeridexSDK` + `EVMClient` directly — see the [React Integration](/integrations/react) guide.
-
-## Gasless Transfer (via Relayer)
-
-Send tokens without the user needing gas:
-
-```typescript
-// Transfer via relayer — user pays no gas
-const result = await sdk.transferViaRelayer({
-  targetChain: 10004,
-  token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f5A234',
-  amount: 1000000n, // 1 USDC
-});
-
-console.log('Transaction hash:', result.transactionHash);
-```
-
-## Agent SDK Quick Start
-
-For AI agents that need to make autonomous payments:
-
-```typescript
-
-
-async function agentQuickStart() {
-  // 1. Create agent with spending limits and MCP tools
-  const agent = await createAgentWallet({
-    masterCredential: {
-      credentialId: process.env.CREDENTIAL_ID!,
-      publicKeyX: BigInt(process.env.PUBLIC_KEY_X!),
-      publicKeyY: BigInt(process.env.PUBLIC_KEY_Y!),
-      keyHash: process.env.KEY_HASH!,
-    },
-    session: {
-      dailyLimitUSD: 50,
-      perTransactionLimitUSD: 10,
-      expiryHours: 24,
-      allowedChains: [10004], // Base Sepolia
-    },
-    mcp: { enabled: true }, // Enable MCP tools for AI model integration
-    relayerUrl: 'https://relay.veridex.network',
-  });
-
-  // 2. Get MCP tools (for Gemini, Claude, GPT function calling)
-  const tools = agent.getMCPTools();
-  console.log('Available tools:', tools.map(t => t.name));
-
-  // 3. Fetch paid data (x402 handled automatically)
-  const response = await agent.fetch('https://paid-api.example.com/data');
-  const data = await response.json();
-
-  // 4. Direct payment
-  const receipt = await agent.pay({
-    chain: 10004,
-    token: 'USDC',
-    amount: '1000000',
-    recipient: '0x...',
-  });
-
-  // 5. Check spending
-  const status = agent.getSessionStatus();
-  console.log(`Spent: $${status.totalSpentUSD} / $${status.limits!.dailyLimitUSD}`);
-
-  // 6. Clean up
-  await agent.revokeSession();
-}
-```
-
-## Next.js SSR-Safe Pattern
-
-In Next.js, use dynamic imports to avoid SSR issues:
-
-```typescript
-// lib/veridex-client.ts
-let sdkInstance: any = null;
-
-export async function getVeridexSDK() {
-  if (!sdkInstance) {
-    const { createSDK } = await import('@veridex/sdk');
-    sdkInstance = createSDK('base', {
-      network: 'testnet',
-      relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL,
-    });
-  }
-  return sdkInstance;
-}
-```
-
-> **Note:** The `await import('@veridex/sdk')` ensures the SDK is only loaded in the browser, never during server-side rendering. See the [Next.js Integration](/integrations/nextjs) guide for the full pattern.
-
-## React Integration
-
-```tsx
-'use client';
-
-
-const sdk = createSDK('base', { network: 'testnet' });
-
-export function WalletButton() {
-  const [vault, setVault] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleConnect = async () => {
-    setLoading(true);
-    try {
-      // Check for existing passkey
-      const hasStored = sdk.passkey.hasStoredCredential();
-      if (hasStored) {
-        await sdk.passkey.authenticate();
-      } else {
-        await sdk.passkey.register('user@example.com', 'My Wallet');
-        sdk.passkey.saveToLocalStorage();
-      }
-      setVault(sdk.getVaultAddress());
-    } catch (error) {
-      console.error('Failed to connect:', error);
-    }
-    setLoading(false);
-  };
-
-  if (vault) {
-    return (
-      
-        Connected: {vault.slice(0, 6)}...{vault.slice(-4)}
-      
-    );
-  }
-
-  return (
-    
-      {loading ? 'Connecting...' : 'Connect with Passkey'}
-    
-  );
-}
-```
-
-## Next Steps
-
-
-  
-    Full multi-chain context provider with VeridexSDK
-  
-  
-    SSR-safe patterns with dynamic imports
-  
-  
-    Build autonomous AI agent payments with MCP tools
-  
-  
-    Configure spending limits for safety
+If you arrived here from an external link, please update your bookmarks to point at [/quickstarts/developer](/quickstarts/developer).
 
 
 ================================================================================
@@ -636,10 +338,23 @@ URL: /getting-started/installation
 
 # Installation
 
-Veridex now provides a protocol layer and a runtime layer:
+## What should I install?
+
+Most teams need exactly **one** package to start. Pick the row that matches what you're building:
+
+| If you're building... | Install | Then read |
+|---|---|---|
+| A wallet, dApp, or any UI where a human signs with a passkey | `@veridex/sdk` | [Developer Quickstart](/quickstarts/developer) |
+| An AI agent that pays for things autonomously | `@veridex/agentic-payments` | [Agent Payments guide](/guides/agent-payments) |
+| A custom agent runtime (tools, memory, policies, checkpoints) | `@veridex/agents` | [Agents framework](/sdks/agents-framework) |
+| Approval inbox / trace explorer / policy ops UI | `@veridex/agents-control-plane` | [Control Plane](/guides/enterprise-manager) |
+
+> **Note:** **Don't know yet?** Start with `@veridex/sdk`. Every other Veridex package builds on it — you'll never need to throw away the integration when you graduate to agents or the control plane.
+
+## Reference: the full package family
 
 - **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, cross-chain transfers, and **wallet backup/recovery**
-- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools
+- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools (depends on `@veridex/sdk`)
 - **`@veridex/agents`** — General-purpose TypeScript agent runtime
 - **`@veridex/agents-react`** — React hooks and provider for the runtime
 - **`@veridex/agents-adapters`** — Adapters and live bridges for external runtimes

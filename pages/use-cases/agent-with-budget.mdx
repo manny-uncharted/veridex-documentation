@@ -1,0 +1,119 @@
+---
+title: AI agent with a $50/day budget
+description: Build an autonomous agent that spends within a bounded session key, revocable in one call.
+---
+
+import { Callout } from "../../components/mdx"
+
+# AI agent with a $50/day budget
+
+You'll build a Node service that an LLM agent (or any backend job) can call to ship USDC payments. The agent never holds a seed phrase. It holds a **session key** with a hard daily cap that you can revoke from anywhere. Every payment is signed and recoverable.
+
+**What you ship**
+
+- A backend that registers a passkey once, mints a 24-hour session key capped at 50 USDC/day, and exposes a `POST /pay` endpoint.
+- A "kill switch" CLI that revokes every active session in one call.
+- An audit trail of every signed action, ready to forward to your logger of choice.
+
+**Prerequisites**
+
+- Node 18+, `npm install @veridex/sdk ethers`
+- A funded testnet vault — finish the [Developer Quickstart](/quickstarts/developer) first.
+- A sponsor private key in `PRIVATE_KEY` (paid for by you; covers the on-chain session-register tx — gas is reimbursed in v1.2).
+
+## 1. Mint the session key
+
+```typescript
+// src/session.ts
+import { createSDK, SessionManager, EVMHubClientAdapter } from '@veridex/sdk';
+import { JsonRpcProvider, Wallet, parseUnits } from 'ethers';
+
+export async function mintAgentSession() {
+  const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
+  const provider = new JsonRpcProvider('https://sepolia.base.org');
+  const signer = new Wallet(process.env.PRIVATE_KEY!, provider);
+
+  const hubClient = new EVMHubClientAdapter(sdk.getChainClient() as any, signer as any);
+  const manager = new SessionManager(
+    sdk.getCredential()!,                              // passkey credential from earlier
+    hubClient,
+    (challenge) => sdk.passkey.sign(challenge),
+    {
+      duration: 24 * 60 * 60,                          // 24h
+      maxValue: parseUnits('50', 6),                   // 50 USDC per tx
+    },
+  );
+
+  const session = await manager.createSession();      // one passkey prompt — happens at startup, not per-payment
+  return { sdk, manager, session };
+}
+```
+
+The session key lives in `IndexedDB` (or `LocalStorage` fallback) tied to your passkey's credential ID. Subsequent process restarts can `manager.loadSession()` instead of re-prompting.
+
+## 2. Sign and ship payments from the agent
+
+```typescript
+// src/pay.ts
+import { getBytes, parseUnits } from 'ethers';
+
+export async function pay({ sdk, manager }: Awaited<ReturnType<typeof mintAgentSession>>, recipient: string, amountUsdc: string) {
+  const payload = await sdk.buildTransferPayload({
+    targetChain: 10004,                                // Base Sepolia
+    token: 'USDC',
+    recipient,
+    amount: parseUnits(amountUsdc, 6),
+  });
+
+  const signed = await manager.signAction({
+    action: 'transfer',
+    targetChain: 10004,
+    payload: getBytes(payload),
+    nonce: Number(await sdk.getNonce()),
+    value: parseUnits(amountUsdc, 6),
+  });
+
+  // signed.signature uses the session key — no passkey prompt
+  const result = await sdk.relayer!.submitSignedAction({
+    ...signed.action,
+    signature: signed.signature,
+  } as any);
+
+  return result.txHash;
+}
+```
+
+Wrap this in an HTTP endpoint and your agent has a sub-second payment primitive bounded by the session's caps. The relayer enforces the per-tx `maxValue` server-side too — a compromised agent cannot exceed it.
+
+## 3. Wire the kill switch
+
+```typescript
+// src/revoke.ts — run this from CI, a Slack bot, or a panicked human
+import { mintAgentSession } from './session';
+
+const { manager } = await mintAgentSession();
+await manager.revokeAllSessions();                     // every key derived from this credential is now invalid
+```
+
+Revocation goes on-chain through the Hub contract — there is no off-chain race window. Within one block, the relayer rejects any further signed actions from the revoked key.
+
+## 4. Forward the audit trail
+
+Every `submitSignedAction` returns the on-chain `txHash` plus the canonical `actionPayload` you signed. Persist the pair and you have a tamper-evident record of *what the agent intended* and *what the chain executed*. Forward to Datadog, BigQuery, or your SIEM of choice:
+
+```typescript
+await audit.log({
+  agent: 'agent-7',
+  reasoning: llmTrace.reasoning,       // whatever your agent emitted
+  action: signed.action,
+  txHash: result.txHash,
+  signedBy: 'session_key',
+  keyHash: session.keyHash,
+});
+```
+
+## Going further
+
+- Add per-counterparty allowlists with a [`SpendingLimitsManager`](/sdks/spending-limits).
+- Plug the agent into [Veridex Agents](/sdks/agents-control-plane) for policy packs, approvals, and centralised tracing.
+- Move from testnet to mainnet by switching `network: 'mainnet'` and provisioning a relayer API key in the [Developer Portal](https://app.veridex.network).

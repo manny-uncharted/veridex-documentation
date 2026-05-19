@@ -1,0 +1,163 @@
+---
+title: Consumer passkey wallet
+description: Build a browser wallet where users sign in with FaceID/TouchID and send funds across chains — no seed phrase ever.
+---
+
+import { Callout } from "../../components/mdx"
+
+# Consumer passkey wallet
+
+You'll build a single-page React app that gives users a multi-chain wallet they can log into with FaceID, TouchID, or Windows Hello. There is no seed phrase to write down. The vault lives on Base; outbound transfers fan out to Optimism, Arbitrum, and other supported chains over Wormhole — your users never bridge manually.
+
+**What you ship**
+
+- A "Sign up with passkey" button that provisions a vault on first use and recognises the user on every subsequent visit.
+- A balance view that shows native + ERC-20 balances on every supported chain in one panel.
+- A "Send" form that picks a target chain from a dropdown — the SDK handles the cross-chain message under the hood.
+
+**Prerequisites**
+
+- A Vite / Next.js / CRA project (anything that serves over HTTPS or `localhost`).
+- `npm install @veridex/sdk @veridex/react ethers`
+
+<Callout type="info">
+  **Passkeys + iframes don't mix.** Browsers refuse to surface the FaceID/TouchID dialog inside cross-origin iframes. Always serve this wallet from a top-level origin (`https://wallet.yourapp.com`), and link out from any embed.
+</Callout>
+
+## 1. Set up the SDK provider
+
+```tsx
+// app/providers.tsx
+import { VeridexProvider } from '@veridex/react';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <VeridexProvider
+      chain="base"
+      network="testnet"
+      relayerUrl="https://relayer.veridex.network"   // public relayer; no API key on testnet
+    >
+      {children}
+    </VeridexProvider>
+  );
+}
+```
+
+The provider initialises one `VeridexSDK` per chain and exposes it through React context. Hooks (`usePasskey`, `useVault`, `useBalances`, `useTransfer`) read from that context — no prop drilling.
+
+## 2. Sign up / sign in with a passkey
+
+```tsx
+// app/components/LoginButton.tsx
+import { usePasskey } from '@veridex/react';
+
+export function LoginButton() {
+  const { register, authenticate, credential, status } = usePasskey();
+
+  if (credential) return <div>Signed in as {credential.label}</div>;
+
+  return (
+    <div className="flex gap-2">
+      <button onClick={() => register('user@example.com', 'My Wallet')}>
+        Sign up with passkey
+      </button>
+      <button onClick={authenticate}>Sign in</button>
+      {status === 'pending' && <span>Prompting…</span>}
+    </div>
+  );
+}
+```
+
+`register()` triggers `navigator.credentials.create()` — the browser shows the FaceID/TouchID dialog, mints a WebAuthn credential, and the SDK derives a deterministic vault address from the credential's public key. `authenticate()` re-binds an existing credential on returning visits, no re-registration needed.
+
+## 3. Render a multi-chain balance panel
+
+```tsx
+// app/components/Balances.tsx
+import { useBalances } from '@veridex/react';
+
+export function Balances() {
+  const { balances, loading, refresh } = useBalances({
+    chains: ['base', 'optimism', 'arbitrum'],         // hook fans out the RPC calls in parallel
+    tokens: ['native', 'USDC'],
+  });
+
+  if (loading) return <div>Loading balances…</div>;
+
+  return (
+    <table>
+      <thead><tr><th>Chain</th><th>Native</th><th>USDC</th></tr></thead>
+      <tbody>
+        {balances.map((row) => (
+          <tr key={row.chain}>
+            <td>{row.chain}</td>
+            <td>{row.native.formatted}</td>
+            <td>{row.usdc?.formatted ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot>
+        <tr><td colSpan={3}><button onClick={refresh}>Refresh</button></td></tr>
+      </tfoot>
+    </table>
+  );
+}
+```
+
+The hook caches per chain and invalidates entries when a transfer settles, so the table updates without manual refetching after a `Send`.
+
+## 4. Send across chains, no manual bridging
+
+```tsx
+// app/components/SendForm.tsx
+import { useTransfer } from '@veridex/react';
+import { parseEther } from 'ethers';
+
+const CHAINS = [
+  { id: 10004, label: 'Base Sepolia' },
+  { id: 10005, label: 'Optimism Sepolia' },
+  { id: 10003, label: 'Arbitrum Sepolia' },
+];
+
+export function SendForm() {
+  const { send, status, txHash, error } = useTransfer();
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        await send({
+          targetChain: Number(fd.get('chain')),
+          token: 'native',
+          recipient: String(fd.get('to')),
+          amount: parseEther(String(fd.get('amount'))),
+        });
+      }}
+    >
+      <select name="chain">
+        {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+      </select>
+      <input name="to" placeholder="0x…" />
+      <input name="amount" placeholder="0.01" />
+      <button type="submit" disabled={status === 'sending'}>
+        {status === 'sending' ? 'Sending…' : 'Send'}
+      </button>
+      {txHash && <a href={`https://sepolia.basescan.org/tx/${txHash}`} target="_blank" rel="noreferrer">View tx</a>}
+      {error && <div className="text-red">{error.message}</div>}
+    </form>
+  );
+}
+```
+
+Under the hood `useTransfer` calls `sdk.transferViaRelayer({ targetChain, ... })`. The relayer takes the signed action on the Base hub, dispatches the cross-chain message through Wormhole, and the destination spoke chain (Optimism, Arbitrum, …) materialises the funds. Your user sees one prompt, one confirmation, one transaction hash.
+
+## 5. Recover on a new device
+
+Passkeys sync through iCloud Keychain / Google Password Manager / 1Password. A user who lost their laptop signs in on their new device with FaceID and the same vault is there — there's no seed-phrase recovery flow because there's no seed phrase. For users without cloud-synced passkeys, see [Recovery](/security/recovery) for the social-recovery and multi-device options.
+
+## Going further
+
+- Add **session keys** so power users don't get a passkey prompt for every transfer: [Sessions](/sdks/sessions).
+- Add **spend limits** so a stolen device can't drain the vault before the user revokes it: [Spending Limits](/guides/spending-limits).
+- Move from testnet to mainnet by switching `network` and grabbing a [relayer API key](https://app.veridex.network).

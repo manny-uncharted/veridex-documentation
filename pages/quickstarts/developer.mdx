@@ -1,17 +1,24 @@
 ---
 title: Developer Quickstart
-description: Register an app, create a session, and make your first governed request in under 10 minutes
+description: Register an app, create a session, and make your first governed request in under 5 minutes
 ---
+
+import { Callout } from "../../components/mdx"
 
 # Developer Quickstart
 
-Get from zero to a working session-backed request in five steps.
+Get from zero to a working session-backed request in five steps. **No portal account required.**
+
+<Callout type="tip">
+  **Want to skip setup?** Open the [playground](/playground) — a fully-wired sandbox that runs in your browser, no install, no API key. Come back to this page when you're ready to wire it into your own project.
+</Callout>
 
 ## Prerequisites
 
 - Node.js 18+ or Bun
 - A browser supporting WebAuthn/Passkeys (Chrome 108+, Safari 16+, Firefox 118+)
-- A Veridex Developer Portal account — sign up at [app.veridex.network](https://app.veridex.network) (beta)
+
+That's it. You do **not** need a Veridex account, an API key, or a funded wallet to complete this quickstart — testnet sessions work with a default public relayer (rate-limited to 5 tx/hour per IP).
 
 ## Step 1: Install the SDK
 
@@ -23,87 +30,98 @@ bun add @veridex/sdk ethers
 
 > Current published version: `@veridex/sdk@1.1.1`. The SDK targets the live EVM testnets today — Base Sepolia (hub), Ethereum Sepolia, Optimism Sepolia, Arbitrum Sepolia, Monad Testnet, and Polygon Amoy. Mainnet is not yet enabled.
 
-## Step 2: Get a Relayer API Key (optional, enables gasless)
-
-1. Sign in to [app.veridex.network](https://app.veridex.network).
-2. Open the **Developer** tab → **API Keys**.
-3. Click **Create key**, pick a label, and copy the key — it is shown only once.
-4. Store it as an environment variable:
-
-```bash
-export VERIDEX_RELAYER_API_KEY=vdx_live_...
-```
-
-The API key is only required if you want the Veridex relayer to sponsor gas. Direct-to-chain usage works without one.
-
-## Step 3: Initialize the SDK
+## Step 2: Initialize the SDK
 
 The `createSDK` factory defaults to `testnet`. Pick a chain name; everything else has sane defaults.
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-// Minimal: Base Sepolia, no relayer
+// Minimal: Base Sepolia, public relayer
 const sdk = createSDK('base');
-
-// Or with gasless relayer (testnet)
-const sdkWithRelayer = createSDK('base', {
-  network: 'testnet',
-  relayerUrl: 'https://relayer.veridex.network',
-  relayerApiKey: process.env.VERIDEX_RELAYER_API_KEY,
-});
 ```
+
+<Callout type="info">
+  **Need gasless transactions with your own quota?** Create a developer account at [app.veridex.network](https://app.veridex.network) (beta), grab an API key, and pass `relayerApiKey: process.env.VERIDEX_RELAYER_API_KEY`. Optional — only needed when you outgrow the shared rate limit.
+</Callout>
 
 > `new VeridexClient({...})` is **not** a supported entry point. Always use `createSDK` (or one of the `createHubSDK` / `createSessionSDK` variants) so the SDK can resolve the correct contract addresses for each chain.
 
-## Step 4: Register a Passkey & Create a Session
+## Step 3: Register a Passkey
 
-Session creation runs in the browser — it triggers a WebAuthn prompt on the user's device. Use the React hooks in [`@veridex/react`](/sdks/react) for a production flow; the snippet below shows the raw SDK calls.
+Passkey registration runs in the browser — it triggers a WebAuthn prompt on the user's device. Use the React hooks in [`@veridex/react`](/sdks/react) for a production flow; the snippet below shows the raw SDK calls.
 
 ```typescript
-import { createSessionSDK, SessionManager } from '@veridex/sdk';
-import { ethers } from 'ethers';
+import { createSDK } from '@veridex/sdk';
 
-const sdk = createSessionSDK('base');
-const manager = new SessionManager({ sdk });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 
-// One-time Passkey registration
+// One-time Passkey registration → vault provisioned on Base Sepolia
 await sdk.passkey.register('user@example.com', 'My Wallet');
 
-// Create a scoped, time-limited session key
-const session = await manager.createSession({
-  duration: 3600,                       // 1 hour
-  maxValue: ethers.parseEther('0.05'),  // per-tx cap — see note below
-  requireUV: true,
-});
-
-console.log('Session key hash:', session.sessionKeyHash);
+console.log('Vault address:', sdk.getVaultAddress());
 ```
 
-> **About `maxValue`.** The on-chain Hub accepts `maxValue: 0n` as "no per-tx limit — bounded only by the vault daily cap." That is deliberate, but for most apps it is a foot-gun: a compromised session key can drain the vault up to the daily cap. The SDK therefore throws when `maxValue === 0n` unless you explicitly set `allowUnboundedMaxValue: true` on the config. Prefer a finite `maxValue` sized to the largest single transaction you expect. See [Threat Model → Session Key Security](/security/threat-model) for the full rationale.
+## Step 4: Ship a Gasless Transfer Through the Public Relayer
 
-## Step 5: Execute a Session-Authorized Transfer
+`transferViaRelayer` signs the action with the user's passkey and submits it via [`relayer.veridex.network`](https://relayer.veridex.network) — no gas tank, no signer required.
 
 ```typescript
-const result = await manager.executeWithSession(
+import { parseEther } from 'ethers';
+
+const tx = await sdk.transferViaRelayer(
   {
-    targetChain: 10005,                 // Optimism Sepolia Wormhole Chain ID
+    targetChain: 10005,                 // Optimism Sepolia (Wormhole chain id)
     token: 'native',
     recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
-    amount: ethers.parseEther('0.01'),
+    amount: parseEther('0.01'),
   },
-  session,
+  (state) => console.log('relayer status:', state.status),
 );
 
-console.log('Transaction:', result.transactionHash);
+console.log('Transaction:', tx.transactionHash);
 ```
 
-## Verify in the Developer Portal
+<Callout type="info">
+  Run the full flow live: [stackblitz.com/github/Veridex-Protocol/playground](https://stackblitz.com/github/Veridex-Protocol/playground?file=src/main.ts) (open in a top-level tab — passkeys are blocked inside iframes).
+</Callout>
 
-Open [app.veridex.network](https://app.veridex.network) and check:
-1. **Sessions** — your session appears with label, expiry, and `maxValue`.
-2. **Activity** — the transfer appears with chain, transaction hash, and policy decision (`allowed`).
-3. **Policies** — any violations are surfaced here with the rule that blocked them.
+## Step 5: Add a Session Key (optional)
+
+Mint a key with hard caps (duration + per-tx max) that signs many transfers without re-prompting. Real signature — `SessionManager(credential, hubClient, passkeySign, config)`:
+
+```typescript
+import { SessionManager, EVMHubClientAdapter } from '@veridex/sdk';
+import { JsonRpcProvider, Wallet, parseEther, getBytes } from 'ethers';
+
+const provider = new JsonRpcProvider('https://sepolia.base.org');
+const signer = new Wallet(process.env.PRIVATE_KEY!, provider);    // sponsor for the on-chain session-register tx
+
+const hubClient = new EVMHubClientAdapter(sdk.getChainClient() as any, signer as any);
+const manager = new SessionManager(
+  sdk.getCredential()!,
+  hubClient,
+  (challenge) => sdk.passkey.sign(challenge),
+  { duration: 3600, maxValue: parseEther('0.05') },
+);
+
+const session = await manager.createSession();                    // one passkey prompt
+
+const payload = await sdk.buildTransferPayload({
+  targetChain: 10005, token: 'native',
+  recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
+  amount: parseEther('0.01'),
+});
+const signed = await manager.signAction({
+  action: 'transfer', targetChain: 10005,
+  payload: getBytes(payload),
+  nonce: Number(await sdk.getNonce()),
+  value: parseEther('0.01'),
+});
+// `signed` is ready to submit through the relayer (sdk.relayer.submitSignedAction).
+```
+
+> `maxValue: 0n` (unbounded) throws unless you opt in with `allowUnboundedMaxValue: true`. Why this is a foot-gun and when to opt in: [Threat Model → Session Key Security](/security/threat-model).
 
 ## What's Next
 

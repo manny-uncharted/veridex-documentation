@@ -7,10 +7,25 @@ import { Callout, Note, Info, Warning, Tip, Danger, Tabs, Tab, Cards, Card, Card
 
 # Installation
 
-Veridex now provides a protocol layer and a runtime layer:
+## What should I install?
+
+Most teams need exactly **one** package to start. Pick the row that matches what you're building:
+
+| If you're building... | Install | Then read |
+|---|---|---|
+| A wallet, dApp, or any UI where a human signs with a passkey | `@veridex/sdk` | [Developer Quickstart](/quickstarts/developer) |
+| An AI agent that pays for things autonomously | `@veridex/agentic-payments` | [Agent Payments guide](/guides/agent-payments) |
+| A custom agent runtime (tools, memory, policies, checkpoints) | `@veridex/agents` | [Agents framework](/sdks/agents-framework) |
+| Approval inbox / trace explorer / policy ops UI | `@veridex/agents-control-plane` | [Control Plane](/guides/enterprise-manager) |
+
+<Callout type="info">
+  **Don't know yet?** Start with `@veridex/sdk`. Every other Veridex package builds on it — you'll never need to throw away the integration when you graduate to agents or the control plane.
+</Callout>
+
+## Reference: the full package family
 
 - **`@veridex/sdk`** — Core SDK for passkey wallets, vaults, sessions, cross-chain transfers, and **wallet backup/recovery**
-- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools
+- **`@veridex/agentic-payments`** — Agent SDK for autonomous AI agent payments, x402 protocol, and MCP tools (depends on `@veridex/sdk`)
 - **`@veridex/agents`** — General-purpose TypeScript agent runtime
 - **`@veridex/agents-react`** — React hooks and provider for the runtime
 - **`@veridex/agents-adapters`** — Adapters and live bridges for external runtimes
@@ -270,7 +285,7 @@ const sdk = createSDK('stacks', { network: 'testnet' });
 // test-sdk.ts
 import { createSDK, getChainConfig, getSupportedChains } from '@veridex/sdk';
 
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 const chains = getSupportedChains('testnet');
 
 console.log('SDK initialized successfully!');

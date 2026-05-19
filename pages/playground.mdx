@@ -1,0 +1,74 @@
+---
+title: Playground
+description: Try Veridex in your browser — no install, no account, no API key
+---
+
+import { Callout } from "../components/mdx"
+
+# Playground
+
+A fully-wired Veridex sandbox that runs in your browser. Open it in a new tab, register a passkey, mint a session key, and ship a governed testnet transfer — all without leaving your laptop.
+
+<div className="vdx-home">
+<section className="vdx-hero" style={{ padding: "2rem 0 1rem" }}>
+  <div className="vdx-hero-actions">
+    <a
+      href="https://stackblitz.com/github/Veridex-Protocol/playground?file=src/main.ts"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="vdx-btn vdx-btn-primary"
+    >
+      {"Open the playground ↗"}
+    </a>
+    <a
+      href="https://github.com/Veridex-Protocol/playground"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="vdx-btn vdx-btn-secondary"
+    >
+      {"View on GitHub"}
+    </a>
+  </div>
+  <div className="vdx-hero-meta">
+    <span>{"Opens in a new tab"}</span>
+    <span>{"·"}</span>
+    <span>{"FaceID / TouchID / Windows Hello supported"}</span>
+    <span>{"·"}</span>
+    <span>{"Base Sepolia testnet"}</span>
+  </div>
+</section>
+</div>
+
+<Callout type="info">
+  **Why a new tab?** Browser passkey prompts (`navigator.credentials.create`) misbehave inside cross-origin iframes — Safari and some Chrome profiles refuse to surface the FaceID/TouchID dialog. The playground opens in a top-level Stackblitz tab so passkey registration works the first time.
+</Callout>
+
+## What's in the playground
+
+| File | What it does |
+|------|-------------|
+| `src/main.ts` | End-to-end script: register passkey → confirm policy → ship a gasless transfer via the public relayer → render the trace. |
+| `src/policies.ts` | Example policy: per-tx max value with a label. Edit and re-run to see the transfer get rejected. |
+| `src/trace-view.ts` | Renders a signed-trace stub inline so you can see exactly what got recorded. |
+| `README.md` | Step-by-step walkthrough mirroring the [Developer Quickstart](/quickstarts/developer). |
+
+## Five-minute path
+
+1. Click **Open the playground ↗** above.
+2. When Stackblitz finishes booting, hit the **Run** button (or wait for autorun).
+3. In the preview pane, click **1. Register passkey** — your browser prompts for FaceID/TouchID.
+4. Click **2. Confirm policy** — confirms the per-tx max value the playground will enforce.
+5. Click **3. Send transfer** — the SDK signs with your passkey, the public relayer submits the transaction, and the preview renders both the on-chain tx hash and the local trace.
+
+## When you're ready to leave the sandbox
+
+- **Wire it into your own project:** [Developer Quickstart](/quickstarts/developer)
+- **Understand what just happened:** [Core Concepts](/getting-started/concepts)
+- **Build an agent on top of it:** [Agent Payments guide](/guides/agent-payments)
+- **Tune the policies:** [Spending Limits](/guides/spending-limits) · [Governance / Approvals](/governance/approvals)
+
+## Limits of the shared playground
+
+The playground talks to the public Veridex relayer at **`https://relayer.veridex.network`** — no API key, no signup, rate-limited to 5 transactions per hour per IP on Base Sepolia. If you hit the limit, either wait or provision your own key from the [Developer Portal](https://app.veridex.network) (still free during beta).
+
+The shared playground also signs against a pre-seeded testnet vault — funds are not real and reset periodically. For persistent testnet funds, generate your own vault by following the [Developer Quickstart](/quickstarts/developer).

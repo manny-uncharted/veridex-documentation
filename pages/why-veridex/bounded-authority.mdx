@@ -5,7 +5,26 @@ description: How Veridex's layered authority model works
 
 # Bounded Authority
 
-Bounded authority is the core design principle of Veridex. Instead of granting unrestricted access to wallets and funds, Veridex decomposes authority into explicit, auditable layers.
+Without Veridex, giving software the ability to spend means handing it a key with no limits. With Veridex, you hand it a **bounded delegation** — a contract that says exactly what it can do.
+
+```typescript
+// Without Veridex: unlimited authority
+wallet.sendTransaction({ to, value });          // Could drain everything
+
+// With Veridex: bounded authority
+sessions.createSession({
+  permissions: ['transfer'],     // only transfers — no contract calls, no approvals
+  chainScopes: [8453],           // only Base — not Ethereum, not Solana
+  maxValue: parseEther('0.05'),  // hard cap per transaction
+  dailyLimit: parseEther('1'),   // hard cap per 24h
+  duration: 86400,               // expires in 24h
+  label: 'payment-agent-001',    // human-readable purpose
+});
+```
+
+A compromised session key in the second example can spend at most `dailyLimit`. A compromised wallet in the first can spend everything you own. The difference between those two outcomes is what Veridex calls **bounded authority**.
+
+Below is the layered authority model that makes this work end-to-end.
 
 ## The Four Layers
 

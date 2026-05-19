@@ -144,7 +144,7 @@ await sdk.transferViaRelayer({ token, recipient, amount });
 
 ```typescript
 // ✅ Correct
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 await sdk.passkey.authenticate();
 
 // ❌ Incorrect

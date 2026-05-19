@@ -5,7 +5,7 @@ const withNextra = nextra({
   theme: 'nextra-theme-docs',
   themeConfig: './theme.config.tsx',
   defaultShowCopyCode: true,
-  latex: false,
+  latex: true,
 });
 
 export default (phase) => withNextra({

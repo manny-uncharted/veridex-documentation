@@ -18,7 +18,7 @@ npm install @veridex/sdk
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK('base', { network: 'testnet' });
+const sdk = createSDK('base', { network: 'testnet', relayerUrl: 'https://relayer.veridex.network' });
 
 // Register a passkey (prompts biometric)
 const credential = await sdk.passkey.register('alice', 'My Wallet');
