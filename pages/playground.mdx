@@ -1,13 +1,15 @@
 ---
 title: Playground
-description: Try Veridex in your browser — no install, no account, no API key
+description: Run the Veridex browser playground from source while hosted services are redeployed
 ---
 
 import { Callout } from "../components/mdx"
 
 # Playground
 
-A fully-wired Veridex sandbox that runs in your browser. Open it in a new tab, register a passkey, mint a session key, and ship a governed testnet transfer — all without leaving your laptop.
+The Playground source demonstrates passkey and policy flows in a browser. Its
+previous public relayer dependency is currently unavailable, so a hosted
+end-to-end transfer is not claimed on this page.
 
 <div className="vdx-home">
 <section className="vdx-hero" style={{ padding: "2rem 0 1rem" }}>
@@ -40,14 +42,16 @@ A fully-wired Veridex sandbox that runs in your browser. Open it in a new tab, r
 </div>
 
 <Callout type="info">
-  **Why a new tab?** Browser passkey prompts (`navigator.credentials.create`) misbehave inside cross-origin iframes — Safari and some Chrome profiles refuse to surface the FaceID/TouchID dialog. The playground opens in a top-level Stackblitz tab so passkey registration works the first time.
+  For a complete payment path that works today, run the
+  [Stellar x402 quickstart](/quickstarts/stellar-x402). It starts the facilitator,
+  Bazaar, gateway, and dedicated Stellar Playground locally.
 </Callout>
 
 ## What's in the playground
 
 | File | What it does |
 |------|-------------|
-| `src/main.ts` | End-to-end script: register passkey → confirm policy → ship a gasless transfer via the public relayer → render the trace. |
+| `src/main.ts` | Browser flow for passkey registration, policy confirmation, and relayer submission when a relayer URL is configured. |
 | `src/policies.ts` | Example policy: per-tx max value with a label. Edit and re-run to see the transfer get rejected. |
 | `src/trace-view.ts` | Renders a signed-trace stub inline so you can see exactly what got recorded. |
 | `README.md` | Step-by-step walkthrough mirroring the [Developer Quickstart](/quickstarts/developer). |
@@ -56,9 +60,10 @@ A fully-wired Veridex sandbox that runs in your browser. Open it in a new tab, r
 
 1. Click **Open the playground ↗** above.
 2. When Stackblitz finishes booting, hit the **Run** button (or wait for autorun).
-3. In the preview pane, click **1. Register passkey** — your browser prompts for FaceID/TouchID.
-4. Click **2. Confirm policy** — confirms the per-tx max value the playground will enforce.
-5. Click **3. Send transfer** — the SDK signs with your passkey, the public relayer submits the transaction, and the preview renders both the on-chain tx hash and the local trace.
+3. In the preview pane, click **1. Register passkey** - your browser prompts for FaceID/TouchID.
+4. Click **2. Confirm policy** - confirms the per-transaction maximum the Playground will enforce.
+5. Relayer submission requires a separately configured, reachable relayer. Check
+  [service status](/resources/service-status) before expecting an on-chain result.
 
 ## When you're ready to leave the sandbox
 
@@ -67,8 +72,9 @@ A fully-wired Veridex sandbox that runs in your browser. Open it in a new tab, r
 - **Build an agent on top of it:** [Agent Payments guide](/guides/agent-payments)
 - **Tune the policies:** [Spending Limits](/guides/spending-limits) · [Governance / Approvals](/governance/approvals)
 
-## Limits of the shared playground
+## Current availability
 
-The playground talks to the public Veridex relayer at **`https://relayer.veridex.network`** — no API key, no signup, rate-limited to 5 transactions per hour per IP on Base Sepolia. If you hit the limit, either wait or provision your own key from the [Developer Portal](https://app.veridex.network) (still free during beta).
-
-The shared playground also signs against a pre-seeded testnet vault — funds are not real and reset periodically. For persistent testnet funds, generate your own vault by following the [Developer Quickstart](/quickstarts/developer).
+The former public relayer and Developer Portal hostnames are reserved but not
+currently deployed. Do not use them as SDK defaults. Run a relayer you control,
+or use the self-hosted Stellar evaluator while the public services are being
+restored.

@@ -58,10 +58,10 @@ const config: DocsThemeConfig = {
     labels: 'feedback',
   },
   banner: {
-    key: 'veridex-docs-v1',
+    key: 'veridex-service-status-2026-09',
     text: (
-      <a href="https://github.com/veridex-protocol/" target="_blank" rel="noreferrer">
-        🚀 Veridex Protocol is live on testnet. Star us on GitHub →
+      <a href="/resources/service-status">
+        Public runtime services are being redeployed. Check verified availability.
       </a>
     ),
   },

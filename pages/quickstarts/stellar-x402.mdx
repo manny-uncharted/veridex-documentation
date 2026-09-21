@@ -1,0 +1,86 @@
+---
+title: Stellar x402 Quickstart
+description: Run the Veridex facilitator, Bazaar, gateway, and Playground on Stellar testnet
+---
+
+import { Callout } from "../../components/mdx"
+
+# Stellar x402 Quickstart
+
+Run the complete Veridex Stellar x402 evaluator stack locally and settle a real
+testnet payment. The facilitator re-reads the settlement from Stellar instead
+of trusting its own response.
+
+<Callout type="info">
+  The hosted facilitator, Bazaar, Playground, and Explorer are not public yet.
+  This self-hosted flow is the supported evaluator path until the
+  [service status](/resources/service-status) page marks those services live.
+</Callout>
+
+## Prerequisites
+
+- Node.js 22 or newer
+- Docker with Compose
+- Network access to Stellar testnet, Friendbot, Soroban RPC, Horizon, and npm
+
+No Veridex API key or funded mainnet wallet is required.
+
+## Start from a clean clone
+
+```bash
+git clone https://github.com/Veridex-Protocol/stellar-facilitator.git
+cd stellar-facilitator
+npm run demo
+```
+
+The command installs dependencies, creates fresh Friendbot-funded accounts,
+starts PostgreSQL/pgvector, Bazaar, facilitator, reference seller, gateway, and
+Playground, then runs the conformance harness.
+
+## Verify the services
+
+```bash
+curl -fsS http://localhost:3001/health
+curl -fsS http://localhost:3002/ready
+curl -fsS http://localhost:3003/health
+curl -fsS http://localhost:3005/health
+curl -fsS http://localhost:3004/api/config
+curl -fsS http://localhost:3002/supported | jq
+```
+
+Default local surfaces:
+
+| Surface | URL |
+|---|---|
+| Bazaar | `http://localhost:3001` |
+| Facilitator | `http://localhost:3002` |
+| Reference seller | `http://localhost:3003` |
+| Playground | `http://localhost:3004` |
+| Gateway | `http://localhost:3005` |
+
+Open `http://localhost:3004` to run the browser evaluator. Its wallet is
+created in the browser and funded only on Stellar testnet.
+
+## Inspect the proof
+
+After conformance completes, inspect the generated report:
+
+```bash
+jq '{runAt, network, passed, failed, settledTransaction, explorerUrl}' conformance-report.json
+```
+
+Success requires `network` to be `stellar:testnet`, `failed` to be `0`, and the
+reported transaction to exist independently on Stellar. The report contains no
+private keys.
+
+## Current evidence boundary
+
+- Canonical Stellar `exact` is exercised with stock x402 packages.
+- The Veridex `upto` scheme is experimental, testnet-only, and unaudited.
+- Bazaar discovery, gateway, and MCP paths are testnet evidence, not production
+  availability claims.
+- No pubnet/mainnet or public hosted-service claim is made by this quickstart.
+
+For implementation status, known limitations, and recorded transactions, see
+the [public acceptance matrix](https://github.com/Veridex-Protocol/stellar-facilitator/blob/main/docs/rfp/testnet-acceptance-matrix.md)
+and [conformance report](https://github.com/Veridex-Protocol/stellar-facilitator/blob/main/docs/rfp/testnet-conformance-report.md).

@@ -8,7 +8,7 @@ import Link from "next/link"
 <div className="vdx-home">
 
 <section className="vdx-hero">
-  <div className="vdx-hero-badge">Open-source protocol · Free during beta</div>
+  <div className="vdx-hero-badge">Open-source protocol · Public services redeploying</div>
   <h1 className="vdx-hero-title">{"Give your app or agent"}<br/>{"an on-chain budget."}</h1>
   <p className="vdx-hero-subtitle">{"Hard spending limits, human approvals, and a verifiable audit trail — across 8 chains. Your code (or your AI agent) signs only what your policy allows."}</p>
   <div className="vdx-hero-actions">
@@ -21,7 +21,7 @@ import Link from "next/link"
   <div className="vdx-hero-meta">
     <span>{"No wallet to install"}</span>
     <span>{"·"}</span>
-    <span>{"Free testnet by default"}</span>
+    <span>{"Self-hosted testnet available"}</span>
     <span>{"·"}</span>
     <Link href="/quickstarts/operator">{"For operators →"}</Link>
   </div>
@@ -50,7 +50,7 @@ import Link from "next/link"
 
 <section className="vdx-fivelines">
   <h2 className="vdx-section-title">{"A governed transfer in six lines"}</h2>
-  <p className="vdx-section-lede">{"Drop this into a browser-side script. Veridex prompts for a passkey and ships a gasless transfer through the public relayer — within a policy you control. Click below to run it live, no install required."}</p>
+  <p className="vdx-section-lede">{"Configure a reachable relayer, then use the SDK to prompt for a passkey and submit a gasless transfer within a policy you control. Check service status before using any hosted endpoint."}</p>
   <div className="vdx-model-cta">
     <a href="https://stackblitz.com/github/Veridex-Protocol/playground?file=src/main.ts" target="_blank" rel="noreferrer">{"Open in Stackblitz →"}</a>
   </div>
@@ -62,7 +62,10 @@ import Link from "next/link"
 import { createSDK } from '@veridex/sdk';
 import { parseEther } from 'ethers';
 
-const sdk = createSDK('base', { network: 'testnet' });                       // Base Sepolia + public relayer
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://your-relayer.example/api/v1',
+});                                                                          // Use a relayer you operate
 await sdk.passkey.register('alice@example.com', 'My Wallet');                // FaceID / TouchID prompt → vault provisioned
 const tx = await sdk.transferViaRelayer({
   targetChain: 10004,                                                        // Base Sepolia (Wormhole chain id)

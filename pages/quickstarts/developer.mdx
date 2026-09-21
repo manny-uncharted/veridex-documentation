@@ -7,18 +7,25 @@ import { Callout } from "../../components/mdx"
 
 # Developer Quickstart
 
-Get from zero to a working session-backed request in five steps. **No portal account required.**
+Configure a self-hosted relayer and get from zero to a working session-backed
+request in five steps.
 
 <Callout type="tip">
-  **Want to skip setup?** Open the [playground](/playground) — a fully-wired sandbox that runs in your browser, no install, no API key. Come back to this page when you're ready to wire it into your own project.
+  The former hosted relayer and Developer Portal are being redeployed. Check
+  [service status](/resources/service-status) before using a Veridex hostname.
+  For a complete payment flow that works today, use the
+  [Stellar x402 quickstart](/quickstarts/stellar-x402).
 </Callout>
 
 ## Prerequisites
 
 - Node.js 18+ or Bun
 - A browser supporting WebAuthn/Passkeys (Chrome 108+, Safari 16+, Firefox 118+)
+- A reachable relayer deployment and its HTTPS API URL
 
-That's it. You do **not** need a Veridex account, an API key, or a funded wallet to complete this quickstart — testnet sessions work with a default public relayer (rate-limited to 5 tx/hour per IP).
+No public relayer is currently claimed. Run the relayer from the Veridex
+monorepo or use another explicitly configured deployment. Never rely on an SDK
+default without first checking the endpoint.
 
 ## Step 1: Install the SDK
 
@@ -32,17 +39,22 @@ bun add @veridex/sdk ethers
 
 ## Step 2: Initialize the SDK
 
-The `createSDK` factory defaults to `testnet`. Pick a chain name; everything else has sane defaults.
+The `createSDK` factory can target testnet, but the relayer URL must identify a
+deployment you have verified.
 
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-// Minimal: Base Sepolia, public relayer
-const sdk = createSDK('base');
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: process.env.VERIDEX_RELAYER_URL,
+});
 ```
 
-<Callout type="info">
-  **Need gasless transactions with your own quota?** Create a developer account at [app.veridex.network](https://app.veridex.network) (beta), grab an API key, and pass `relayerApiKey: process.env.VERIDEX_RELAYER_API_KEY`. Optional — only needed when you outgrow the shared rate limit.
+<Callout type="warning">
+  Do not use `app.veridex.network`, `developers.veridex.network`, or
+  `relayer.veridex.network` until the [service status](/resources/service-status)
+  page marks them live.
 </Callout>
 
 > `new VeridexClient({...})` is **not** a supported entry point. Always use `createSDK` (or one of the `createHubSDK` / `createSessionSDK` variants) so the SDK can resolve the correct contract addresses for each chain.
@@ -54,7 +66,10 @@ Passkey registration runs in the browser — it triggers a WebAuthn prompt on th
 ```typescript
 import { createSDK } from '@veridex/sdk';
 
-const sdk = createSDK('base');                       // testnet + public relayer baked in
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: process.env.VERIDEX_RELAYER_URL,
+});
 
 // One-time Passkey registration → vault provisioned on Base Sepolia
 await sdk.passkey.register('user@example.com', 'My Wallet');
@@ -62,9 +77,11 @@ await sdk.passkey.register('user@example.com', 'My Wallet');
 console.log('Vault address:', sdk.getVaultAddress());
 ```
 
-## Step 4: Ship a Gasless Transfer Through the Public Relayer
+## Step 4: Ship a Gasless Transfer Through Your Relayer
 
-`transferViaRelayer` signs the action with the user's passkey and submits it via [`relayer.veridex.network`](https://relayer.veridex.network) — no gas tank, no signer required.
+`transferViaRelayer` signs the action with the user's passkey and submits it to
+the relayer URL configured above. The deployment operator owns its gas funding,
+keys, limits, and availability.
 
 ```typescript
 import { parseEther } from 'ethers';
@@ -83,7 +100,10 @@ console.log('Transaction:', tx.transactionHash);
 ```
 
 <Callout type="info">
-  Run the full flow live: [stackblitz.com/github/Veridex-Protocol/playground](https://stackblitz.com/github/Veridex-Protocol/playground?file=src/main.ts) (open in a top-level tab — passkeys are blocked inside iframes).
+  The browser Playground can demonstrate local passkey and policy behavior, but
+  an on-chain result still requires a reachable relayer. For a reproducible
+  hosted-independent payment proof, run the
+  [Stellar x402 evaluator](/quickstarts/stellar-x402).
 </Callout>
 
 ## Step 5: Add a Session Key (optional)

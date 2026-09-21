@@ -7,8 +7,8 @@
 > GitHub: https://github.com/veridex-protocol/
 > llms.txt index: https://docs.veridex.network/llms.txt
 
-> Generated: 2026-05-19T20:34:07.662Z
-> Pages: 66
+> Generated: 2026-09-16T15:25:33.420Z
+> Pages: 67
 
 ## Table of Contents
 
@@ -79,6 +79,7 @@
 - Error Handling (/api-reference/errors)
 - Agents React API Reference (/api-reference/agents-react)
 ### Resources
+- Service Status (/resources/service-status)
 - Architecture Decisions (/resources/architecture-decisions)
 - Contributing (/resources/contributing)
 - AI & LLM Access (/resources/llm-access)
@@ -93,7 +94,7 @@
 URL: /
 ================================================================================
 
-Open-source protocol · Free during beta
+Open-source protocol · Public services redeploying
   Give your app or agentan on-chain budget.
   Hard spending limits, human approvals, and a verifiable audit trail — across 8 chains. Your code (or your AI agent) signs only what your policy allows.
   
@@ -106,7 +107,7 @@ Open-source protocol · Free during beta
   
     No wallet to install
     ·
-    Free testnet by default
+    Self-hosted testnet available
     ·
     For operators →
   
@@ -133,7 +134,7 @@ Open-source protocol · Free during beta
 
 
   A governed transfer in six lines
-  Drop this into a browser-side script. Veridex prompts for a passkey and ships a gasless transfer through the public relayer — within a policy you control. Click below to run it live, no install required.
+  Configure a reachable relayer, then use the SDK to prompt for a passkey and submit a gasless transfer within a policy you control. Check service status before using any hosted endpoint.
   
     Open in Stackblitz →
   
@@ -142,7 +143,10 @@ Open-source protocol · Free during beta
 ```typescript
 
 
-const sdk = createSDK('base', { network: 'testnet' });                       // Base Sepolia + public relayer
+const sdk = createSDK('base', {
+  network: 'testnet',
+  relayerUrl: 'https://your-relayer.example/api/v1',
+});                                                                          // Use a relayer you operate
 await sdk.passkey.register('alice@example.com', 'My Wallet');                // FaceID / TouchID prompt → vault provisioned
 const tx = await sdk.transferViaRelayer({
   targetChain: 10004,                                                        // Base Sepolia (Wormhole chain id)
@@ -23869,6 +23873,68 @@ const { bindings, bind, unbind, update } = usePolicyBindings();
   
   
     Core wallet/passkey hooks
+
+
+================================================================================
+URL: /resources/service-status
+================================================================================
+
+# Service Status
+
+Last manually verified: **September 16, 2026**.
+
+> **Note:** A hostname listed as **Reserved** is not a deployed service. Do not configure
+  an SDK, production application, or evaluator workflow with it until this page
+  marks it **Live** and links a successful health check.
+
+## Verified live
+
+| Surface | Status | URL | Scope |
+|---|---|---|---|
+| Documentation | Live | [docs.veridex.network](https://docs.veridex.network/) | Documentation source; individual runtime claims may describe self-hosted software |
+| Website preview | Preview | [veridex-home.vercel.app](https://veridex-home.vercel.app/) | Product preview, not a service-availability endpoint |
+
+## Reserved deployment targets
+
+These hostnames did not resolve during the verification above:
+
+| Planned surface | Status | Reserved hostname |
+|---|---|---|
+| Canonical website | Not deployed | `veridex.network` |
+| Developer and enterprise console | Not deployed | `developers.veridex.network` |
+| Application console alias | Not deployed | `app.veridex.network` |
+| Relayer API | Not deployed | `relayer.veridex.network` |
+| Stellar facilitator | Not deployed | `facilitator.veridex.network` |
+| Stellar Bazaar | Not deployed | `bazaar.veridex.network` |
+| Stellar Playground | Not deployed | `playground.veridex.network` |
+| Stellar Explorer | Not deployed | `explorer.veridex.network` |
+
+## What works today
+
+The Stellar x402 facilitator, Bazaar, gateway, Playground, and conformance
+harness run from the public Apache-2.0 repository. Follow the
+[Stellar x402 quickstart](/quickstarts/stellar-x402) to create fresh testnet
+accounts, start the stack, settle a real testnet payment, and verify the
+transaction independently.
+
+The general Veridex relayer and enterprise console can be run from the monorepo,
+but no public endpoint is claimed until deployment, DNS, TLS, database
+migrations, and health checks are complete.
+
+## Promotion rule
+
+A reserved service moves to **Live** only after all of the following are
+published:
+
+1. DNS and TLS resolve from an external network.
+2. Its health/readiness endpoint passes.
+3. The deployed image or source revision is identified.
+4. Required database migrations and secret configuration are verified.
+5. A browser or API smoke test exercises the user-facing path.
+6. Monitoring has retained at least 24 hours of successful checks.
+
+For Stellar payment services, promotion also requires a public testnet
+transaction produced through the deployed path.
 
 
 ================================================================================

@@ -1,4 +1,5 @@
 {
+  "service-status": "Service Status",
   "architecture-decisions": "Architecture Decisions",
   "contributing": "Contributing",
   "llm-access": "AI & LLM Access",
