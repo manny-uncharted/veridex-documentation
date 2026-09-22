@@ -1,0 +1,95 @@
+---
+title: Stellar Facilitator Local Quickstart
+description: Bootstrap, run, inspect, and reset the complete local testnet stack
+---
+
+# Stellar Facilitator Local Quickstart
+
+## Prerequisites
+
+- Node.js 22 or newer
+- Docker with Compose
+- `curl`, `jq`, and network access to npm and Stellar testnet
+
+## Start from a clean clone
+
+```bash
+git clone https://github.com/Veridex-Protocol/stellar-facilitator.git
+cd stellar-facilitator
+npm run demo
+```
+
+The command installs dependencies, creates Friendbot-funded facilitator, seller, buyer, and channel accounts, writes a mode-`0600` `.env`, starts PostgreSQL/Bazaar/facilitator/reference seller, runs conformance, confirms settlement from Stellar, and writes `conformance-report.json`.
+
+Generated testnet keys are disposable. Never reuse them on a network holding value.
+
+## Start the complete interactive stack
+
+After setup, include the gateway and Playground:
+
+```bash
+docker compose up --build -d \
+  postgres bazaar facilitator demo-server gateway playground
+```
+
+Open `http://localhost:3004` for browser testing. The Playground generates the user's test key in the browser and does not custody it on the server.
+
+## Verify readiness
+
+```bash
+curl -fsS http://localhost:3001/health
+curl -fsS http://localhost:3001/ready
+curl -fsS http://localhost:3002/health
+curl -fsS http://localhost:3002/ready
+curl -fsS http://localhost:3003/health
+curl -fsS http://localhost:3005/health
+curl -fsS http://localhost:3002/supported | jq
+```
+
+Treat `/supported` as runtime authority. For the first pilot it should advertise x402 v2, `exact`, `stellar:testnet`, and the sponsorship state actually confirmed at boot. It should not advertise `upto` when its contract environment variable is omitted.
+
+## Inspect a payment challenge
+
+```bash
+curl -sS -D /tmp/veridex-headers -o /tmp/veridex-body \
+  http://localhost:3003/paid-resource
+
+awk -F': ' 'tolower($1)=="payment-required" {print $2}' \
+  /tmp/veridex-headers | tr -d '\r' | base64 -d | jq
+```
+
+The decoded payload uses x402 v2 `accepts` entries with `scheme`, CAIP-2 `network`, `asset`, atomic `amount`, `payTo`, timeout, and `extra`.
+
+## Test Bazaar
+
+After a successful payment, catalog delivery is asynchronous:
+
+```bash
+curl -fsS \
+  'http://localhost:3001/discovery/resources?network=stellar:testnet&limit=20' | jq
+
+curl -fsS \
+  'http://localhost:3001/discovery/search?q=demo&network=stellar:testnet&limit=5' | jq
+```
+
+## Test the SDK from this repository
+
+Until npm availability is confirmed, pack and install the canonical SDK:
+
+```bash
+cd sdk-typescript
+npm run build
+npm pack
+```
+
+Then install the tarball into a separate application and use `createVeridexClient()` as shown in the [Stellar SDK guide](/sdks/stellar).
+
+## Reset all local state
+
+```bash
+docker compose down -v --remove-orphans
+rm -f .env conformance-report.json
+npm run demo
+```
+
+Use this clean reset before recording launch evidence. Stellar testnet resets also require regenerating the accounts.

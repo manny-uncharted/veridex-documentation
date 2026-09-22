@@ -66,6 +66,9 @@ GitHub: https://github.com/veridex-protocol/
 - [Core SDK](/api-reference/sdk): VeridexSDK class, factory functions, all methods
 - [Agent SDK](/api-reference/agent-sdk): @veridex/agentic-payments API
 - [Agents Framework](/api-reference/agents-framework): @veridex/agents package family — runtime, tools, hooks, memory, policy, transports, adapters, control plane
+- [Agents Treasury](/api-reference/agents-treasury): Safe treasury primitives, evidence, sanctions, ceilings, and time-locks
+- [Stellar SDK](/api-reference/stellar): @veridex/stellar buyer, Bazaar, facilitator, and provider-quality APIs
+- [Platform Events](/api-reference/platform-events): Versioned execution, sponsorship, authorization, and capability contracts
 - [Relayer API](/api-reference/relayer): Relayer endpoints, relay requests
 - [Types](/api-reference/types): TypeScript type definitions
 - [Errors](/api-reference/errors): Error codes, VeridexError class
@@ -79,6 +82,21 @@ GitHub: https://github.com/veridex-protocol/
 - [Troubleshooting](/resources/troubleshooting): Common issues and fixes
 - [Migration](/resources/migration): Upgrade guides between versions
 
+## SDKs and Packages
+
+- [Stellar SDK](/sdks/stellar): Canonical Stellar x402 buyer and discovery SDK, plus local seller helper status
+- [Agents Treasury](/sdks/agents-treasury): Production-oriented treasury controls for @veridex/agents
+- [Payment Integrations](/sdks/payment-integrations): Fetch.ai, GOAT AgentKit, x402 endpoint scaffolding, and platform contracts
+
+## Stellar Facilitator
+
+- [Readiness and Scope](/stellar-facilitator/readiness): Evidence-based testnet launch verdict, blockers, and release boundaries
+- [Architecture](/stellar-facilitator/architecture): Bazaar, facilitator, gateway, Playground, MCP, database, and Stellar dependencies
+- [Local Quickstart](/stellar-facilitator/local-quickstart): Run and verify a complete local Stellar testnet payment
+- [Hosted Testnet](/stellar-facilitator/hosted-testnet): Harden and deploy an exact-only design-partner environment
+- [User Testing](/stellar-facilitator/user-testing): Buyer, seller, gateway, Playground, and agent test plans
+- [Portal Integration](/stellar-facilitator/portal-integration): Why hosting comes first and how the Developer Portal is added later
+
 ## Key Packages
 
 - `@veridex/sdk` — Core SDK: createSDK, passkey auth, transfers, bridging, sessions
@@ -89,6 +107,12 @@ GitHub: https://github.com/veridex-protocol/
 - `@veridex/agents-adapters` — Framework adapters: OpenAI Agents SDK, LangGraph, PydanticAI, OpenAPI live bridges
 - `@veridex/agents-openclaw` — OpenClaw/Pi bridge: context-file importer, skill importer, ACP agent cards, session translator
 - `@veridex/agents-control-plane` — Enterprise control plane: PolicyPackManager, TraceStore, ApprovalWorkflowEngine, AuditExporter, TenantManager
+- `@veridex/agents-treasury` — Treasury safety: idempotency, spend ceilings, sanctions, time-lock, evidence bundles, and red-team evals
+- `@veridex/platform-events` — Shared payment, execution, sponsorship, capability, and signed authorization contracts
+- `@veridex/stellar` — Stellar x402 buyer, Bazaar discovery, facilitator, provider-outcome, and quality APIs
+- `@veridex/fetch-adapter` — Bounded Fetch.ai payments on BNB Chain with MCP tools
+- `@veridex/goat-agentkit` — GOAT AgentKit policy, x402 settlement verification, and evidence controls
+- `create-x402-endpoint` — CLI scaffolder for paid x402 HTTP endpoints
 
 ## Supported Chains (Testnet Wormhole IDs)
 

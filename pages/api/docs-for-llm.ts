@@ -4,6 +4,14 @@ import { join } from 'path';
 
 const SECTION_SEPARATOR = '=' .repeat(80);
 
+function availableSections(content: string): string[] {
+  return [...new Set(
+    [...content.matchAll(/^URL:\s*\/(?:([^/\s]+)(?:\/|$))?/gm)]
+      .map((match) => match[1])
+      .filter((section): section is string => Boolean(section)),
+  )].sort();
+}
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -34,7 +42,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (matched.length === 0) {
       return res.status(404).json({
         error: `No pages found for section "${section}"`,
-        available: ['getting-started', 'guides', 'api', 'integrations', 'chains', 'resources'],
+        available: availableSections(content),
       });
     }
 

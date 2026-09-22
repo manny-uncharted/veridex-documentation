@@ -7,6 +7,9 @@
   "agents-adapters": "Agents Adapters",
   "agents-openclaw": "Agents OpenClaw",
   "agents-control-plane": "Agents Control Plane",
+  "agents-treasury": "Agents Treasury",
+  "stellar": "Stellar SDK",
+  "platform-events": "Platform Events",
   "relayer": "Relayer API",
   "types": "Types",
   "errors": "Errors"

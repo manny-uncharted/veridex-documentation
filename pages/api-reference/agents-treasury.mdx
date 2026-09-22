@@ -1,0 +1,37 @@
+---
+title: Agents Treasury API Reference
+description: Public treasury safety, policy, evidence, and tool APIs
+---
+
+# Agents Treasury API Reference
+
+## Runtime composition
+
+`createTreasuryKit(options)` returns tools, policy rules, and a runtime plugin configured for treasury workflows.
+
+## Safety primitives
+
+| Export | Purpose |
+|---|---|
+| `InMemoryIdempotencyStore` | Development idempotency reservation and commit store |
+| `SpendCeilings` | Atomic hourly, daily, monthly, or lifetime limits |
+| `TimeLockManager` | Schedule, inspect, cancel, and release delayed actions |
+| `NoopSanctionScreener` | Development-only pass-through screener |
+| `DenylistSanctionScreener` | Block listed counterparties |
+| `AllowlistSanctionScreener` | Permit only listed counterparties |
+| `CompositeSanctionScreener` | Combine multiple screening sources |
+| `OracleSanctionScreener` | Use an external sanctions oracle with bounded freshness |
+
+## Evidence
+
+`EvidenceBundler` records traces, proposals, policy verdicts, approvals, and chain transactions. Sign with `HmacEvidenceSigner` or `Ed25519EvidenceSigner`; use `NoopEvidenceSigner` only for local development. `FilecoinEvidenceStore` implements durable bundle submission.
+
+## Policy and tools
+
+`treasuryPolicyPack()` composes sanctions, counterparty, route, cap, velocity, dual-approval, time-lock, reputation, and idempotency rules. Individual rule factories are exported for custom ordering.
+
+Tool factories include `transferTool`, `balanceTool`, `escrowReleaseTool`, and `x402PaywallTool`.
+
+## Evaluation
+
+Use the red-team exports from `@veridex/agents-treasury/evals` in CI. Scenarios include tool poisoning, prompt injection, confused deputy, replay, split-payment cap bypass, stale sanctions data, time-lock cancellation races, and self-approval.

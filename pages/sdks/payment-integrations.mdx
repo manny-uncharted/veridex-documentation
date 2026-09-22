@@ -1,0 +1,49 @@
+---
+title: Payment Integrations
+description: Fetch.ai, GOAT AgentKit, x402 scaffolding, and shared platform contracts
+---
+
+# Payment Integration Packages
+
+Veridex ships focused packages for bounded agent payments, external agent frameworks, endpoint scaffolding, and shared platform contracts.
+
+## `@veridex/fetch-adapter`
+
+Bound Fetch.ai/uAgent payments on BNB Chain by daily budget, recipient, contract, and function selector. TypeScript callers use `VeridexFetchVault`; Python uAgents connect to the key-isolated MCP server.
+
+```bash
+npm install @veridex/fetch-adapter
+npx veridex-fetch-mcp
+```
+
+The MCP server exposes `veridex_pay`, `veridex_check_policy`, and `veridex_get_budget`. Keep session keys in the server boundary, call `assertProvisioned()` at startup, and scope ERC-20 sessions to `transfer`, never unrestricted `approve`.
+
+## `@veridex/goat-agentkit`
+
+Adds transaction normalization, atomic economic policy, authenticated x402 challenges, RPC-backed settlement verification, KMS session signing, and ERC-8004 evidence to GOAT Network AgentKit.
+
+```bash
+npm install @veridex/goat-agentkit ethers
+```
+
+Production integrations should normalize once, execute exactly the normalized action, use shared transactional policy providers, verify mined settlement over RPC, and retain uncertain broadcasts for reconciliation.
+
+## `create-x402-endpoint`
+
+Scaffold a paid HTTP endpoint with x402 and Veridex:
+
+```bash
+npx create-x402-endpoint
+```
+
+The CLI interactively creates an endpoint project and is intended for first-run development. Review generated chain, asset, facilitator, and environment settings before deployment.
+
+## `@veridex/platform-events`
+
+Shared TypeScript contracts for payment execution, sponsorship, gateways, Bazaar events, chain capabilities, and cryptographically signed charge authorizations.
+
+```bash
+npm install @veridex/platform-events
+```
+
+Use these contracts at service boundaries instead of duplicating event or authorization shapes. See the [Platform Events API reference](/api-reference/platform-events).

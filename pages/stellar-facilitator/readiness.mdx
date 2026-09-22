@@ -1,0 +1,54 @@
+---
+title: Stellar Facilitator Readiness and Scope
+description: Evidence-based testnet launch scope and supported release boundaries
+---
+
+# Stellar Facilitator Readiness and Scope
+
+## Decision
+
+The Stellar Facilitator is **conditionally ready for a controlled, single-instance Stellar testnet pilot using the `exact` payment scheme**.
+
+It is **not ready to expose the repository's Docker Compose ports directly to the public Internet**, and it is **not ready for pubnet/mainnet or a production availability claim**.
+
+The Developer Portal is not a launch dependency. Host the standalone components first, keep the portal outside the payment path, and add portal management after its authenticated backend-for-frontend and project ownership model are implemented.
+
+## What is proven
+
+The repository records the following launch evidence:
+
+- stock x402 v2 `exact` buyer and seller behavior on `stellar:testnet`;
+- real Horizon-confirmed settlement and replay/binding rejection checks;
+- Bazaar ingestion backed by confirmed settlement;
+- PostgreSQL persistence across service restart;
+- six ordered database migrations on a fresh volume;
+- keyless MCP discovery and two-phase payment submission;
+- gateway settlement before upstream forwarding;
+- Playground browser-local signing with no server custody of the user's key;
+- deterministic service, SDK, contract, security, and conformance suites;
+- `36/36` clean-stack conformance in the recorded September 7, 2026 artifact.
+
+These results are historical evidence, not a substitute for rerunning the launch candidate. Before opening test access, generate a new report from the exact commit and hosted environment being released.
+
+## Launch classification
+
+| Scope | Decision | Conditions |
+|---|---|---|
+| Local development | Go | Node.js 22+, Docker Compose, Stellar testnet access |
+| Internal hosted testnet | Go after hardening | TLS, private network, real secrets, backups, monitoring |
+| Small external design-partner cohort | Conditional go | Exact only, capped traffic, support owner, incident path, fresh conformance |
+| Public anonymous testnet | No-go today | Requires stronger edge controls, abuse budgets, operations evidence, and current CI evidence |
+| `upto` external testing | Restricted experimental | Independent review is pending; do not enable by default |
+| Multi-instance HA | No-go | Signer quarantine, channel ownership, event storage, and outbox are not shared safely |
+| Pubnet/mainnet | No-go | No pubnet execution evidence or independent security approval |
+
+## Known design limits
+
+- Channel leases and quarantine are process-local. Never share a channel secret between instances.
+- The facilitator catalog outbox is a single-host file spool, not a shared HA queue.
+- Gateway events use local JSONL storage and are not a multi-tenant portal datastore.
+- Provider quality is a policy signal, not payment authorization or a mature public reputation service.
+- Bazaar retrieval combines full-text ranking with deterministic lexical feature hashing; it is not learned semantic search.
+- `@veridex/stellar` is prepared and tarball-tested, but registry availability must be independently confirmed before documenting npm installation as active.
+
+Continue with [Architecture](/stellar-facilitator/architecture) and [Hosted Testnet](/stellar-facilitator/hosted-testnet).

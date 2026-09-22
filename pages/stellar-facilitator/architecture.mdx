@@ -1,0 +1,95 @@
+---
+title: Stellar Facilitator Architecture
+description: Service topology, trust boundaries, state, and network exposure
+---
+
+# Stellar Facilitator Architecture
+
+## Runtime topology
+
+```text
+                         Stellar testnet
+                  Horizon + Soroban RPC + Friendbot
+                               ^
+                               |
+buyer/browser -> TLS ingress -> gateway/demo seller -> facilitator
+       |               |               |                 |
+       |               |               +---- x402 -------+
+       |               |                                 |
+       |               +-> Playground                    +-> channel signers
+       |                                                 +-> catalog outbox
+       +-> Bazaar read/search -> Bazaar -> PostgreSQL
+               ^                    |
+               +------ MCP ---------+
+```
+
+Payment authority, discovery, and provider quality remain separate:
+
+- the signed x402 requirements authorize recipient, asset, network, and amount;
+- Bazaar recommends resources but cannot alter payment terms;
+- provider outcomes and quality scores inform local policy but do not authorize settlement.
+
+## Components
+
+| Component | Purpose | State | Initial external exposure |
+|---|---|---|---|
+| PostgreSQL + pgvector | Bazaar catalog and quality state | Durable database | Never public |
+| Bazaar | Resource reads, search, catalog ingestion, optional P2P | PostgreSQL plus process-local P2P | Public read API only |
+| Facilitator | `/verify`, `/settle`, sponsorship, signer scheduling | Process state plus durable file outbox | x402 endpoints through ingress |
+| Demo seller | Reference paid resource | Stateless | Optional test-only hostname |
+| Gateway | Protect existing APIs without handler changes | Static config plus JSONL events | Public paid routes |
+| Playground | Browser test experience | Browser-local ephemeral signer | Public test hostname |
+| MCP server | Keyless discovery and two-phase payment tools | Stdio process | Do not expose as unauthenticated HTTP |
+
+## Default local ports
+
+| Service | Port |
+|---|---:|
+| Bazaar HTTP | `3001` |
+| Facilitator HTTP | `3002` |
+| Demo seller | `3003` |
+| Playground | `3004` |
+| Gateway | `3005` |
+| Bazaar P2P TCP / WebSocket | `4001` / `4002` |
+
+These defaults are for local development. A hosted pilot should expose TLS `443` and route hostnames internally. Do not publish PostgreSQL, management routes, metrics, tokens, or raw internal service ports.
+
+## x402 exact flow
+
+```text
+1. Buyer requests a protected route.
+2. Seller returns HTTP 402 with PAYMENT-REQUIRED.
+3. Buyer signs the selected Stellar requirements.
+4. Seller calls facilitator /verify.
+5. Seller performs the paid work.
+6. Seller calls facilitator /settle.
+7. Facilitator submits and confirms Stellar settlement.
+8. Seller returns the resource with PAYMENT-RESPONSE.
+9. Confirmed settlement is queued for asynchronous Bazaar ingestion.
+```
+
+The seller owns the HTTP exchange. The facilitator validates and settles; Bazaar is optional.
+
+## Signer and concurrency model
+
+A Stellar account has one sequence number. Each funded channel account supplies one unit of concurrent settlement capacity. `CHANNEL_POOL_SIZE=0` serializes on the facilitator signer and is appropriate only for smoke testing.
+
+Use disjoint `CHANNEL_SECRET_KEYS` per process. If a submission is ambiguous and carries a transaction hash, the signer is quarantined until an authenticated operator reconciles and recovers it. Never blindly resubmit signed settlement envelopes.
+
+## Data durability
+
+- Bazaar data is durable in PostgreSQL.
+- The catalog handoff is durable on one host through `facilitator-outbox`.
+- Gateway events are durable on one host through `gateway-data`.
+- Signer leases, quarantine, metrics, and some federation state are process-local.
+
+This supports a single-instance testnet pilot. It does not support transparent horizontal scaling.
+
+## Authentication boundaries
+
+- `/verify` and `/settle` are protocol endpoints and remain callable by sellers through the edge policy.
+- Bazaar catalog writes require `BAZAAR_INTERNAL_TOKEN`.
+- Facilitator channel recovery requires `FACILITATOR_INTERNAL_TOKEN`.
+- Gateway `/v1` management reads require `GATEWAY_MANAGEMENT_TOKEN`.
+- MCP retains no payer private key; the client wallet signs externally.
+- `developerId` in gateway configuration is metadata, not an authorization identity.

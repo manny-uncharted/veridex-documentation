@@ -1,0 +1,63 @@
+---
+title: Agents Treasury
+description: Safe money-movement primitives for Veridex agents
+---
+
+# Agents Treasury (`@veridex/agents-treasury`)
+
+`@veridex/agents-treasury` adds production-oriented controls to `@veridex/agents`: idempotency, spend ceilings, time-locks, sanctions screening, signed evidence bundles, reputation checks, and adversarial evaluation.
+
+```bash
+npm install @veridex/agents-treasury @veridex/agents zod
+```
+
+## Create a treasury kit
+
+```ts
+import { createAgent, OpenAIProvider } from '@veridex/agents';
+import {
+  createTreasuryKit,
+  HmacEvidenceSigner,
+  InMemoryIdempotencyStore,
+  NoopSanctionScreener,
+  SpendCeilings,
+  TimeLockManager,
+} from '@veridex/agents-treasury';
+
+const kit = createTreasuryKit({
+  appId: 'app_123',
+  runId: 'run_123',
+  agentId: 'finance-agent',
+  idempotency: new InMemoryIdempotencyStore(),
+  ceilings: new SpendCeilings({
+    perTransferUsdMicro: 5_000_000_000n,
+    dayUsdMicro: 50_000_000_000n,
+  }),
+  timeLock: new TimeLockManager({ baseDelaySec: 60 }),
+  sanctions: new NoopSanctionScreener(),
+  evidenceSigner: new HmacEvidenceSigner('ops', Buffer.from(process.env.HMAC_KEY!)),
+  transfer: { executor: transferExecutor },
+  dualApprovalAbove: { amountUsdMicro: 10_000_000_000n },
+});
+
+const agent = createAgent(
+  {
+    name: 'treasury-agent',
+    instructions: 'Execute approved treasury operations.',
+    tools: kit.tools,
+    policies: kit.policyRules,
+  },
+  {
+    modelProviders: {
+      default: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }),
+    },
+    plugins: [kit.plugin],
+  },
+);
+```
+
+Use a durable idempotency store, real sanctions provider, governed evidence signer, checkpoint backend, and approval verifier in production. `NoopSanctionScreener` and in-memory stores are development defaults only.
+
+The package also includes transfer, balance, escrow, and x402 tools; Filecoin evidence storage; portal telemetry; composable policy rules; and a red-team suite for replay, confused-deputy, prompt-injection, cap-bypass, and approval attacks.
+
+See the [Treasury API reference](/api-reference/agents-treasury) and [Agent Fabric treasury guides](/agent-fabric/treasury/overview).

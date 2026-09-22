@@ -12,7 +12,7 @@
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs';
-import { join, relative, basename, extname } from 'path';
+import { join, basename, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -25,11 +25,19 @@ const OUTPUT = join(__dirname, '..', 'public', 'llms-full.txt');
 // Ordered sections — controls output order
 const SECTION_ORDER = [
   'index.mdx',
+  'why-veridex',
   'getting-started',
+  'quickstarts',
+  'use-cases',
+  'sdks',
+  'stellar-facilitator',
+  'platform',
+  'governance',
   'guides',
   'chains',
   'integrations',
   'security',
+  'agent-fabric',
   'api-reference',
   'resources',
 ];
@@ -86,6 +94,9 @@ function mdxToPlainMarkdown(content, filePath) {
   // Clean up excessive blank lines
   text = text.replace(/\n{4,}/g, '\n\n\n');
 
+  // Generated artifacts should not inherit trailing spaces from source MDX.
+  text = text.replace(/[ \t]+$/gm, '');
+
   // Trim
   text = text.trim();
 
@@ -104,6 +115,43 @@ function extractTitle(content) {
   return null;
 }
 
+function collectDirectory(directory, routeParts, section) {
+  const pages = [];
+  const order = getSectionPageOrder(directory);
+  const entries = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.name !== '_meta.json' && !entry.name.startsWith('.'));
+  const entryNames = entries.map((entry) =>
+    entry.isFile() && extname(entry.name) === '.mdx' ? basename(entry.name, '.mdx') : entry.name,
+  );
+  const sortedNames = order
+    ? [...order.filter((name) => entryNames.includes(name)), ...entryNames.filter((name) => !order.includes(name)).sort()]
+    : entryNames.sort();
+
+  for (const name of sortedNames) {
+    const entry = entries.find((candidate) => {
+      const candidateName = candidate.isFile() && extname(candidate.name) === '.mdx'
+        ? basename(candidate.name, '.mdx')
+        : candidate.name;
+      return candidateName === name;
+    });
+    if (!entry) continue;
+
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      pages.push(...collectDirectory(entryPath, [...routeParts, entry.name], section));
+    } else if (extname(entry.name) === '.mdx') {
+      pages.push({
+        path: entryPath,
+        section,
+        slug: name,
+        route: `/${[...routeParts, name].join('/')}`,
+      });
+    }
+  }
+
+  return pages;
+}
+
 function collectPages() {
   const pages = [];
 
@@ -113,7 +161,7 @@ function collectPages() {
     // Top-level file (index.mdx)
     if (section.endsWith('.mdx')) {
       if (existsSync(sectionPath)) {
-        pages.push({ path: sectionPath, section: 'home', slug: 'index' });
+        pages.push({ path: sectionPath, section: 'home', slug: 'index', route: '/' });
       }
       continue;
     }
@@ -121,22 +169,7 @@ function collectPages() {
     // Section directory
     if (!existsSync(sectionPath) || !statSync(sectionPath).isDirectory()) continue;
 
-    const order = getSectionPageOrder(sectionPath);
-    const mdxFiles = readdirSync(sectionPath)
-      .filter(f => extname(f) === '.mdx')
-      .map(f => basename(f, '.mdx'));
-
-    // Sort by _meta.json order, then alphabetically for unlisted
-    const sorted = order
-      ? [...order.filter(k => mdxFiles.includes(k)), ...mdxFiles.filter(k => !order.includes(k))]
-      : mdxFiles.sort();
-
-    for (const slug of sorted) {
-      const filePath = join(sectionPath, `${slug}.mdx`);
-      if (existsSync(filePath)) {
-        pages.push({ path: filePath, section, slug });
-      }
-    }
+    pages.push(...collectDirectory(sectionPath, [section], section));
   }
 
   return pages;
@@ -172,7 +205,7 @@ function generate() {
     }
     const raw = readFileSync(page.path, 'utf-8');
     const title = extractTitle(raw) || page.slug.replace(/-/g, ' ');
-    parts.push(`- ${title} (/${page.section}/${page.slug})`);
+    parts.push(`- ${title} (${page.route})`);
   }
   parts.push('');
   parts.push('---');
@@ -182,7 +215,7 @@ function generate() {
   for (const page of pages) {
     const raw = readFileSync(page.path, 'utf-8');
     const title = extractTitle(raw) || page.slug;
-    const urlPath = page.section === 'home' ? '/' : `/${page.section}/${page.slug}`;
+    const urlPath = page.route;
     const markdown = mdxToPlainMarkdown(raw, page.path);
 
     parts.push(`${'='.repeat(80)}`);

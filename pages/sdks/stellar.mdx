@@ -1,0 +1,65 @@
+---
+title: Stellar SDK
+description: Canonical Stellar x402 buyer, Bazaar discovery, facilitator, and provider-quality APIs
+---
+
+# Stellar SDK (`@veridex/stellar`)
+
+`@veridex/stellar` is the focused TypeScript SDK for paying Stellar x402 resources and integrating with Veridex Bazaar and facilitator services. It supports Node.js 22 or newer.
+
+## Package status
+
+The package is prepared and tarball-tested in `packages/stellar-facilitator/sdk-typescript`. Confirm registry availability before using the npm command below. When unpublished, build it with `npm pack` and install the generated tarball.
+
+```bash
+npm install @veridex/stellar
+```
+
+The sibling `sdks/typescript`, `sdks/python`, and `sdks/go` directories contain local seller metadata helpers. They are prototypes, not claimed as published registry packages or wire-equivalent implementations.
+
+## Pay a Stellar x402 resource
+
+```ts
+import { createVeridexClient } from '@veridex/stellar';
+
+const client = createVeridexClient({
+  network: 'stellar:testnet',
+  privateKey: process.env.BUYER_SECRET_KEY!,
+});
+
+const response = await client.fetch('https://merchant.example/paid-resource');
+console.log(await response.json());
+```
+
+`VeridexClient` owns the HTTP 402 challenge, Stellar signing, payment header, and retry flow. Use official x402 server adapters with `@x402/stellar` for seller middleware.
+
+## Bazaar discovery
+
+```ts
+import { createBazaarClient } from '@veridex/stellar';
+
+const bazaar = createBazaarClient({
+  bazaarUrl: 'https://bazaar.example',
+  defaultNetwork: 'stellar:testnet',
+});
+
+const results = await bazaar.search({
+  query: 'translation API',
+  minUptimeRatio: 0.95,
+  limit: 5,
+});
+```
+
+Discovery is optional for payment. The SDK also exposes `FacilitatorClient`, signed provider outcomes, response-aware settlement hooks, provider aggregate verification, cache helpers, and seller quality policy.
+
+## Choose the correct package
+
+| Need | Package |
+|---|---|
+| Pay a Stellar x402 resource | `@veridex/stellar` |
+| Accept Stellar x402 payments | Official x402 server adapter + `@x402/stellar` |
+| Autonomous policy and orchestration | `@veridex/agentic-payments` composed with `@veridex/stellar` |
+| Passkeys and cross-chain wallet identity | `@veridex/sdk` |
+| MCP discovery and externally signed payment submission | Stellar facilitator `mcp-server` |
+
+See the [Stellar API reference](/api-reference/stellar) for the public classes and contracts.

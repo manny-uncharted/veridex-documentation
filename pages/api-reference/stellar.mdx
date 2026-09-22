@@ -1,0 +1,37 @@
+---
+title: Stellar SDK API Reference
+description: Public APIs exported by @veridex/stellar
+---
+
+# Stellar SDK API Reference
+
+## Buyer API
+
+| Export | Purpose |
+|---|---|
+| `createVeridexClient(options)` | Create the recommended Stellar x402 buyer facade |
+| `VeridexClient` | Execute the 402 challenge, sign, attach payment, and retry flow |
+| `VeridexClientError` | Typed SDK error with validation, network, payment, provider, and discovery categories |
+| `VeridexNetwork` | `stellar:testnet` or `stellar:pubnet` |
+| `VeridexPaymentScheme` | `exact` or `upto` |
+
+## Discovery and facilitator API
+
+| Export | Purpose |
+|---|---|
+| `createBazaarClient(config)` / `BazaarClient` | Search resources and read provider quality |
+| `createFacilitatorClient(config)` / `FacilitatorClient` | Read capabilities and submit pre-built signed payloads |
+| `createSmartAccountSigner(...)` | Create a compatible facilitator signer |
+| `createUptoStellarClient(options)` | Create the `upto` scheme network client |
+
+`FacilitatorClient` is low level and does not perform the HTTP challenge/retry loop.
+
+## Provider outcomes and quality
+
+The package exports `createProviderOutcome`, `verifyProviderOutcome`, header encoding and decoding, `ProviderOutcomeReplayGuard`, `createProviderAggregate`, `verifyProviderAggregate`, `ProviderAggregateClient`, and `SellerPolicyEngine`.
+
+Provider declarations use `createProviderQualityExtension()`. Settlement integrations can use `installProviderOutcomeSettlementEnrichment()` and `applyProviderOutcomeHeaders()`.
+
+## Errors
+
+Catch `VeridexClientError` for SDK-level failures. Raw facilitator responses retain x402 `invalidReason` and `errorReason` values. Never treat a discovery result or provider-quality score as payment authorization.

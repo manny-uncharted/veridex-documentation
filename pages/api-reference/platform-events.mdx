@@ -1,0 +1,35 @@
+---
+title: Platform Events API Reference
+description: Versioned platform events, sponsorship quotes, capabilities, and signed charge authorizations
+---
+
+# Platform Events API Reference
+
+`@veridex/platform-events` defines contracts shared by the SDK, relayer, control plane, gateways, sponsorship ledger, and Bazaar services.
+
+## Core contracts
+
+| Export | Purpose |
+|---|---|
+| `PlatformEvent` | Versioned event envelope with tenant, app, environment, and typed data |
+| `PlatformEventType` | Supported payment, execution, sponsorship, gateway, and Bazaar event names |
+| `SponsorshipQuote` | Asset-denominated sponsorship quote with expiry and limits |
+| `ChargeAuthorization` | One-time signed charge authorization bound to payer and nonce |
+| `ChainPaymentCapabilities` | Chain-level settlement and sponsorship capabilities |
+| `PlatformChainCapability` | Readiness and explorer metadata for a network |
+
+## Charge authorization helpers
+
+| Export | Purpose |
+|---|---|
+| `canonicalizeJson(value)` | Deterministic canonical encoding |
+| `chargeAuthorizationSigningPayload(value)` | Domain-separated bytes for signing |
+| `createChargeAuthorization(...)` | Build a payer-bound authorization envelope |
+| `verifyChargeAuthorizationSignature(value)` | Verify the Ed25519 signature and signed fields |
+| `chargeAuthorizationPayer(publicKey)` | Derive the payer fingerprint |
+
+Verify the complete authorization at every trust boundary and atomically consume its ID and nonce. Never authorize from an unsigned subset of the envelope.
+
+## Validation and capability helpers
+
+Use `validatePlatformEvent`, `validateSponsorshipQuote`, `assertAtomicAmount`, `assertCaip2`, and `assertCaip19` before persistence. Capability discovery uses `listPlatformChainCapabilities`, `findPlatformChainCapability`, and `platformExplorerUrl`.

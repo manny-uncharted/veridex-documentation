@@ -1,0 +1,90 @@
+---
+title: Stellar Facilitator and Developer Portal
+description: Hosting order, current boundary, and future managed integration
+---
+
+# Stellar Facilitator and Developer Portal
+
+## Recommendation
+
+**Host the Stellar Facilitator components before the Developer Portal integration is complete.**
+
+The payment stack already has standalone configuration, health checks, conformance, a browser Playground, gateway management snapshots, and normalized events. The Developer Portal does not currently deploy, configure, or query this stack end to end.
+
+The portal should become a control and observation layer. It must not become a dependency for verifying or settling payment.
+
+## What users can use now
+
+| User | Standalone path |
+|---|---|
+| Buyer | Hosted paid resource + `@veridex/stellar` or official x402 client |
+| Seller with existing API | Hosted gateway configured by operator |
+| Native seller | Official x402 server middleware pointed at facilitator |
+| Browser evaluator | Hosted Playground |
+| Agent developer | Bazaar reads plus SDK or keyless MCP |
+| Operator | Compose-derived deployment, metrics, logs, management token |
+
+This is enough for controlled testnet testing without portal accounts.
+
+## Current portal boundary
+
+The gateway can expose an authenticated `veridex.portal.stellar-gateway/v1` snapshot containing lifecycle, routes, terms, Bazaar declarations, payment events, settlement hashes, latency, provider outcomes, and earnings inputs.
+
+The missing managed layer includes:
+
+- portal pages and calculations wired to live gateway data;
+- project-scoped gateway create/update/delete APIs;
+- sealed-cookie BFF routes for Stellar gateway reads;
+- relayer/server-session authorization on management routes;
+- durable multi-tenant storage and ownership tables;
+- webhooks, exports, credential vaulting, billing, and MCP activity ingestion.
+
+`developerId` in self-hosted gateway configuration is correlation metadata only. Never use it as proof that the caller owns a gateway.
+
+## Hosting order
+
+### Phase 1: standalone pilot
+
+1. Deploy exact-only Facilitator, Bazaar, gateway, Playground, and managed PostgreSQL.
+2. Configure sellers manually through reviewed operator configuration.
+3. Issue management tokens only to operators.
+4. Store gateway events and export sanitized evidence for pilot review.
+5. Keep all users on Stellar testnet with explicit caps.
+
+### Phase 2: portal read integration
+
+1. Add server-only portal API clients for gateway management contracts.
+2. Authenticate the user through the portal BFF.
+3. Resolve workspace and project ownership server-side.
+4. Map each gateway to a durable project record.
+5. Proxy project-scoped read models for resources, payments, earnings, transactions, provider quality, and Bazaar status.
+
+The browser must never receive `GATEWAY_MANAGEMENT_TOKEN`, `BAZAAR_INTERNAL_TOKEN`, facilitator tokens, or signer secrets.
+
+### Phase 3: managed lifecycle
+
+Add validated create/update/delete workflows, secret vaulting, deployment orchestration, audit events, webhooks, exports, and rollback. Keep these asynchronous from payment verification and settlement.
+
+## Intended BFF read model
+
+```text
+GET /developers/me/gateways
+GET /developers/me/resources
+GET /developers/me/payments
+GET /developers/me/earnings
+GET /developers/me/transactions
+GET /developers/me/provider-quality
+GET /developers/me/bazaar
+```
+
+Every request should derive tenant, workspace, project, and gateway identity from authenticated server context. The backing gateway token should be selected server-side from the project record.
+
+## Non-negotiable separation
+
+- Portal downtime must not interrupt `/verify` or `/settle`.
+- Dashboard calculations must consume normalized events, not mutate payment facts.
+- Portal configuration must not silently advertise `upto` or batch settlement when the deployed gateway is exact-only.
+- Gateway ownership must be enforced in durable server-side data.
+- Payment and provider events must be immutable or append-only enough for audit and reconciliation.
+
+Build the payment service first, prove it independently, then integrate the portal around its stable contracts.

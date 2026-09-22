@@ -8,7 +8,7 @@ Need to paste our full docs into ChatGPT, Claude, or another AI assistant? Downl
 
 **[Download llms-full.txt →](/llms-full.txt)**
 
-This file contains all 48 pages of documentation (~420 KB) concatenated into clean, readable markdown — no HTML, no JSX, no imports. Just content.
+This file recursively includes every MDX page in the documentation tree, including nested Agent Fabric references, SDKs, quickstarts, platform guides, governance, and use cases. It is emitted as clean, readable markdown without imports or JSX wrappers.
 
 ## Discovery (`llms.txt`)
 
@@ -39,10 +39,16 @@ curl https://docs.veridex.network/api/docs-for-llm?section=chains
 | Section | Description |
 |---------|-------------|
 | `getting-started` | Quick start, installation, core concepts, FAQ |
+| `quickstarts` | Task-focused setup paths |
+| `sdks` | SDK and package guides |
 | `guides` | Wallets, transfers, sessions, agents, React hooks |
 | `api-reference` | SDK, Agent SDK, Relayer API |
+| `agent-fabric` | Runtime, memory, policy, security, treasury, and deployment |
 | `chains` | EVM, Solana, Aptos, Sui, Starknet, Stacks |
 | `integrations` | React, Next.js, DeFi, gaming, payments |
+| `platform` | Developer platform operations |
+| `governance` | Protocol governance |
+| `use-cases` | End-to-end product use cases |
 | `security` | Audits, best practices, recovery |
 | `resources` | Architecture decisions, glossary, changelog |
 

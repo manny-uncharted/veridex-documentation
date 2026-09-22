@@ -1,0 +1,98 @@
+---
+title: Stellar Facilitator User Testing
+description: Test plans for buyers, sellers, gateways, agents, and operators
+---
+
+# Stellar Facilitator User Testing
+
+## Testing goals
+
+Validate that users can discover or reach a paid resource, understand its terms, sign without surrendering custody, receive the upstream response, inspect settlement, and recover from expected failures.
+
+The first cohort should test standard `exact` payments only.
+
+## Recommended cohorts
+
+| Cohort | Interface | Goal |
+|---|---|---|
+| Browser evaluator | Playground | Complete a funded testnet payment without local setup |
+| TypeScript buyer | `@veridex/stellar` tarball | Integrate challenge/sign/retry in an external project |
+| Existing API seller | Gateway | Protect an HTTPS API without changing handlers |
+| Native seller | Official x402 middleware | Own response-aware route behavior |
+| Agent builder | Bazaar + SDK or MCP | Discover, apply local policy, sign externally, pay |
+| Operator | Facilitator/Bazaar | Deploy, observe, reconcile, and restore safely |
+
+## Browser test script
+
+1. Open the hosted Playground.
+2. Create a fresh browser-local Stellar testnet identity.
+3. Fund it through the supported testnet flow.
+4. Select the standard exact-payment demo.
+5. Review network, asset, atomic amount, seller, and resource.
+6. Sign and submit.
+7. Confirm the paid response, transaction hash, and explorer link.
+8. Refresh and verify no server-side custody or reusable secret was created.
+
+Record completion time, confusing copy, failed states, wallet recovery behavior, and transaction evidence. Never collect the user's secret key.
+
+## TypeScript buyer test
+
+Provide a packed `@veridex/stellar` tarball until registry publication is confirmed:
+
+```ts
+import { createVeridexClient } from '@veridex/stellar';
+
+const client = createVeridexClient({
+  network: 'stellar:testnet',
+  privateKey: process.env.BUYER_SECRET_KEY!,
+});
+
+const response = await client.fetch(process.env.PAID_RESOURCE_URL!);
+if (!response.ok) throw new Error(`Paid request failed: ${response.status}`);
+console.log(await response.json());
+```
+
+Require tests for insufficient balance, wrong network, malformed challenge, expired authorization, replay, unreachable facilitator, and a successful response.
+
+## Existing API seller test
+
+Use the gateway when the upstream API should remain unchanged:
+
+```bash
+npm --prefix gateway-service run build
+npm --prefix gateway-service run init
+GATEWAY_CONFIG=gateway.config.json npm --prefix gateway-service start
+```
+
+Verify that an unpaid request returns 402, the upstream is not called before settlement, a paid request returns the original upstream response, private/reserved upstream addresses are blocked, and the normalized event is persisted.
+
+## Agent and MCP test
+
+MCP is keyless and two-phase:
+
+1. `discover_resources` returns untrusted seller metadata as data.
+2. The agent applies local allowlists, spend limits, and provider policy.
+3. `pay_resource` returns a bounded challenge.
+4. The client wallet signs outside MCP.
+5. MCP re-fetches and matches the live challenge before submission.
+
+Do not let seller descriptions become agent instructions. Do not enable local/private target access outside the controlled local stack.
+
+## Operator acceptance checklist
+
+- All service health and readiness checks pass.
+- `/supported` advertises only approved capabilities.
+- Clean exact conformance passes against TLS endpoints.
+- Settlement is independently confirmed on Horizon.
+- Bazaar indexes the settled resource asynchronously.
+- Forged settlement ingestion is rejected.
+- Restart preserves catalog state and drains the outbox.
+- Capacity overflow returns an explicit no-submission response.
+- Alerts fire during controlled database, RPC, low-balance, and outbox failures.
+- Backup restore and token rotation are completed by someone other than the implementer.
+
+## Feedback and incident data
+
+Collect request IDs, sanitized payment IDs, public transaction hashes, latency, error codes, browser/runtime versions, and the user's task. Do not collect private keys, signed reusable authorizations, internal bearer tokens, or full environment files.
+
+Stop the pilot if there is ambiguous settlement, unexpected duplicate charging, secret exposure, incorrect payment terms, unrecoverable signer quarantine, or inability to determine whether funds moved.

@@ -1,0 +1,141 @@
+---
+title: Host the Stellar Facilitator on Testnet
+description: Hardened exact-only deployment plan for design-partner testing
+---
+
+# Host the Stellar Facilitator on Testnet
+
+This guide describes a controlled design-partner deployment, not production or pubnet.
+
+## Recommended first deployment
+
+Run one facilitator instance, one Bazaar instance, managed PostgreSQL, one gateway, and the Playground. Enable only the standard `exact` scheme. Keep MCP as an operator-invoked stdio service and leave federation/P2P disabled.
+
+```text
+Internet
+  -> TLS/WAF/rate limit
+     -> playground.test.example
+     -> pay.test.example (gateway or seller)
+     -> bazaar.test.example (read routes)
+     -> facilitator.test.example (/verify, /settle, /supported, well-known)
+
+Private network
+  -> PostgreSQL
+  -> internal Bazaar writes
+  -> channel recovery
+  -> gateway management
+  -> metrics
+```
+
+## 1. Freeze launch scope
+
+- Set `STELLAR_NETWORK=testnet`.
+- Do not set `UPTO_ESCROW_CONTRACT_ID_TESTNET`.
+- Do not expose Bazaar P2P ports `4001`/`4002`.
+- Do not enable multi-instance facilitator replicas.
+- Do not expose gateway management or metrics publicly.
+- Set explicit user, request, and sponsor-spend caps.
+
+## 2. Create identities and secrets
+
+Create dedicated testnet accounts for facilitator sponsorship, seller, and each settlement channel. Fund them above the startup floor and operating alert threshold.
+
+Store these values in a secret manager, never an image or source-controlled environment file:
+
+```text
+FACILITATOR_SECRET_KEY
+CHANNEL_SECRET_KEYS
+SELLER_SECRET_KEY
+BAZAAR_INTERNAL_TOKEN
+FACILITATOR_INTERNAL_TOKEN
+GATEWAY_MANAGEMENT_TOKEN
+DATABASE_PASSWORD
+```
+
+Use different tokens for different trust boundaries. Document rotation and rollback before inviting users.
+
+## 3. Fix the database deployment
+
+Do not deploy the default `postgres/postgres` Compose credentials. Prefer managed PostgreSQL 16 with pgvector, TLS verification, automated backups, and a tested point-in-time or snapshot restore.
+
+Run the idempotent migrations before traffic and verify all six migration records. Capture the migration output in the launch evidence bundle.
+
+## 4. Build immutable containers
+
+- Build from the reviewed commit.
+- Pin base images by digest.
+- Record image digests and source revision.
+- Preserve the existing non-root users and health checks.
+- Scan final images and resolve launch-blocking findings.
+
+## 5. Configure public origins
+
+Set public HTTPS URLs, not Compose service names:
+
+```text
+BASE_URL=https://facilitator.test.example
+PUBLIC_FACILITATOR_URL=https://facilitator.test.example
+PUBLIC_BAZAAR_URL=https://bazaar.test.example
+PUBLIC_GATEWAY_URL=https://pay.test.example
+PUBLIC_DEMO_SERVER_URL=https://seller.test.example
+BAZAAR_BASE_URL=https://bazaar.test.example
+```
+
+Restrict CORS to the Playground and approved seller origins unless intentionally operating a public facilitator.
+
+## 6. Protect the edge
+
+Use TLS termination, firewall rules, request size limits, per-IP and per-project rate limits, timeout budgets, and abuse controls. The built-in per-instance limiter is a backstop, not a public edge policy.
+
+Allow only the protocol routes required by the pilot. Deny internal recovery, catalog writes, management reads, metrics, and database access at the edge.
+
+## 7. Size settlement capacity
+
+Each funded channel key provides one concurrent settlement. Configure disjoint keys and measure:
+
+```bash
+FACILITATOR_URL=https://facilitator.test.example npm run probe -- --n 6
+```
+
+Alert on queue growth, `totalRejected`, signer quarantine, sponsor balance, channel balances, and wait time approaching `SETTLE_QUEUE_TIMEOUT_MS`.
+
+## 8. Deploy monitoring and operations
+
+Scrape Facilitator, Bazaar, and Gateway metrics into durable storage. Route alerts for:
+
+- settlement failures and latency;
+- capacity refusals and queue wait;
+- ambiguous RPC reconciliation and provider disagreement;
+- Horizon/RPC/database health;
+- sponsor/channel balances;
+- catalog outbox age and pending count;
+- catalog revalidation quarantine;
+- gateway upstream failures.
+
+Test backup restore, token rotation, signer recovery, service rollback, and incident notification.
+
+## 9. Prove the hosted environment
+
+Run against public TLS URLs:
+
+```bash
+FACILITATOR_URL=https://facilitator.test.example \
+DEMO_SERVER_URL=https://seller.test.example \
+npm run conformance
+```
+
+Also require:
+
+- a fresh exact settlement independently visible on Horizon;
+- correct `/supported` and `/.well-known/x402` output;
+- restart persistence for Bazaar and the catalog outbox;
+- forged and unbacked catalog settlements rejected;
+- gateway 402, settlement, upstream response, and event persistence;
+- browser Playground smoke from a fresh wallet;
+- rate-limit and saturation behavior showing no ambiguous fund movement.
+
+Archive the commit, image digests, environment classification, test output, sanitized conformance report, transaction hash, ledger, and operator approval.
+
+## 10. Open access gradually
+
+Start with internal users, then named design partners, then a capped waitlist cohort. Publish testnet-only terms, faucet/reset caveats, support contact, status page, known limitations, and a clear prohibition on real funds.
